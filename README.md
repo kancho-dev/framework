@@ -13,6 +13,7 @@ Recommended shape:
 ```text
 workspace/
   .gitignore
+  README.md
   AGENTS.md
   ACTIVE-CONTEXT.md
   FIXES.md
@@ -20,6 +21,7 @@ workspace/
     daily-brief-YYYY-MM-DD.md
   projects/
     my-project/
+      README.md
       project/
       library/
         decisions.md
@@ -53,6 +55,11 @@ workspace/
 2. Create `projects/`, `memory/`, `ACTIVE-CONTEXT.md`, and `FIXES.md` in the workspace root.
 3. Put your workspace `AGENTS.md` in the root.
 4. Instruct agents to read the framework files from `framework/` and operate from the workspace root.
+
+Create a simple root `README.md` during workspace setup that explains:
+- what the workspace is for
+- what lives in `projects/`
+- the repository boundaries when the workspace, framework, and projects use separate repositories
 
 ## What The Agent Should Read
 

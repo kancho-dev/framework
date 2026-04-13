@@ -98,6 +98,13 @@ If you use this model, configure the workspace root repository to ignore nested 
 
 This is the actual software project.
 
+Create a simple `projects/[name]/README.md` when initializing a new project.
+
+It should briefly explain:
+- what the project is
+- the current scope or goal
+- the purpose of `project/`, `library/`, and `work/`
+
 ### `projects/[name]/library/`
 
 This is the project's durable knowledge base.
