@@ -9,6 +9,7 @@ Use this role when you are responsible for the overall workspace direction.
 3. Decide what should be done directly and what should be delegated.
 4. Review delegated work before treating it as complete.
 5. Move lasting knowledge into project `library/` files.
+6. Follow the framework instructions under `framework/`.
 
 ## Constraints
 

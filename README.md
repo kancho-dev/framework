@@ -2,50 +2,21 @@
 
 Minimal, agent-agnostic framework for AI-assisted software development.
 
-This directory is meant to be copied into the root of a new workspace so agents can read the markdown files directly from that root context.
+This repository is intended to be cloned into the root of each workspace as a dedicated framework directory.
 
-## Intended Use
+## Intended Workspace Layout
 
-1. Copy these markdown files into a new workspace root.
-2. Create `projects/` in that same root.
-3. Run your AI agents from the workspace root.
-4. Let the agents read these files as their operating framework.
+Clone this framework into the workspace root, then keep the active workspace files next to it.
 
-## What To Copy
-
-Copy these files and directories into the new workspace root:
-- `FRAMEWORK.md`
-- `SECURITY.md`
-- `ENGINEERING.md`
-- `ROLES/`
-- `TEMPLATES/`
-- optionally `memory-service/`
-
-Then create:
-- `ACTIVE-CONTEXT.md`
-- `FIXES.md`
-- `memory/`
-- `projects/`
-
-## Recommended Workspace Shape
+Recommended shape:
 
 ```text
 workspace/
-  FRAMEWORK.md
-  SECURITY.md
-  ENGINEERING.md
+  AGENTS.md
   ACTIVE-CONTEXT.md
   FIXES.md
   memory/
     daily-brief-YYYY-MM-DD.md
-  ROLES/
-    MAIN.md
-    ENGINEER.md
-  TEMPLATES/
-    TASK.md
-    HANDOFF.md
-    CONTEXT.md
-    RUN-LOG.md
   projects/
     my-project/
       project/
@@ -60,12 +31,36 @@ workspace/
           HANDOFF.md
           CONTEXT.md
           runs/
-        release-prep/
-          TASK.md
-          HANDOFF.md
-          CONTEXT.md
-          runs/
+  framework/
+    FRAMEWORK.md
+    SECURITY.md
+    ENGINEERING.md
+    ROLES/
+      MAIN.md
+      ENGINEER.md
+    TEMPLATES/
+      TASK.md
+      HANDOFF.md
+      CONTEXT.md
+      RUN-LOG.md
+    memory-service/
 ```
+
+## How To Use It
+
+1. Clone this framework into `workspace/framework/`.
+2. Create `projects/`, `memory/`, `ACTIVE-CONTEXT.md`, and `FIXES.md` in the workspace root.
+3. Put your workspace `AGENTS.md` in the root.
+4. Instruct agents to read the framework files from `framework/` and operate from the workspace root.
+
+## What The Agent Should Read
+
+At minimum, the agent should read:
+- `framework/FRAMEWORK.md`
+- `framework/SECURITY.md`
+- `framework/ENGINEERING.md`
+
+Then it should read the active workspace files from the root.
 
 ## Task Directory Naming
 
@@ -91,4 +86,4 @@ Rules:
 2. Searchable memory is optional and supports recall, not policy.
 3. Code and project knowledge stay together.
 4. Every task gets its own directory and handoff files.
-5. Tool-specific integrations belong in adapters, not in the core framework.
+5. Tool-specific integrations belong in adapters, not in the framework core.

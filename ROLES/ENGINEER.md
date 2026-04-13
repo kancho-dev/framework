@@ -5,7 +5,7 @@ Use this role when you are making or reviewing code changes.
 ## Responsibilities
 
 1. Read the relevant code before editing it.
-2. Follow `ENGINEERING.md`.
+2. Follow `framework/ENGINEERING.md`.
 3. Prefer the smallest correct implementation.
 4. Verify behavior with tests, builds, or direct checks where possible.
 5. Record lasting technical discoveries in project knowledge files or `FIXES.md`.

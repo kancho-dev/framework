@@ -3,7 +3,7 @@
 Read this file at the start of every session.
 
 You are operating from the workspace root.
-Assume the framework files are available in that root.
+Assume the framework files live under `framework/` in that root.
 
 ## Purpose
 
@@ -27,9 +27,9 @@ Use this framework to keep software development work coherent across:
 ### Main session
 
 Read in this order:
-1. `FRAMEWORK.md`
-2. `SECURITY.md`
-3. `ENGINEERING.md`
+1. `framework/FRAMEWORK.md`
+2. `framework/SECURITY.md`
+3. `framework/ENGINEERING.md`
 4. `ACTIVE-CONTEXT.md`
 5. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists
 6. relevant files under `projects/[name]/library/`
@@ -37,9 +37,9 @@ Read in this order:
 ### Task session
 
 If you are working on a task under `projects/[name]/work/[task-slug]/`, read in this order:
-1. `FRAMEWORK.md`
-2. `SECURITY.md`
-3. `ENGINEERING.md`
+1. `framework/FRAMEWORK.md`
+2. `framework/SECURITY.md`
+3. `framework/ENGINEERING.md`
 4. `projects/[name]/work/[task-slug]/TASK.md`
 5. `projects/[name]/work/[task-slug]/HANDOFF.md`
 6. `projects/[name]/work/[task-slug]/CONTEXT.md`
@@ -125,10 +125,10 @@ Each task directory must contain:
 - `runs/`
 
 When creating a new task directory, initialize its files from:
-- `TEMPLATES/TASK.md`
-- `TEMPLATES/HANDOFF.md`
-- `TEMPLATES/CONTEXT.md`
-- `TEMPLATES/RUN-LOG.md` for new entries inside `runs/`
+- `framework/TEMPLATES/TASK.md`
+- `framework/TEMPLATES/HANDOFF.md`
+- `framework/TEMPLATES/CONTEXT.md`
+- `framework/TEMPLATES/RUN-LOG.md` for new entries inside `runs/`
 
 Do not invent task file formats ad hoc when the templates already apply.
 
