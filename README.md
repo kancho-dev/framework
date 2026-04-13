@@ -12,6 +12,7 @@ Recommended shape:
 
 ```text
 workspace/
+  .gitignore
   AGENTS.md
   ACTIVE-CONTEXT.md
   FIXES.md
@@ -87,3 +88,29 @@ Rules:
 3. Code and project knowledge stay together.
 4. Every task gets its own directory and handoff files.
 5. Tool-specific integrations belong in adapters, not in the framework core.
+
+## Repository Boundaries
+
+Recommended repository model:
+- the workspace root is its own git repository
+- `framework/` remains its own git repository
+- each project under `projects/[name]/` is its own git repository
+
+This keeps workspace coordination files separate from the framework and from project code.
+
+When using this model, the workspace root repository should ignore nested repositories such as `framework/` and `projects/*/`.
+
+Example root `.gitignore`:
+
+```gitignore
+# Nested project repositories
+projects/*/.git/
+projects/*/
+
+# Framework repository
+framework/.git/
+framework/
+
+# Keep the projects directory itself
+!projects/
+```

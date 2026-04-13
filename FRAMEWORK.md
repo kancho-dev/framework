@@ -81,6 +81,19 @@ Before inventing a workaround for a bug, check whether `FIXES.md` already contai
 
 Each project lives under `projects/[name]/`.
 
+## Repository Structure
+
+Recommended default:
+- the workspace root has its own git repository for coordination files
+- `framework/` stays as its own git repository
+- each project under `projects/[name]/` has its own git repository
+
+This separation lets the workspace track shared operational state without mixing framework history or project history into the same repository.
+
+If you use this model, configure the workspace root repository to ignore nested repositories such as:
+- `framework/`
+- `projects/*/`
+
 ### `projects/[name]/project/`
 
 This is the actual software project.
