@@ -1,0 +1,323 @@
+# Memory Service Setup
+
+This guide covers the first local setup flow for the framework memory-service.
+
+## What `MEMORY_WORKSPACE` Is For
+
+`MEMORY_WORKSPACE` is a logical workspace label stored with imported records.
+
+It is currently used to:
+- stamp imported `sessions`, `messages`, and `work_reports` with a workspace name
+- stamp manually added `lessons` with a workspace name
+- keep the schema ready for cases where one PostgreSQL database stores memory for more than one workspace
+
+Example uses:
+- `agent-framework-ws`
+- `personal-workspace`
+- `client-a-workspace`
+
+If you only use one workspace, set it to a stable descriptive name and leave it alone.
+
+Example:
+
+```env
+MEMORY_WORKSPACE=agent-framework-ws
+```
+
+## 1. Go To The Memory-Service Directory
+
+```bash
+cd /home/kancho/Documents/temp/agents-framework-ws/projects/agent-framework/project/memory-service
+```
+
+## 2. Install Dependencies
+
+```bash
+npm install
+```
+
+This creates:
+- `node_modules/`
+- `package-lock.json` if it is not already present
+
+## 3. Create The Local Env File
+
+```bash
+cp .env.example .env
+```
+
+Example `.env`:
+
+```env
+MEMORY_DB_HOST=localhost
+MEMORY_DB_PORT=5432
+MEMORY_DB_NAME=agent_framework
+MEMORY_DB_USER=agent_framework
+MEMORY_DB_PASSWORD=change-me
+MEMORY_DB_SCHEMA=memory
+MEMORY_WORKSPACE=agent-framework-ws
+```
+
+## 4. PostgreSQL Setup Options
+
+### Option A: Existing Local PostgreSQL
+
+If PostgreSQL is already installed and running on the host, create the database/user if needed, then apply the migration with host `psql`.
+
+### Option B: Docker PostgreSQL
+
+This option runs PostgreSQL inside a container.
+It does **not** install `psql` on the host.
+
+That means you have two valid ways to manage the database:
+- use `docker exec ... psql ...` inside the container
+- install `postgresql-client` on the host and connect to the mapped port
+
+Start a disposable local PostgreSQL 16 container:
+
+```bash
+docker run -d \
+  --name agent-framework-memory-pg \
+  -e POSTGRES_USER=agent_framework \
+  -e POSTGRES_PASSWORD=change-me \
+  -e POSTGRES_DB=agent_framework \
+  -p 5432:5432 \
+  postgres:16
+```
+
+If you want persistent Docker storage:
+
+```bash
+docker run -d \
+  --name agent-framework-memory-pg \
+  -e POSTGRES_USER=agent_framework \
+  -e POSTGRES_PASSWORD=change-me \
+  -e POSTGRES_DB=agent_framework \
+  -p 5432:5432 \
+  -v agent-framework-memory-pg:/var/lib/postgresql/data \
+  postgres:16
+```
+
+Wait a few seconds, then verify connectivity.
+
+#### Docker-native verification
+
+```bash
+docker exec -it agent-framework-memory-pg \
+  psql -U agent_framework -d agent_framework -c 'select 1;'
+```
+
+#### Host `psql` verification
+
+This only works if `psql` is installed on the host.
+
+```bash
+PGPASSWORD=change-me psql -h localhost -p 5432 -U agent_framework -d agent_framework -c 'select 1;'
+```
+
+## 5. Apply The Migration
+
+### Option A: Apply With Host `psql`
+
+```bash
+PGPASSWORD=change-me psql \
+  -h localhost \
+  -p 5432 \
+  -U agent_framework \
+  -d agent_framework \
+  -f migrations/001-init.sql
+```
+
+### Option B: Apply Through Docker
+
+```bash
+docker exec -i agent-framework-memory-pg \
+  psql -U agent_framework -d agent_framework \
+  < migrations/001-init.sql
+```
+
+Or use the helper script:
+
+```bash
+bash scripts/apply-migration-docker.sh
+```
+
+## 6. Verify The Schema
+
+### With Host `psql`
+
+```bash
+PGPASSWORD=change-me psql \
+  -h localhost \
+  -p 5432 \
+  -U agent_framework \
+  -d agent_framework \
+  -c "\dt memory.*"
+```
+
+### Through Docker
+
+```bash
+docker exec -it agent-framework-memory-pg \
+  psql -U agent_framework -d agent_framework -c '\dt memory.*'
+```
+
+Expected tables:
+- `memory.sessions`
+- `memory.messages`
+- `memory.work_reports`
+- `memory.lessons`
+
+## 7. Run Tests
+
+```bash
+npm test
+```
+
+## 8. Smoke-Check The CLI
+
+Show usage:
+
+```bash
+node ./bin/mem.js
+```
+
+List sessions:
+
+```bash
+node ./bin/mem.js sessions
+```
+
+## 9. Create A Sample OpenCode Transcript
+
+Create `sample-opencode.jsonl`:
+
+```jsonl
+{"type":"session","id":"sess-1","timestamp":"2026-04-14T10:00:00Z","source":"cli"}
+{"type":"message","id":"m1","timestamp":"2026-04-14T10:01:00Z","message":{"role":"user","content":"Plan the task"}}
+{"type":"message","id":"m2","timestamp":"2026-04-14T10:02:00Z","message":{"role":"assistant","content":[{"type":"thinking","text":"hidden"},{"type":"text","text":"Done"}]}}
+{"type":"work_report","id":"wr1","timestamp":"2026-04-14T10:03:00Z","project":"agent-framework","work_item":"task-1","summary":"Completed planning"}
+```
+
+## 10. Import The Sample Transcript
+
+```bash
+node ./bin/mem.js import-opencode ./sample-opencode.jsonl
+```
+
+Expected output:
+
+```text
+Imported session sess-1: 2 messages, 1 work reports
+```
+
+## 11. Query The Imported Data
+
+```bash
+node ./bin/mem.js search "Plan"
+node ./bin/mem.js recent 10
+node ./bin/mem.js reports 10
+node ./bin/mem.js sessions 10
+```
+
+## 12. Test Lessons
+
+Add a lesson:
+
+```bash
+node ./bin/mem.js lessons add "Test lesson" \
+  --desc "Remember to validate transcript shape first" \
+  --category setup \
+  --severity warning \
+  --tags postgres,opencode \
+  --project agent-framework \
+  --work-item memory-service-v1
+```
+
+Search for it:
+
+```bash
+node ./bin/mem.js lessons search "validate transcript"
+```
+
+## Ubuntu Helper Script
+
+This repository includes helper scripts:
+
+- `scripts/setup-postgres-ubuntu.sh` — for host-installed PostgreSQL on Ubuntu
+- `scripts/apply-migration-docker.sh` — for applying the migration to a running Docker PostgreSQL container
+
+`setup-postgres-ubuntu.sh`:
+- installs PostgreSQL if needed
+- creates the database user
+- creates the database
+- grants privileges
+- applies `migrations/001-init.sql`
+
+`apply-migration-docker.sh`:
+- expects a running Docker container with PostgreSQL already started
+- applies `migrations/001-init.sql` inside that container
+- verifies the created tables
+
+Example:
+
+```bash
+sudo bash scripts/setup-postgres-ubuntu.sh
+```
+
+Optional overrides:
+
+```bash
+sudo DB_NAME=agent_framework \
+  DB_USER=agent_framework \
+  DB_PASSWORD=change-me \
+  DB_HOST=localhost \
+  DB_PORT=5432 \
+  DB_SCHEMA=memory \
+  bash scripts/setup-postgres-ubuntu.sh
+```
+
+Docker helper usage:
+
+```bash
+bash scripts/apply-migration-docker.sh
+```
+
+Optional Docker helper overrides:
+
+```bash
+CONTAINER_NAME=agent-framework-memory-pg \
+DB_NAME=agent_framework \
+DB_USER=agent_framework \
+bash scripts/apply-migration-docker.sh
+```
+
+## Common Problems
+
+### Authentication failure
+
+Check:
+- host
+- port
+- username/password
+- whether PostgreSQL is listening on TCP or a local socket
+
+### Schema permission issues
+
+If the user can connect but cannot create schema objects, run as a privileged user:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS memory AUTHORIZATION agent_framework;
+GRANT ALL ON SCHEMA memory TO agent_framework;
+```
+
+### Search returns nothing
+
+Possible causes:
+- the import failed
+- the transcript shape differs from the current normalizer assumptions
+- the transcript only contained ignored thinking/tool blocks
+
+## Recommended Next Validation Step
+
+After the sample import works, test with a real OpenCode transcript and refine normalization only where the real data requires it.

@@ -55,6 +55,7 @@ The repository now includes an initial local-first PostgreSQL implementation und
 - `lib/import-opencode.js` — first OpenCode transcript importer
 - `lib/normalize-opencode.js` — OpenCode transcript normalization
 - `.env.example` — database/workspace configuration example
+- `SETUP.md` — setup, Docker PostgreSQL, helper scripts, and validation instructions
 
 This slice is intentionally small:
 - one storage backend: PostgreSQL
