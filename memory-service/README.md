@@ -45,6 +45,32 @@ If the answer is only needed for search and recall, the memory service is enough
 3. Expose a small CLI.
 4. Keep any web UI optional.
 
+## Current V1 Implementation Slice
+
+The repository now includes an initial local-first PostgreSQL implementation under `memory-service/`:
+
+- `package.json` — isolated Node package for the memory-service CLI
+- `migrations/001-init.sql` — initial PostgreSQL schema for `sessions`, `messages`, `work_reports`, and `lessons`
+- `bin/mem.js` — tiny CLI entrypoint
+- `lib/import-opencode.js` — first OpenCode transcript importer
+- `lib/normalize-opencode.js` — OpenCode transcript normalization
+- `.env.example` — database/workspace configuration example
+
+This slice is intentionally small:
+- one storage backend: PostgreSQL
+- one adapter: OpenCode JSONL transcript import
+- one interface: CLI
+- no UI and no automatic summarization
+
+## Boundary Reminder
+
+The memory service is for search and recall.
+It does not replace:
+- `ACTIVE-CONTEXT.md`
+- task `HANDOFF.md` / `CONTEXT.md`
+- `FIXES.md`
+- other markdown files that hold current state or policy
+
 ## Not In Scope For V1
 
 - automatic summarization

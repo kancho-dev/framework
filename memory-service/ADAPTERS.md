@@ -15,9 +15,15 @@ Each adapter converts platform-specific session artifacts into the common record
 ### OpenCode adapter
 
 Input examples:
-- session transcripts
-- work logs
-- command histories
+- JSONL session transcripts
+- work logs exported as newline-delimited JSON
+- command histories when they are emitted as transcript events
+
+Current v1 implementation note:
+- the first importer targets a single OpenCode JSONL transcript file
+- it normalizes one session plus message and optional `work_report` records
+- it preserves timestamps and source provenance where available
+- it strips thinking/tool-only blocks from stored message content
 
 ### Pi adapter
 

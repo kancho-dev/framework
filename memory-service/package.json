@@ -1,0 +1,20 @@
+{
+  "name": "@portable-agent-framework/memory-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first PostgreSQL-backed memory service for the portable agent framework",
+  "bin": {
+    "mem": "./bin/mem.js"
+  },
+  "scripts": {
+    "mem": "node ./bin/mem.js",
+    "test": "node --test ./lib/*.test.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "pg": "^8.16.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
