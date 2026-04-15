@@ -44,6 +44,8 @@ Import OpenCode sessions from the local SQLite database into PostgreSQL.
 Default behavior:
 - only imports sessions related to the current framework workspace
 - matching is based on OpenCode `session.directory` or `project.worktree` being under `MEMORY_WORKSPACE_ROOT`
+- reports how many sessions were scanned, in scope, inserted, updated, or unchanged
+- reports how many messages and derived work reports were newly inserted vs already present
 
 ### `mem import-opencode-sqlite /path/to/opencode.db --scope all`
 

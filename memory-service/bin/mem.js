@@ -67,7 +67,17 @@ async function main() {
           throw new Error('Invalid --scope value. Use workspace or all');
         }
         const result = await importOpenCodeSqlite(pool, config, dbPath, scope);
-        console.log(`Imported ${result.sessions} sessions, ${result.messages} messages, ${result.workReports} work reports (scope: ${result.scope})`);
+        console.log(`OpenCode import complete (scope: ${result.scope})`);
+        console.log(`  Sessions scanned: ${result.scannedSessions}`);
+        console.log(`  Sessions in scope: ${result.eligibleSessions}`);
+        console.log(`  Sessions inserted: ${result.sessionsInserted}`);
+        console.log(`  Sessions updated: ${result.sessionsUpdated}`);
+        console.log(`  Sessions unchanged: ${result.sessionsUnchanged}`);
+        console.log(`  Messages inserted: ${result.messagesInserted}`);
+        console.log(`  Messages skipped (already present): ${result.messagesSkipped}`);
+        console.log(`  Work reports inserted: ${result.workReportsInserted}`);
+        console.log(`  Work reports updated: ${result.workReportsUpdated}`);
+        console.log(`  Work reports unchanged: ${result.workReportsUnchanged}`);
         return;
       }
       case 'search': {

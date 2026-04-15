@@ -1,7 +1,18 @@
 const { readOpenCodeData } = require('./read-sqlite');
 const { normalizeOpenCodeSqlite } = require('./normalize');
 
+async function findExistingSession(client, schema, session) {
+  const { rows } = await client.query(
+    `SELECT id, source_hash, message_count, ended_at
+     FROM ${schema}.sessions
+     WHERE platform = $1 AND workspace = $2 AND external_id = $3`,
+    [session.platform, session.workspace, session.externalId]
+  );
+  return rows[0] || null;
+}
+
 async function upsertSession(client, schema, session) {
+  const existing = await findExistingSession(client, schema, session);
   const { rows } = await client.query(
     `INSERT INTO ${schema}.sessions (
       platform, workspace, external_id, session_type, source_path, source_hash, started_at, ended_at, message_count, updated_at
@@ -28,12 +39,24 @@ async function upsertSession(client, schema, session) {
     ]
   );
 
-  return rows[0].id;
+  const status = !existing
+    ? 'inserted'
+    : existing.source_hash !== session.sourceHash || Number(existing.message_count) !== Number(session.messageCount) || String(existing.ended_at || '') !== String(session.endedAt || '')
+      ? 'updated'
+      : 'unchanged';
+
+  return {
+    id: rows[0].id,
+    status,
+  };
 }
 
 async function insertMessages(client, schema, sessionId, session, messages) {
+  let inserted = 0;
+  let skipped = 0;
+
   for (const message of messages) {
-    await client.query(
+    const result = await client.query(
       `INSERT INTO ${schema}.messages (
         platform, workspace, session_id, external_id, parent_external_id, role, content, source_type, created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -50,11 +73,31 @@ async function insertMessages(client, schema, sessionId, session, messages) {
         message.createdAt,
       ]
     );
+
+    if (result.rowCount > 0) inserted += 1;
+    else skipped += 1;
   }
+
+  return { inserted, skipped };
+}
+
+async function findExistingWorkReport(client, schema, session, report) {
+  const { rows } = await client.query(
+    `SELECT summary, created_at
+     FROM ${schema}.work_reports
+     WHERE platform = $1 AND workspace = $2 AND external_id = $3`,
+    [session.platform, session.workspace, report.externalId]
+  );
+  return rows[0] || null;
 }
 
 async function upsertWorkReports(client, schema, sessionId, session, workReports) {
+  let inserted = 0;
+  let updated = 0;
+  let unchanged = 0;
+
   for (const report of workReports) {
+    const existing = await findExistingWorkReport(client, schema, session, report);
     await client.query(
       `INSERT INTO ${schema}.work_reports (
         platform, workspace, session_id, external_id, project, work_item, summary, source_type, created_at
@@ -78,7 +121,13 @@ async function upsertWorkReports(client, schema, sessionId, session, workReports
         report.createdAt,
       ]
     );
+
+    if (!existing) inserted += 1;
+    else if (existing.summary !== report.summary || String(existing.created_at || '') !== String(report.createdAt || '')) updated += 1;
+    else unchanged += 1;
   }
+
+  return { inserted, updated, unchanged };
 }
 
 async function importOpenCodeSqlite(pool, config, dbPath, scope = 'workspace') {
@@ -95,28 +144,39 @@ async function importOpenCodeSqlite(pool, config, dbPath, scope = 'workspace') {
   try {
     await client.query('BEGIN');
 
-    let importedSessions = 0;
-    let importedMessages = 0;
-    let importedReports = 0;
+    const stats = {
+      scope,
+      scannedSessions: raw.sessions.length,
+      eligibleSessions: normalizedSessions.length,
+      sessionsInserted: 0,
+      sessionsUpdated: 0,
+      sessionsUnchanged: 0,
+      messagesInserted: 0,
+      messagesSkipped: 0,
+      workReportsInserted: 0,
+      workReportsUpdated: 0,
+      workReportsUnchanged: 0,
+    };
 
     for (const normalized of normalizedSessions) {
-      const sessionId = await upsertSession(client, config.db.schema, normalized.session);
-      await insertMessages(client, config.db.schema, sessionId, normalized.session, normalized.messages);
-      await upsertWorkReports(client, config.db.schema, sessionId, normalized.session, normalized.workReports);
+      const sessionResult = await upsertSession(client, config.db.schema, normalized.session);
+      const messageResult = await insertMessages(client, config.db.schema, sessionResult.id, normalized.session, normalized.messages);
+      const reportResult = await upsertWorkReports(client, config.db.schema, sessionResult.id, normalized.session, normalized.workReports);
 
-      importedSessions += 1;
-      importedMessages += normalized.messages.length;
-      importedReports += normalized.workReports.length;
+      if (sessionResult.status === 'inserted') stats.sessionsInserted += 1;
+      else if (sessionResult.status === 'updated') stats.sessionsUpdated += 1;
+      else stats.sessionsUnchanged += 1;
+
+      stats.messagesInserted += messageResult.inserted;
+      stats.messagesSkipped += messageResult.skipped;
+      stats.workReportsInserted += reportResult.inserted;
+      stats.workReportsUpdated += reportResult.updated;
+      stats.workReportsUnchanged += reportResult.unchanged;
     }
 
     await client.query('COMMIT');
 
-    return {
-      sessions: importedSessions,
-      messages: importedMessages,
-      workReports: importedReports,
-      scope,
-    };
+    return stats;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
