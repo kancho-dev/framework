@@ -8,7 +8,7 @@
   },
   "scripts": {
     "mem": "node ./bin/mem.js",
-    "test": "node --test ./lib/*.test.js"
+    "test": "node --test ./lib/**/*.test.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

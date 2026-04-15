@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 const { withPool } = require('../lib/db');
-const { importOpenCodeSqlite } = require('../lib/import-opencode-sqlite');
+const { importOpenCodeSqlite } = require('../lib/adapters/opencode/import');
 const {
   addLesson,
   listReports,

@@ -52,9 +52,9 @@ The repository now includes an initial local-first PostgreSQL implementation und
 - `package.json` — isolated Node package for the memory-service CLI
 - `migrations/001-init.sql` — initial PostgreSQL schema for `sessions`, `messages`, `work_reports`, and `lessons`
 - `bin/mem.js` — tiny CLI entrypoint for queries, lessons, and import commands
-- `lib/import-opencode-sqlite.js` — OpenCode SQLite importer
-- `lib/read-opencode-sqlite.js` — OpenCode SQLite reader
-- `lib/normalize-opencode-sqlite.js` — OpenCode SQLite normalization
+- `lib/adapters/opencode/import.js` — OpenCode SQLite importer
+- `lib/adapters/opencode/read-sqlite.js` — OpenCode SQLite reader
+- `lib/adapters/opencode/normalize.js` — OpenCode SQLite normalization
 - `.env.example` — database/workspace configuration example
 - `SETUP.md` — setup, Docker PostgreSQL, helper scripts, and validation instructions
 

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeOpenCodeSqlite, shouldIncludeSession } = require('./normalize-opencode-sqlite');
+const { normalizeOpenCodeSqlite, shouldIncludeSession } = require('./normalize');
 
 test('shouldIncludeSession respects workspace scope filtering', () => {
   const session = {

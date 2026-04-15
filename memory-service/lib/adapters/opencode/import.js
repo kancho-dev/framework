@@ -1,5 +1,5 @@
-const { readOpenCodeData } = require('./read-opencode-sqlite');
-const { normalizeOpenCodeSqlite } = require('./normalize-opencode-sqlite');
+const { readOpenCodeData } = require('./read-sqlite');
+const { normalizeOpenCodeSqlite } = require('./normalize');
 
 async function upsertSession(client, schema, session) {
   const { rows } = await client.query(
