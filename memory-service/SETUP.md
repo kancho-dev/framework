@@ -12,7 +12,7 @@ It is currently used to:
 - keep the schema ready for cases where one PostgreSQL database stores memory for more than one workspace
 
 Example uses:
-- `agent-framework-ws`
+- `framework-workspace`
 - `personal-workspace`
 - `client-a-workspace`
 
@@ -21,13 +21,13 @@ If you only use one workspace, set it to a stable descriptive name and leave it 
 Example:
 
 ```env
-MEMORY_WORKSPACE=agent-framework-ws
+MEMORY_WORKSPACE=framework-workspace
 ```
 
 ## 1. Go To The Memory-Service Directory
 
 ```bash
-cd /home/kancho/Documents/temp/agents-framework-ws/projects/agent-framework/project/memory-service
+cd /path/to/your/framework-workspace/framework/memory-service
 ```
 
 ## 2. Install Dependencies
@@ -55,8 +55,8 @@ MEMORY_DB_NAME=agent_framework
 MEMORY_DB_USER=agent_framework
 MEMORY_DB_PASSWORD=change-me
 MEMORY_DB_SCHEMA=memory
-MEMORY_WORKSPACE=agent-framework-ws
-MEMORY_WORKSPACE_ROOT=/home/kancho/Documents/temp/agents-framework-ws
+MEMORY_WORKSPACE=framework-workspace
+MEMORY_WORKSPACE_ROOT=/path/to/your/framework-workspace
 ```
 
 ## 4. PostgreSQL Setup Options
@@ -217,7 +217,7 @@ mem sessions 1
 Add an alias to your shell config instead of creating a global link:
 
 ```bash
-alias mem='node /path/to/your/framework-workspace/projects/agent-framework/project/memory-service/bin/mem.js'
+alias mem='node /path/to/your/framework-workspace/framework/memory-service/bin/mem.js'
 ```
 
 For example, place it in `~/.bashrc` or `~/.zshrc`, then reload the shell:
