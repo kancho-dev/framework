@@ -14,6 +14,7 @@ function getConfig() {
       schema: process.env.MEMORY_DB_SCHEMA || 'memory',
     },
     workspace: process.env.MEMORY_WORKSPACE || 'default-workspace',
+    workspaceRoot: process.env.MEMORY_WORKSPACE_ROOT || process.cwd(),
   };
 }
 

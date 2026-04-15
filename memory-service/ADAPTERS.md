@@ -15,20 +15,24 @@ Each adapter converts platform-specific session artifacts into the common record
 ### OpenCode adapter
 
 Input examples:
-- JSONL session transcripts
-- work logs exported as newline-delimited JSON
-- command histories when they are emitted as transcript events
+- OpenCode SQLite database files
+- session tables or message tables inside the OpenCode local store
+- todo/work item tables if they are needed for `work_reports`
 
-Current v1 implementation note:
-- the first importer targets a single OpenCode JSONL transcript file
-- it normalizes one session plus message and optional `work_report` records
-- it preserves timestamps and source provenance where available
-- it strips thinking/tool-only blocks from stored message content
+Current implementation note:
+- OpenCode integration reads the local SQLite database instead of transcript files
+- `session` maps to framework sessions
+- `message` plus `part` reconstruct framework messages
+- only `part.type = text` is stored as searchable message content in v1
+- reasoning, step markers, and other noisy parts are ignored by default
+- `todo` rows are used to derive one searchable `work_report` per session when todos exist
+- imports default to the current workspace scope via `MEMORY_WORKSPACE_ROOT`, with `--scope all` available for broader import
 
 ### Pi adapter
 
 Input examples:
 - exported chat logs
+- JSONL session files
 - structured notes
 - task outputs
 

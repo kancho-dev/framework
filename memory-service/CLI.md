@@ -5,7 +5,8 @@ Provide a tiny CLI, not a product.
 ## Recommended Commands
 
 ```text
-mem import-opencode ./path/to/transcript.jsonl
+mem import-opencode-sqlite /path/to/opencode.db
+mem import-opencode-sqlite /path/to/opencode.db --scope all
 mem search "query"
 mem recent 20
 mem reports 10
@@ -36,12 +37,20 @@ Search mistakes, gotchas, and durable fixes before risky work.
 
 Add a lesson after solving a meaningful bug or discovering a repeated failure mode.
 
-### `mem import-opencode ./path/to/transcript.jsonl`
+### `mem import-opencode-sqlite /path/to/opencode.db`
 
-Import one OpenCode JSONL transcript into PostgreSQL.
+Import OpenCode sessions from the local SQLite database into PostgreSQL.
 
-Current v1 assumptions:
-- input is newline-delimited JSON
-- it may contain a `session` record plus `message` and optional `work_report` records
-- message content may be plain text or arrays of content blocks
-- thinking/tool-only blocks are ignored during normalization
+Default behavior:
+- only imports sessions related to the current framework workspace
+- matching is based on OpenCode `session.directory` or `project.worktree` being under `MEMORY_WORKSPACE_ROOT`
+
+### `mem import-opencode-sqlite /path/to/opencode.db --scope all`
+
+Import all OpenCode sessions found in the SQLite database, not just the current workspace subset.
+
+## Adapter Note
+
+The OpenCode adapter is SQLite-backed, not JSONL-backed.
+For OpenCode, the importer reconstructs framework messages from `message` + `part` tables and derives searchable work reports from `todo` rows.
+JSONL/session-file import is reserved as a likely future path for a Pi adapter.

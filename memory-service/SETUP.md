@@ -56,6 +56,7 @@ MEMORY_DB_USER=agent_framework
 MEMORY_DB_PASSWORD=change-me
 MEMORY_DB_SCHEMA=memory
 MEMORY_WORKSPACE=agent-framework-ws
+MEMORY_WORKSPACE_ROOT=/home/kancho/Documents/temp/agents-framework-ws
 ```
 
 ## 4. PostgreSQL Setup Options
@@ -188,30 +189,26 @@ List sessions:
 node ./bin/mem.js sessions
 ```
 
-## 9. Create A Sample OpenCode Transcript
+## 9. Import OpenCode Data From SQLite
 
-Create `sample-opencode.jsonl`:
+The OpenCode adapter reads from the local SQLite database.
+It requires the `sqlite3` CLI to be available on the machine running the import command.
 
-```jsonl
-{"type":"session","id":"sess-1","timestamp":"2026-04-14T10:00:00Z","source":"cli"}
-{"type":"message","id":"m1","timestamp":"2026-04-14T10:01:00Z","message":{"role":"user","content":"Plan the task"}}
-{"type":"message","id":"m2","timestamp":"2026-04-14T10:02:00Z","message":{"role":"assistant","content":[{"type":"thinking","text":"hidden"},{"type":"text","text":"Done"}]}}
-{"type":"work_report","id":"wr1","timestamp":"2026-04-14T10:03:00Z","project":"agent-framework","work_item":"task-1","summary":"Completed planning"}
-```
-
-## 10. Import The Sample Transcript
+Default current-workspace import:
 
 ```bash
-node ./bin/mem.js import-opencode ./sample-opencode.jsonl
+node ./bin/mem.js import-opencode-sqlite ~/.local/share/opencode/opencode.db
 ```
 
-Expected output:
+This imports only sessions whose OpenCode `session.directory` or `project.worktree` falls under `MEMORY_WORKSPACE_ROOT`.
 
-```text
-Imported session sess-1: 2 messages, 1 work reports
+Import all local OpenCode sessions instead:
+
+```bash
+node ./bin/mem.js import-opencode-sqlite ~/.local/share/opencode/opencode.db --scope all
 ```
 
-## 11. Query The Imported Data
+## 10. Query The Current Data
 
 ```bash
 node ./bin/mem.js search "Plan"
@@ -220,7 +217,7 @@ node ./bin/mem.js reports 10
 node ./bin/mem.js sessions 10
 ```
 
-## 12. Test Lessons
+## 11. Test Lessons
 
 Add a lesson:
 

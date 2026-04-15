@@ -1,5 +1,5 @@
-const fs = require('fs');
-const { normalizeOpenCodeTranscript } = require('./normalize-opencode');
+const { readOpenCodeData } = require('./read-opencode-sqlite');
+const { normalizeOpenCodeSqlite } = require('./normalize-opencode-sqlite');
 
 async function upsertSession(client, schema, session) {
   const { rows } = await client.query(
@@ -53,13 +53,19 @@ async function insertMessages(client, schema, sessionId, session, messages) {
   }
 }
 
-async function insertWorkReports(client, schema, sessionId, session, workReports) {
+async function upsertWorkReports(client, schema, sessionId, session, workReports) {
   for (const report of workReports) {
     await client.query(
       `INSERT INTO ${schema}.work_reports (
         platform, workspace, session_id, external_id, project, work_item, summary, source_type, created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT (platform, workspace, external_id) DO NOTHING`,
+      ON CONFLICT (platform, workspace, external_id) DO UPDATE SET
+        session_id = EXCLUDED.session_id,
+        project = EXCLUDED.project,
+        work_item = EXCLUDED.work_item,
+        summary = EXCLUDED.summary,
+        source_type = EXCLUDED.source_type,
+        created_at = EXCLUDED.created_at`,
       [
         session.platform,
         session.workspace,
@@ -75,26 +81,41 @@ async function insertWorkReports(client, schema, sessionId, session, workReports
   }
 }
 
-async function importOpenCodeTranscript(pool, config, filePath) {
-  const content = fs.readFileSync(filePath, 'utf8');
-  const normalized = normalizeOpenCodeTranscript({
-    content,
-    sourcePath: filePath,
+async function importOpenCodeSqlite(pool, config, dbPath, scope = 'workspace') {
+  const raw = readOpenCodeData(dbPath);
+  const normalizedSessions = normalizeOpenCodeSqlite({
+    dbPath,
     workspace: config.workspace,
+    workspaceRoot: config.workspaceRoot,
+    scope,
+    raw,
   });
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const sessionId = await upsertSession(client, config.db.schema, normalized.session);
-    await insertMessages(client, config.db.schema, sessionId, normalized.session, normalized.messages);
-    await insertWorkReports(client, config.db.schema, sessionId, normalized.session, normalized.workReports);
+
+    let importedSessions = 0;
+    let importedMessages = 0;
+    let importedReports = 0;
+
+    for (const normalized of normalizedSessions) {
+      const sessionId = await upsertSession(client, config.db.schema, normalized.session);
+      await insertMessages(client, config.db.schema, sessionId, normalized.session, normalized.messages);
+      await upsertWorkReports(client, config.db.schema, sessionId, normalized.session, normalized.workReports);
+
+      importedSessions += 1;
+      importedMessages += normalized.messages.length;
+      importedReports += normalized.workReports.length;
+    }
+
     await client.query('COMMIT');
 
     return {
-      sessionExternalId: normalized.session.externalId,
-      messages: normalized.messages.length,
-      workReports: normalized.workReports.length,
+      sessions: importedSessions,
+      messages: importedMessages,
+      workReports: importedReports,
+      scope,
     };
   } catch (error) {
     await client.query('ROLLBACK');
@@ -105,5 +126,5 @@ async function importOpenCodeTranscript(pool, config, filePath) {
 }
 
 module.exports = {
-  importOpenCodeTranscript,
+  importOpenCodeSqlite,
 };

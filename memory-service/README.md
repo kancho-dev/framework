@@ -51,17 +51,34 @@ The repository now includes an initial local-first PostgreSQL implementation und
 
 - `package.json` — isolated Node package for the memory-service CLI
 - `migrations/001-init.sql` — initial PostgreSQL schema for `sessions`, `messages`, `work_reports`, and `lessons`
-- `bin/mem.js` — tiny CLI entrypoint
-- `lib/import-opencode.js` — first OpenCode transcript importer
-- `lib/normalize-opencode.js` — OpenCode transcript normalization
+- `bin/mem.js` — tiny CLI entrypoint for queries, lessons, and import commands
+- `lib/import-opencode-sqlite.js` — OpenCode SQLite importer
+- `lib/read-opencode-sqlite.js` — OpenCode SQLite reader
+- `lib/normalize-opencode-sqlite.js` — OpenCode SQLite normalization
 - `.env.example` — database/workspace configuration example
 - `SETUP.md` — setup, Docker PostgreSQL, helper scripts, and validation instructions
 
 This slice is intentionally small:
 - one storage backend: PostgreSQL
-- one adapter: OpenCode JSONL transcript import
 - one interface: CLI
 - no UI and no automatic summarization
+
+## Adapter Status
+
+The earlier assumption that OpenCode sessions could be imported from JSONL transcript files was incorrect for the real OpenCode environment being targeted here.
+OpenCode session, todo, and message data are stored in SQLite, so the adapter is implemented around SQLite extraction.
+
+Current OpenCode adapter behavior:
+- reads the OpenCode SQLite database through the local `sqlite3` CLI
+- imports `session` rows into framework `sessions`
+- reconstructs framework `messages` from `message` plus `part`
+- stores only searchable text content from `part.type = text`
+- ignores reasoning and step markers by default
+- derives one searchable `work_report` per session from `todo` rows when present
+- defaults to importing only sessions whose OpenCode `directory` or `project.worktree` falls under `MEMORY_WORKSPACE_ROOT`
+- supports `--scope all` for optional broader imports
+
+JSONL-based import is better treated as future work for another adapter, likely Pi.
 
 ## Boundary Reminder
 

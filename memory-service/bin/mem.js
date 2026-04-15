@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-const path = require('path');
 const { withPool } = require('../lib/db');
-const { importOpenCodeTranscript } = require('../lib/import-opencode');
+const { importOpenCodeSqlite } = require('../lib/import-opencode-sqlite');
 const {
   addLesson,
   listReports,
@@ -13,7 +12,7 @@ const {
 
 function usage() {
   console.log(`Usage:
-  mem import-opencode <transcript.jsonl>
+  mem import-opencode-sqlite <db-path> [--scope workspace|all]
   mem search "query"
   mem recent [count]
   mem reports [count]
@@ -59,11 +58,16 @@ async function main() {
     const schema = config.db.schema;
 
     switch (command) {
-      case 'import-opencode': {
-        const filePath = args[1];
-        if (!filePath) throw new Error('Missing transcript path');
-        const result = await importOpenCodeTranscript(pool, config, path.resolve(filePath));
-        console.log(`Imported session ${result.sessionExternalId}: ${result.messages} messages, ${result.workReports} work reports`);
+      case 'import-opencode-sqlite': {
+        const dbPath = args[1];
+        if (!dbPath) throw new Error('Missing OpenCode SQLite database path');
+        const flags = parseFlags(args.slice(2));
+        const scope = flags.scope || 'workspace';
+        if (!['workspace', 'all'].includes(scope)) {
+          throw new Error('Invalid --scope value. Use workspace or all');
+        }
+        const result = await importOpenCodeSqlite(pool, config, dbPath, scope);
+        console.log(`Imported ${result.sessions} sessions, ${result.messages} messages, ${result.workReports} work reports (scope: ${result.scope})`);
         return;
       }
       case 'search': {
