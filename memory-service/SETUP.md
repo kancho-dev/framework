@@ -189,6 +189,45 @@ List sessions:
 node ./bin/mem.js sessions
 ```
 
+## Optional: Make `mem` Available As A Shell Command
+
+If you want to run `mem` from anywhere instead of `node ./bin/mem.js`, there are two simple options.
+
+### Option A: `npm link`
+
+From the memory-service directory:
+
+```bash
+npm link
+```
+
+This exposes the package `bin` globally as `mem`.
+It is convenient, but the global command will point at this specific workspace copy of `memory-service/`.
+If you use multiple framework workspaces, only one linked copy can win at a time.
+
+Verify:
+
+```bash
+which mem
+mem sessions 1
+```
+
+### Option B: Shell Alias
+
+Add an alias to your shell config instead of creating a global link:
+
+```bash
+alias mem='node /path/to/your/framework-workspace/projects/agent-framework/project/memory-service/bin/mem.js'
+```
+
+For example, place it in `~/.bashrc` or `~/.zshrc`, then reload the shell:
+
+```bash
+source ~/.bashrc
+```
+
+This is still workspace-specific, but it is explicit and easy to change later.
+
 ## 9. Import OpenCode Data From SQLite
 
 The OpenCode adapter reads from the local SQLite database.
@@ -210,11 +249,22 @@ node ./bin/mem.js import-opencode-sqlite ~/.local/share/opencode/opencode.db --s
 
 ## 10. Query The Current Data
 
+Direct invocation:
+
 ```bash
 node ./bin/mem.js search "Plan"
 node ./bin/mem.js recent 10
 node ./bin/mem.js reports 10
 node ./bin/mem.js sessions 10
+```
+
+If you set up `mem` as a shell command, the same queries become:
+
+```bash
+mem search "Plan"
+mem recent 10
+mem reports 10
+mem sessions 10
 ```
 
 ## 11. Test Lessons

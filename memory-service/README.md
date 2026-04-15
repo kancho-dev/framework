@@ -63,6 +63,20 @@ This slice is intentionally small:
 - one interface: CLI
 - no UI and no automatic summarization
 
+## CLI Invocation
+
+The default invocation form is:
+
+```bash
+node ./bin/mem.js <command>
+```
+
+If you want a plain `mem` command from anywhere, two simple options are documented in `SETUP.md`:
+- `npm link` from this package directory
+- a shell alias pointing at `bin/mem.js`
+
+Both approaches are workspace-specific, so be careful if you keep multiple framework workspaces side by side.
+
 ## Adapter Status
 
 The earlier assumption that OpenCode sessions could be imported from JSONL transcript files was incorrect for the real OpenCode environment being targeted here.
