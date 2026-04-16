@@ -34,9 +34,22 @@ async function recentMessages(pool, schema, limit = 20) {
   });
 }
 
+function formatSessionTrace(row) {
+  const metadata = row.source_metadata || {};
+  if (row.platform === 'pi') {
+    return metadata.cwd || row.source_path || '—';
+  }
+
+  if (row.platform === 'opencode') {
+    return metadata.directory || metadata.projectWorktree || row.source_path || '—';
+  }
+
+  return row.source_path || '—';
+}
+
 async function listReports(pool, schema, limit = 10) {
   const { rows } = await pool.query(
-    `SELECT project, work_item, summary, created_at
+    `SELECT platform, project, work_item, summary, created_at, source_metadata
      FROM ${schema}.work_reports
      ORDER BY created_at DESC
      LIMIT $1`,
@@ -44,14 +57,19 @@ async function listReports(pool, schema, limit = 10) {
   );
 
   rows.forEach((row) => {
+    const metadata = row.source_metadata || {};
+    const trace = row.platform === 'opencode'
+      ? `todo-count=${metadata.todoCount || 0}`
+      : row.platform;
     console.log(`[${formatTimestamp(row.created_at)}] ${row.project || '—'} / ${row.work_item || '—'}`);
+    console.log(`  source: ${trace}`);
     console.log(`  ${truncate(row.summary, 240)}\n`);
   });
 }
 
 async function listSessions(pool, schema, limit = 20) {
   const { rows } = await pool.query(
-    `SELECT external_id, session_type, message_count, started_at, ended_at
+    `SELECT platform, external_id, session_type, source_path, source_metadata, message_count, started_at, ended_at
      FROM ${schema}.sessions
      ORDER BY COALESCE(ended_at, started_at) DESC NULLS LAST
      LIMIT $1`,
@@ -59,7 +77,8 @@ async function listSessions(pool, schema, limit = 20) {
   );
 
   rows.forEach((row) => {
-    console.log(`${row.external_id} | ${row.session_type || 'session'} | ${row.message_count} msgs | ${formatTimestamp(row.started_at)} -> ${formatTimestamp(row.ended_at)}`);
+    console.log(`${row.external_id} | ${row.platform} | ${row.session_type || 'session'} | ${row.message_count} msgs | ${formatTimestamp(row.started_at)} -> ${formatTimestamp(row.ended_at)}`);
+    console.log(`  trace: ${truncate(formatSessionTrace(row), 140)}`);
   });
 }
 

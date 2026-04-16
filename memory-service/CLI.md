@@ -27,9 +27,14 @@ Search message content across sessions.
 
 Show recent human and assistant messages for fast catch-up.
 
+### `mem sessions`
+
+Show recent sessions with a small trace hint from adapter metadata, such as Pi `cwd` or OpenCode directory/worktree.
+
 ### `mem reports 10`
 
 Show recent delegated or recurring work summaries.
+The current output includes a small trace hint from adapter metadata, such as OpenCode todo counts.
 
 ### `mem lessons search "query"`
 

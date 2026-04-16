@@ -31,6 +31,8 @@ Keep only these records in v1:
 - show recent work reports
 - search lessons before risky or repeated work
 
+The current session/report CLI also surfaces a small amount of trace metadata so you can tell where imported records came from without dumping raw `source_metadata` JSON.
+
 ## Recommended Rule
 
 If the answer is needed for current state or policy, write it into markdown.
