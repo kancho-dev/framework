@@ -55,6 +55,9 @@ The repository now includes an initial local-first PostgreSQL implementation und
 - `lib/adapters/opencode/import.js` — OpenCode SQLite importer
 - `lib/adapters/opencode/read-sqlite.js` — OpenCode SQLite reader
 - `lib/adapters/opencode/normalize.js` — OpenCode SQLite normalization
+- `lib/adapters/pi/import.js` — Pi JSONL importer
+- `lib/adapters/pi/read-jsonl.js` — Pi JSONL session reader
+- `lib/adapters/pi/normalize.js` — Pi JSONL normalization
 - `.env.example` — database/workspace configuration example
 - `SETUP.md` — setup, Docker PostgreSQL, helper scripts, and validation instructions
 
@@ -73,6 +76,7 @@ node ./bin/mem.js <command>
 
 For OpenCode imports, the SQLite database path can be passed explicitly or preconfigured with `MEMORY_OPENCODE_DB_PATH`.
 If the local `sqlite3` executable lives in a non-standard location, set `MEMORY_SQLITE3_BIN`.
+For Pi imports, the JSONL sessions root can be passed explicitly or preconfigured with `MEMORY_PI_SESSIONS_ROOT`.
 
 If you want a plain `mem` command from anywhere, two simple options are documented in `SETUP.md`:
 - `npm link` from this package directory
@@ -97,7 +101,17 @@ Current OpenCode adapter behavior:
 - defaults to importing only sessions whose OpenCode `directory` or `project.worktree` falls under `MEMORY_WORKSPACE_ROOT`
 - supports `--scope all` for optional broader imports
 
-JSONL-based import is better treated as future work for another adapter, likely Pi.
+Current Pi adapter behavior:
+- reads local Pi JSONL session files from a sessions root directory
+- imports `session` headers into framework `sessions`
+- preserves Pi session provenance such as `cwd`, model changes, thinking-level changes, and observed tool results in `source_metadata`
+- stores searchable user `text` and assistant-visible `text`
+- ignores hidden `thinking`, structured `toolCall`, and `toolResult` payloads by default for searchable messages
+- defaults to importing only sessions whose Pi `cwd` falls under `MEMORY_WORKSPACE_ROOT`
+- supports `--scope all` for optional broader imports
+- does not derive `work_reports` yet
+
+JSONL-based import is now implemented for Pi rather than OpenCode.
 
 ## Boundary Reminder
 

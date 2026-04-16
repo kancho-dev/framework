@@ -4,7 +4,7 @@ const dotenv = require('dotenv');
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
-function resolveOpenCodeDbPath(value) {
+function resolvePathFromEnv(value) {
   if (!value) return null;
   if (value.startsWith('~/')) {
     return path.join(os.homedir(), value.slice(2));
@@ -25,13 +25,16 @@ function getConfig(env = process.env, cwd = process.cwd()) {
     workspace: env.MEMORY_WORKSPACE || 'default-workspace',
     workspaceRoot: env.MEMORY_WORKSPACE_ROOT || cwd,
     opencode: {
-      sqlitePath: resolveOpenCodeDbPath(env.MEMORY_OPENCODE_DB_PATH),
+      sqlitePath: resolvePathFromEnv(env.MEMORY_OPENCODE_DB_PATH),
       sqliteBin: env.MEMORY_SQLITE3_BIN || 'sqlite3',
+    },
+    pi: {
+      sessionsRoot: resolvePathFromEnv(env.MEMORY_PI_SESSIONS_ROOT),
     },
   };
 }
 
 module.exports = {
   getConfig,
-  resolveOpenCodeDbPath,
+  resolvePathFromEnv,
 };

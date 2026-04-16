@@ -59,6 +59,7 @@ MEMORY_WORKSPACE=framework-workspace
 MEMORY_WORKSPACE_ROOT=/path/to/your/framework-workspace
 MEMORY_OPENCODE_DB_PATH=~/.local/share/opencode/opencode.db
 MEMORY_SQLITE3_BIN=sqlite3
+MEMORY_PI_SESSIONS_ROOT=~/.pi/agent/sessions
 ```
 
 ## 4. PostgreSQL Setup Options
@@ -261,6 +262,32 @@ node ./bin/mem.js import-opencode-sqlite --scope all
 
 If `sqlite3` is not on your default `PATH`, point `MEMORY_SQLITE3_BIN` at the correct executable.
 
+## Optional: Import Pi Data From JSONL
+
+The Pi adapter reads JSONL session files from a sessions root directory.
+
+Default current-workspace import with an explicit sessions root:
+
+```bash
+node ./bin/mem.js import-pi-jsonl ~/.pi/agent/sessions
+```
+
+If `MEMORY_PI_SESSIONS_ROOT` is set in `.env`, you can omit the path entirely:
+
+```bash
+node ./bin/mem.js import-pi-jsonl
+```
+
+This imports only sessions whose Pi `session.cwd` falls under `MEMORY_WORKSPACE_ROOT`.
+
+Import all local Pi sessions under that root instead:
+
+```bash
+node ./bin/mem.js import-pi-jsonl --scope all
+```
+
+The current Pi adapter imports `sessions` and searchable `messages`, but does not derive `work_reports` yet.
+
 ## 10. Query The Current Data
 
 Direct invocation:
@@ -376,9 +403,9 @@ GRANT ALL ON SCHEMA memory TO agent_framework;
 
 Possible causes:
 - the import failed
-- the SQLite DB path or `sqlite3` executable path is wrong
+- the SQLite DB path, `sqlite3` executable path, or Pi sessions root is wrong
 - the transcript shape differs from the current normalizer assumptions
-- the transcript only contained ignored reasoning/synthetic tool-echo blocks
+- the transcript only contained ignored reasoning/tool-echo/tool-result blocks
 
 ## Recommended Next Validation Step
 

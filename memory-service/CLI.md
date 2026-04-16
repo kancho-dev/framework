@@ -7,6 +7,8 @@ Provide a tiny CLI, not a product.
 ```text
 mem import-opencode-sqlite [/path/to/opencode.db]
 mem import-opencode-sqlite --scope all
+mem import-pi-jsonl [/path/to/pi/sessions]
+mem import-pi-jsonl --scope all
 mem search "query"
 mem recent 20
 mem reports 10
@@ -52,6 +54,23 @@ Default behavior:
 
 Import all OpenCode sessions found in the SQLite database, not just the current workspace subset.
 This works with an explicit path or a configured `MEMORY_OPENCODE_DB_PATH`.
+
+### `mem import-pi-jsonl [/path/to/pi/sessions]`
+
+Import Pi sessions from the local JSONL session store.
+The root can be passed directly or supplied through `MEMORY_PI_SESSIONS_ROOT`.
+
+Default behavior:
+- scans `.jsonl` session files under the given root recursively
+- only imports sessions whose Pi `session.cwd` is under `MEMORY_WORKSPACE_ROOT`
+- stores searchable user text and final assistant text
+- excludes hidden `thinking`, structured `toolCall`, and `toolResult` content from searchable messages by default
+- preserves session/tool provenance in `source_metadata`
+- currently does not derive `work_reports`
+
+### `mem import-pi-jsonl --scope all`
+
+Import all Pi sessions found under the configured JSONL root, not just the current workspace subset.
 
 ## Adapter Note
 

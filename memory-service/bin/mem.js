@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const { withPool } = require('../lib/db');
 const { importOpenCodeSqlite } = require('../lib/adapters/opencode/import');
+const { importPiJsonl } = require('../lib/adapters/pi/import');
 const {
   addLesson,
   listReports,
@@ -13,6 +14,7 @@ const {
 function usage() {
   console.log(`Usage:
   mem import-opencode-sqlite [db-path] [--scope workspace|all]
+  mem import-pi-jsonl [sessions-root] [--scope workspace|all]
   mem search "query"
   mem recent [count]
   mem reports [count]
@@ -73,6 +75,33 @@ async function main() {
         console.log(`OpenCode import complete (scope: ${result.scope})`);
         console.log(`  SQLite DB: ${dbPath}`);
         console.log(`  Sessions scanned: ${result.scannedSessions}`);
+        console.log(`  Sessions in scope: ${result.eligibleSessions}`);
+        console.log(`  Sessions inserted: ${result.sessionsInserted}`);
+        console.log(`  Sessions updated: ${result.sessionsUpdated}`);
+        console.log(`  Sessions unchanged: ${result.sessionsUnchanged}`);
+        console.log(`  Messages inserted: ${result.messagesInserted}`);
+        console.log(`  Messages updated: ${result.messagesUpdated}`);
+        console.log(`  Messages unchanged: ${result.messagesUnchanged}`);
+        console.log(`  Work reports inserted: ${result.workReportsInserted}`);
+        console.log(`  Work reports updated: ${result.workReportsUpdated}`);
+        console.log(`  Work reports unchanged: ${result.workReportsUnchanged}`);
+        return;
+      }
+      case 'import-pi-jsonl': {
+        const importArgs = args.slice(1);
+        const flags = parseFlags(importArgs);
+        const sessionsRoot = positionalArgs(importArgs)[0] || config.pi.sessionsRoot;
+        if (!sessionsRoot) {
+          throw new Error('Missing Pi sessions root. Pass [sessions-root] or set MEMORY_PI_SESSIONS_ROOT');
+        }
+        const scope = flags.scope || 'workspace';
+        if (!['workspace', 'all'].includes(scope)) {
+          throw new Error('Invalid --scope value. Use workspace or all');
+        }
+        const result = await importPiJsonl(pool, config, sessionsRoot, scope);
+        console.log(`Pi import complete (scope: ${result.scope})`);
+        console.log(`  Sessions root: ${sessionsRoot}`);
+        console.log(`  Session files scanned: ${result.scannedSessions}`);
         console.log(`  Sessions in scope: ${result.eligibleSessions}`);
         console.log(`  Sessions inserted: ${result.sessionsInserted}`);
         console.log(`  Sessions updated: ${result.sessionsUpdated}`);

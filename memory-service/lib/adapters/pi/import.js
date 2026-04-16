@@ -1,20 +1,19 @@
-const { readOpenCodeData } = require('./read-sqlite');
-const { normalizeOpenCodeSqlite } = require('./normalize');
+const { readPiSessions } = require('./read-jsonl');
+const { normalizePiJsonl } = require('./normalize');
 const { importNormalizedSessions } = require('../../import-records');
 
-async function importOpenCodeSqlite(pool, config, dbPath, scope = 'workspace') {
-  const raw = readOpenCodeData(dbPath, config.opencode.sqliteBin);
-  const normalizedSessions = normalizeOpenCodeSqlite({
-    dbPath,
+async function importPiJsonl(pool, config, sessionsRoot, scope = 'workspace') {
+  const sessionFiles = readPiSessions(sessionsRoot);
+  const normalizedSessions = normalizePiJsonl({
     workspace: config.workspace,
     workspaceRoot: config.workspaceRoot,
     scope,
-    raw,
+    sessionFiles,
   });
 
   const stats = {
     scope,
-    scannedSessions: raw.sessions.length,
+    scannedSessions: sessionFiles.length,
     eligibleSessions: normalizedSessions.length,
     sessionsInserted: 0,
     sessionsUpdated: 0,
@@ -31,5 +30,5 @@ async function importOpenCodeSqlite(pool, config, dbPath, scope = 'workspace') {
 }
 
 module.exports = {
-  importOpenCodeSqlite,
+  importPiJsonl,
 };

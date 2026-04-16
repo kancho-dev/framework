@@ -38,6 +38,16 @@ Input examples:
 - structured notes
 - task outputs
 
+Current implementation note:
+- Pi integration reads JSONL session files under a sessions root directory
+- the first line is a session header and later lines are event/message records
+- searchable messages come from user `text` and assistant-visible `text`
+- hidden `thinking`, structured `toolCall`, and `toolResult` content are excluded from searchable messages by default
+- session-level provenance such as `cwd`, model changes, thinking-level changes, and observed tool results can be preserved in `source_metadata`
+- imports default to workspace scope via Pi `session.cwd` against `MEMORY_WORKSPACE_ROOT`, with `--scope all` available for broader import
+- the sessions root can be supplied as a CLI argument or preconfigured with `MEMORY_PI_SESSIONS_ROOT`
+- Pi imports currently create `sessions` and `messages`, but not derived `work_reports`
+
 ### Manual adapter
 
 Input examples:
