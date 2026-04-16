@@ -7,10 +7,10 @@ DB_USER="${DB_USER:-agent_framework}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-MIGRATION_FILE="$ROOT_DIR/migrations/001-init.sql"
+MIGRATIONS_DIR="$ROOT_DIR/migrations"
 
-if [[ ! -f "$MIGRATION_FILE" ]]; then
-  echo "Migration file not found: $MIGRATION_FILE" >&2
+if [[ ! -d "$MIGRATIONS_DIR" ]]; then
+  echo "Migrations directory not found: $MIGRATIONS_DIR" >&2
   exit 1
 fi
 
@@ -25,11 +25,23 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
   exit 1
 fi
 
-echo "Applying migration to container: $CONTAINER_NAME"
-docker exec -i "$CONTAINER_NAME" \
-  psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME" \
-  < "$MIGRATION_FILE"
+shopt -s nullglob
+migration_files=("$MIGRATIONS_DIR"/*.sql)
+shopt -u nullglob
+
+if [[ ${#migration_files[@]} -eq 0 ]]; then
+  echo "No migration files found in: $MIGRATIONS_DIR" >&2
+  exit 1
+fi
+
+echo "Applying migrations to container: $CONTAINER_NAME"
+for migration_file in "${migration_files[@]}"; do
+  echo "- $(basename "$migration_file")"
+  docker exec -i "$CONTAINER_NAME" \
+    psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME" \
+    < "$migration_file"
+done
 
 echo "Done. Verifying tables..."
-docker exec -it "$CONTAINER_NAME" \
+docker exec -i "$CONTAINER_NAME" \
   psql -U "$DB_USER" -d "$DB_NAME" -c '\dt memory.*'

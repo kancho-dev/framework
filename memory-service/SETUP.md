@@ -145,6 +145,8 @@ Or use the helper script:
 bash scripts/apply-migration-docker.sh
 ```
 
+The helper applies all `migrations/*.sql` files in order, so it also picks up follow-up schema changes such as `002-source-metadata.sql`.
+
 ## 6. Verify The Schema
 
 ### With Host `psql`
@@ -311,11 +313,11 @@ This repository includes helper scripts:
 - creates the database user
 - creates the database
 - grants privileges
-- applies `migrations/001-init.sql`
+- applies all `migrations/*.sql` files in order
 
 `apply-migration-docker.sh`:
 - expects a running Docker container with PostgreSQL already started
-- applies `migrations/001-init.sql` inside that container
+- applies all `migrations/*.sql` files in order inside that container
 - verifies the created tables
 
 Example:

@@ -10,10 +10,10 @@ DB_SCHEMA="${DB_SCHEMA:-memory}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-MIGRATION_FILE="$ROOT_DIR/migrations/001-init.sql"
+MIGRATIONS_DIR="$ROOT_DIR/migrations"
 
-if [[ ! -f "$MIGRATION_FILE" ]]; then
-  echo "Migration file not found: $MIGRATION_FILE" >&2
+if [[ ! -d "$MIGRATIONS_DIR" ]]; then
+  echo "Migrations directory not found: $MIGRATIONS_DIR" >&2
   exit 1
 fi
 
@@ -47,14 +47,26 @@ su - postgres -c "psql -v ON_ERROR_STOP=1 -d $DB_NAME -c \"GRANT ALL PRIVILEGES 
 su - postgres -c "psql -v ON_ERROR_STOP=1 -d $DB_NAME -c \"CREATE SCHEMA IF NOT EXISTS $DB_SCHEMA AUTHORIZATION $DB_USER;\""
 su - postgres -c "psql -v ON_ERROR_STOP=1 -d $DB_NAME -c \"GRANT ALL ON SCHEMA $DB_SCHEMA TO $DB_USER;\""
 
-echo "Applying migration: $MIGRATION_FILE"
-PGPASSWORD="$DB_PASSWORD" psql \
-  -v ON_ERROR_STOP=1 \
-  -h "$DB_HOST" \
-  -p "$DB_PORT" \
-  -U "$DB_USER" \
-  -d "$DB_NAME" \
-  -f "$MIGRATION_FILE"
+shopt -s nullglob
+migration_files=("$MIGRATIONS_DIR"/*.sql)
+shopt -u nullglob
+
+if [[ ${#migration_files[@]} -eq 0 ]]; then
+  echo "No migration files found in: $MIGRATIONS_DIR" >&2
+  exit 1
+fi
+
+echo "Applying migrations"
+for migration_file in "${migration_files[@]}"; do
+  echo "- $(basename "$migration_file")"
+  PGPASSWORD="$DB_PASSWORD" psql \
+    -v ON_ERROR_STOP=1 \
+    -h "$DB_HOST" \
+    -p "$DB_PORT" \
+    -U "$DB_USER" \
+    -d "$DB_NAME" \
+    -f "$migration_file"
+done
 
 echo "Done."
 echo "Database: $DB_NAME"
