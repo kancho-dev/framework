@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS memory.sessions (
   session_type TEXT,
   source_path TEXT,
   source_hash TEXT,
+  source_metadata JSONB,
   started_at TIMESTAMPTZ,
   ended_at TIMESTAMPTZ,
   message_count INTEGER NOT NULL DEFAULT 0,
@@ -46,6 +47,7 @@ CREATE TABLE IF NOT EXISTS memory.work_reports (
   work_item TEXT,
   summary TEXT NOT NULL,
   source_type TEXT,
+  source_metadata JSONB,
   created_at TIMESTAMPTZ NOT NULL,
   imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (platform, workspace, external_id)

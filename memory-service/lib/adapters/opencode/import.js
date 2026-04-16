@@ -15,12 +15,13 @@ async function upsertSession(client, schema, session) {
   const existing = await findExistingSession(client, schema, session);
   const { rows } = await client.query(
     `INSERT INTO ${schema}.sessions (
-      platform, workspace, external_id, session_type, source_path, source_hash, started_at, ended_at, message_count, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+      platform, workspace, external_id, session_type, source_path, source_hash, source_metadata, started_at, ended_at, message_count, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, NOW())
     ON CONFLICT (platform, workspace, external_id) DO UPDATE SET
       session_type = EXCLUDED.session_type,
       source_path = EXCLUDED.source_path,
       source_hash = EXCLUDED.source_hash,
+      source_metadata = EXCLUDED.source_metadata,
       started_at = EXCLUDED.started_at,
       ended_at = EXCLUDED.ended_at,
       message_count = EXCLUDED.message_count,
@@ -33,6 +34,7 @@ async function upsertSession(client, schema, session) {
       session.sessionType,
       session.sourcePath,
       session.sourceHash,
+      JSON.stringify(session.sourceMetadata || null),
       session.startedAt,
       session.endedAt,
       session.messageCount,
@@ -100,14 +102,15 @@ async function upsertWorkReports(client, schema, sessionId, session, workReports
     const existing = await findExistingWorkReport(client, schema, session, report);
     await client.query(
       `INSERT INTO ${schema}.work_reports (
-        platform, workspace, session_id, external_id, project, work_item, summary, source_type, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        platform, workspace, session_id, external_id, project, work_item, summary, source_type, source_metadata, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
       ON CONFLICT (platform, workspace, external_id) DO UPDATE SET
         session_id = EXCLUDED.session_id,
         project = EXCLUDED.project,
         work_item = EXCLUDED.work_item,
         summary = EXCLUDED.summary,
         source_type = EXCLUDED.source_type,
+        source_metadata = EXCLUDED.source_metadata,
         created_at = EXCLUDED.created_at`,
       [
         session.platform,
@@ -118,6 +121,7 @@ async function upsertWorkReports(client, schema, sessionId, session, workReports
         report.workItem,
         report.summary,
         report.sourceType,
+        JSON.stringify(report.sourceMetadata || null),
         report.createdAt,
       ]
     );

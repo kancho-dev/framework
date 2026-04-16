@@ -31,6 +31,7 @@ Suggested fields:
 - `session_type`
 - `source_path`
 - `source_hash`
+- `source_metadata`
 - `started_at`
 - `ended_at`
 - `message_count`
@@ -51,6 +52,7 @@ Suggested fields:
 - `external_id`
 - `summary`
 - `source_type`
+- `source_metadata`
 - `created_at`
 - `imported_at`
 
@@ -70,6 +72,11 @@ Suggested fields:
 - `related_work_item`
 - `created_at`
 - `created_by`
+
+## Provenance Note
+
+`source_metadata` is the escape hatch for adapter-specific provenance that is useful for traceability but does not justify new top-level schema columns yet.
+For the current OpenCode adapter, this is where session identifiers such as slug/title/directory/project linkage and todo-derived report counts are preserved.
 
 ## Principle
 

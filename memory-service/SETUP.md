@@ -171,6 +171,8 @@ Expected tables:
 - `memory.work_reports`
 - `memory.lessons`
 
+If you already applied `migrations/001-init.sql` before the provenance follow-up landed, also apply `migrations/002-source-metadata.sql`.
+
 ## 7. Run Tests
 
 ```bash

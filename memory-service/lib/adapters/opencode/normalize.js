@@ -53,6 +53,39 @@ function hashSessionFingerprint(session) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
+function buildTodoMetadata(todos) {
+  const completed = todos.filter((todo) => todo.status === 'completed');
+  const remaining = todos.filter((todo) => todo.status !== 'completed');
+  const statuses = {};
+
+  todos.forEach((todo) => {
+    const key = todo.status || 'unknown';
+    statuses[key] = (statuses[key] || 0) + 1;
+  });
+
+  return {
+    todoCount: todos.length,
+    completedCount: completed.length,
+    openCount: remaining.length,
+    statuses,
+  };
+}
+
+function buildSessionMetadata(session) {
+  return {
+    projectId: session.project_id || null,
+    parentId: session.parent_id || null,
+    slug: session.slug || null,
+    title: session.title || null,
+    version: session.version || null,
+    directory: session.directory || null,
+    workspaceId: session.workspace_id || null,
+    projectName: session.project_name || null,
+    projectWorktree: session.project_worktree || null,
+    archivedAt: toIsoTime(session.time_archived),
+  };
+}
+
 function buildWorkReport(session, todos) {
   if (!todos.length) return null;
 
@@ -80,6 +113,7 @@ function buildWorkReport(session, todos) {
     workItem: session.slug || session.title || null,
     summary: lines.join('\n').trim(),
     sourceType: 'opencode:todo-derived',
+    sourceMetadata: buildTodoMetadata(todos),
     createdAt: toIsoTime(Math.max(...todos.map((todo) => Number(todo.time_updated || todo.time_created || 0)))) || toIsoTime(session.time_updated),
   };
 }
@@ -148,6 +182,7 @@ function normalizeOpenCodeSqlite({ dbPath, workspace, workspaceRoot, scope, raw 
           sessionType: session.parent_id ? 'child-session' : 'session',
           sourcePath: dbPath,
           sourceHash: hashSessionFingerprint(session),
+          sourceMetadata: buildSessionMetadata(session),
           startedAt: toIsoTime(session.time_created),
           endedAt: toIsoTime(session.time_archived || session.time_updated),
           messageCount: normalizedMessages.length,

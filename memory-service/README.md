@@ -88,10 +88,11 @@ OpenCode session, todo, and message data are stored in SQLite, so the adapter is
 Current OpenCode adapter behavior:
 - reads the OpenCode SQLite database through the local `sqlite3` CLI, or the override in `MEMORY_SQLITE3_BIN`
 - imports `session` rows into framework `sessions`
+- preserves OpenCode session provenance such as title, slug, directory, project/worktree, and parent linkage in `source_metadata`
 - reconstructs framework `messages` from `message` plus `part`
 - stores only searchable text content from `part.type = text`
 - ignores reasoning and step markers by default
-- derives one searchable `work_report` per session from `todo` rows when present
+- derives one searchable `work_report` per session from `todo` rows when present, including todo counts/status metadata in `source_metadata`
 - defaults to importing only sessions whose OpenCode `directory` or `project.worktree` falls under `MEMORY_WORKSPACE_ROOT`
 - supports `--scope all` for optional broader imports
 

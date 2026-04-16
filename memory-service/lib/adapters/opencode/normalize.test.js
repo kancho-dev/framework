@@ -97,6 +97,10 @@ test('normalizeOpenCodeSqlite keeps text parts, drops reasoning and creates todo
   assert.equal(normalized[0].session.externalId, 'ses-1');
   assert.equal(normalized[0].messages.length, 2);
   assert.equal(normalized[0].messages[1].content, 'Done');
+  assert.equal(normalized[0].session.sourceMetadata.slug, 'clever-panda');
+  assert.equal(normalized[0].session.sourceMetadata.directory, '/workspace/project-a');
   assert.equal(normalized[0].workReports.length, 1);
   assert.match(normalized[0].workReports[0].summary, /Completed:/);
+  assert.equal(normalized[0].workReports[0].sourceMetadata.todoCount, 1);
+  assert.equal(normalized[0].workReports[0].sourceMetadata.completedCount, 1);
 });
