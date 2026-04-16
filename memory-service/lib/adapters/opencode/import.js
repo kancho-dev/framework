@@ -131,7 +131,7 @@ async function upsertWorkReports(client, schema, sessionId, session, workReports
 }
 
 async function importOpenCodeSqlite(pool, config, dbPath, scope = 'workspace') {
-  const raw = readOpenCodeData(dbPath);
+  const raw = readOpenCodeData(dbPath, config.opencode.sqliteBin);
   const normalizedSessions = normalizeOpenCodeSqlite({
     dbPath,
     workspace: config.workspace,

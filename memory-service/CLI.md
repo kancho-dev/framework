@@ -5,8 +5,8 @@ Provide a tiny CLI, not a product.
 ## Recommended Commands
 
 ```text
-mem import-opencode-sqlite /path/to/opencode.db
-mem import-opencode-sqlite /path/to/opencode.db --scope all
+mem import-opencode-sqlite [/path/to/opencode.db]
+mem import-opencode-sqlite --scope all
 mem search "query"
 mem recent 20
 mem reports 10
@@ -37,9 +37,10 @@ Search mistakes, gotchas, and durable fixes before risky work.
 
 Add a lesson after solving a meaningful bug or discovering a repeated failure mode.
 
-### `mem import-opencode-sqlite /path/to/opencode.db`
+### `mem import-opencode-sqlite [/path/to/opencode.db]`
 
 Import OpenCode sessions from the local SQLite database into PostgreSQL.
+The path can be passed directly or supplied through `MEMORY_OPENCODE_DB_PATH`.
 
 Default behavior:
 - only imports sessions related to the current framework workspace
@@ -47,9 +48,10 @@ Default behavior:
 - reports how many sessions were scanned, in scope, inserted, updated, or unchanged
 - reports how many messages and derived work reports were newly inserted vs already present
 
-### `mem import-opencode-sqlite /path/to/opencode.db --scope all`
+### `mem import-opencode-sqlite --scope all`
 
 Import all OpenCode sessions found in the SQLite database, not just the current workspace subset.
+This works with an explicit path or a configured `MEMORY_OPENCODE_DB_PATH`.
 
 ## Adapter Note
 

@@ -71,6 +71,9 @@ The default invocation form is:
 node ./bin/mem.js <command>
 ```
 
+For OpenCode imports, the SQLite database path can be passed explicitly or preconfigured with `MEMORY_OPENCODE_DB_PATH`.
+If the local `sqlite3` executable lives in a non-standard location, set `MEMORY_SQLITE3_BIN`.
+
 If you want a plain `mem` command from anywhere, two simple options are documented in `SETUP.md`:
 - `npm link` from this package directory
 - a shell alias pointing at `bin/mem.js`
@@ -83,7 +86,7 @@ The earlier assumption that OpenCode sessions could be imported from JSONL trans
 OpenCode session, todo, and message data are stored in SQLite, so the adapter is implemented around SQLite extraction.
 
 Current OpenCode adapter behavior:
-- reads the OpenCode SQLite database through the local `sqlite3` CLI
+- reads the OpenCode SQLite database through the local `sqlite3` CLI, or the override in `MEMORY_SQLITE3_BIN`
 - imports `session` rows into framework `sessions`
 - reconstructs framework `messages` from `message` plus `part`
 - stores only searchable text content from `part.type = text`

@@ -12,7 +12,7 @@ const {
 
 function usage() {
   console.log(`Usage:
-  mem import-opencode-sqlite <db-path> [--scope workspace|all]
+  mem import-opencode-sqlite [db-path] [--scope workspace|all]
   mem search "query"
   mem recent [count]
   mem reports [count]
@@ -59,15 +59,19 @@ async function main() {
 
     switch (command) {
       case 'import-opencode-sqlite': {
-        const dbPath = args[1];
-        if (!dbPath) throw new Error('Missing OpenCode SQLite database path');
-        const flags = parseFlags(args.slice(2));
+        const importArgs = args.slice(1);
+        const flags = parseFlags(importArgs);
+        const dbPath = positionalArgs(importArgs)[0] || config.opencode.sqlitePath;
+        if (!dbPath) {
+          throw new Error('Missing OpenCode SQLite database path. Pass [db-path] or set MEMORY_OPENCODE_DB_PATH');
+        }
         const scope = flags.scope || 'workspace';
         if (!['workspace', 'all'].includes(scope)) {
           throw new Error('Invalid --scope value. Use workspace or all');
         }
         const result = await importOpenCodeSqlite(pool, config, dbPath, scope);
         console.log(`OpenCode import complete (scope: ${result.scope})`);
+        console.log(`  SQLite DB: ${dbPath}`);
         console.log(`  Sessions scanned: ${result.scannedSessions}`);
         console.log(`  Sessions in scope: ${result.eligibleSessions}`);
         console.log(`  Sessions inserted: ${result.sessionsInserted}`);

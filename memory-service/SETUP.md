@@ -57,6 +57,8 @@ MEMORY_DB_PASSWORD=change-me
 MEMORY_DB_SCHEMA=memory
 MEMORY_WORKSPACE=framework-workspace
 MEMORY_WORKSPACE_ROOT=/path/to/your/framework-workspace
+MEMORY_OPENCODE_DB_PATH=~/.local/share/opencode/opencode.db
+MEMORY_SQLITE3_BIN=sqlite3
 ```
 
 ## 4. PostgreSQL Setup Options
@@ -233,10 +235,16 @@ This is still workspace-specific, but it is explicit and easy to change later.
 The OpenCode adapter reads from the local SQLite database.
 It requires the `sqlite3` CLI to be available on the machine running the import command.
 
-Default current-workspace import:
+Default current-workspace import with an explicit database path:
 
 ```bash
 node ./bin/mem.js import-opencode-sqlite ~/.local/share/opencode/opencode.db
+```
+
+If `MEMORY_OPENCODE_DB_PATH` is set in `.env`, you can omit the path entirely:
+
+```bash
+node ./bin/mem.js import-opencode-sqlite
 ```
 
 This imports only sessions whose OpenCode `session.directory` or `project.worktree` falls under `MEMORY_WORKSPACE_ROOT`.
@@ -244,8 +252,10 @@ This imports only sessions whose OpenCode `session.directory` or `project.worktr
 Import all local OpenCode sessions instead:
 
 ```bash
-node ./bin/mem.js import-opencode-sqlite ~/.local/share/opencode/opencode.db --scope all
+node ./bin/mem.js import-opencode-sqlite --scope all
 ```
+
+If `sqlite3` is not on your default `PATH`, point `MEMORY_SQLITE3_BIN` at the correct executable.
 
 ## 10. Query The Current Data
 
@@ -362,6 +372,7 @@ GRANT ALL ON SCHEMA memory TO agent_framework;
 
 Possible causes:
 - the import failed
+- the SQLite DB path or `sqlite3` executable path is wrong
 - the transcript shape differs from the current normalizer assumptions
 - the transcript only contained ignored thinking/tool blocks
 
