@@ -91,8 +91,9 @@ Current OpenCode adapter behavior:
 - preserves OpenCode session provenance such as title, slug, directory, project/worktree, and parent linkage in `source_metadata`
 - reconstructs framework `messages` from `message` plus `part`
 - stores only searchable text content from `part.type = text`
-- ignores reasoning and step markers by default
+- ignores reasoning, step markers, and synthetic tool-echo text parts by default
 - derives one searchable `work_report` per session from `todo` rows when present, including todo counts/status metadata in `source_metadata`
+- updates previously imported messages and work reports when normalization changes or source content changes
 - defaults to importing only sessions whose OpenCode `directory` or `project.worktree` falls under `MEMORY_WORKSPACE_ROOT`
 - supports `--scope all` for optional broader imports
 

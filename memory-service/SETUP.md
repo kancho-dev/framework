@@ -378,7 +378,7 @@ Possible causes:
 - the import failed
 - the SQLite DB path or `sqlite3` executable path is wrong
 - the transcript shape differs from the current normalizer assumptions
-- the transcript only contained ignored thinking/tool blocks
+- the transcript only contained ignored reasoning/synthetic tool-echo blocks
 
 ## Recommended Next Validation Step
 

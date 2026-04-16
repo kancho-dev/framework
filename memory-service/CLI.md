@@ -46,7 +46,7 @@ Default behavior:
 - only imports sessions related to the current framework workspace
 - matching is based on OpenCode `session.directory` or `project.worktree` being under `MEMORY_WORKSPACE_ROOT`
 - reports how many sessions were scanned, in scope, inserted, updated, or unchanged
-- reports how many messages and derived work reports were newly inserted vs already present
+- reports how many messages and derived work reports were inserted, updated, or unchanged
 
 ### `mem import-opencode-sqlite --scope all`
 

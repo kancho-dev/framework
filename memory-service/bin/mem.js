@@ -78,7 +78,8 @@ async function main() {
         console.log(`  Sessions updated: ${result.sessionsUpdated}`);
         console.log(`  Sessions unchanged: ${result.sessionsUnchanged}`);
         console.log(`  Messages inserted: ${result.messagesInserted}`);
-        console.log(`  Messages skipped (already present): ${result.messagesSkipped}`);
+        console.log(`  Messages updated: ${result.messagesUpdated}`);
+        console.log(`  Messages unchanged: ${result.messagesUnchanged}`);
         console.log(`  Work reports inserted: ${result.workReportsInserted}`);
         console.log(`  Work reports updated: ${result.workReportsUpdated}`);
         console.log(`  Work reports unchanged: ${result.workReportsUnchanged}`);

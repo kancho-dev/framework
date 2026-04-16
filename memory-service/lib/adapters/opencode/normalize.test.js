@@ -13,7 +13,7 @@ test('shouldIncludeSession respects workspace scope filtering', () => {
   assert.equal(shouldIncludeSession(session, 'all', '/other'), true);
 });
 
-test('normalizeOpenCodeSqlite keeps text parts, drops reasoning and creates todo-derived report', () => {
+test('normalizeOpenCodeSqlite keeps real text parts, drops synthetic text/reasoning, and creates todo-derived report', () => {
   const normalized = normalizeOpenCodeSqlite({
     dbPath: '/tmp/opencode.db',
     workspace: 'agent-framework-ws',
@@ -76,6 +76,14 @@ test('normalizeOpenCodeSqlite keeps text parts, drops reasoning and creates todo
           session_id: 'ses-1',
           time_created: 1202,
           time_updated: 1202,
+          data: JSON.stringify({ type: 'text', synthetic: true, text: 'Called the Read tool...' }),
+        },
+        {
+          id: 'part-4',
+          message_id: 'msg-2',
+          session_id: 'ses-1',
+          time_created: 1203,
+          time_updated: 1203,
           data: JSON.stringify({ type: 'text', text: 'Done' }),
         },
       ],

@@ -37,8 +37,9 @@ function shouldIncludeSession(session, scope, workspaceRoot) {
 function partText(partData) {
   if (!partData || !partData.type) return null;
   if (IGNORED_PART_TYPES.has(partData.type)) return null;
-  if (partData.type === 'text') return typeof partData.text === 'string' ? partData.text.trim() : null;
-  return null;
+  if (partData.type !== 'text') return null;
+  if (partData.synthetic) return null;
+  return typeof partData.text === 'string' ? partData.text.trim() : null;
 }
 
 function buildSourceType(messageData) {

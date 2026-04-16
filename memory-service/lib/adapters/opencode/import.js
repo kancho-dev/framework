@@ -53,16 +53,33 @@ async function upsertSession(client, schema, session) {
   };
 }
 
-async function insertMessages(client, schema, sessionId, session, messages) {
+async function findExistingMessage(client, schema, session, sessionId, message) {
+  const { rows } = await client.query(
+    `SELECT parent_external_id, role, content, source_type, created_at
+     FROM ${schema}.messages
+     WHERE platform = $1 AND workspace = $2 AND session_id = $3 AND external_id = $4`,
+    [session.platform, session.workspace, sessionId, message.externalId]
+  );
+  return rows[0] || null;
+}
+
+async function upsertMessages(client, schema, sessionId, session, messages) {
   let inserted = 0;
-  let skipped = 0;
+  let updated = 0;
+  let unchanged = 0;
 
   for (const message of messages) {
-    const result = await client.query(
+    const existing = await findExistingMessage(client, schema, session, sessionId, message);
+    await client.query(
       `INSERT INTO ${schema}.messages (
         platform, workspace, session_id, external_id, parent_external_id, role, content, source_type, created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT (platform, workspace, session_id, external_id) DO NOTHING`,
+      ON CONFLICT (platform, workspace, session_id, external_id) DO UPDATE SET
+        parent_external_id = EXCLUDED.parent_external_id,
+        role = EXCLUDED.role,
+        content = EXCLUDED.content,
+        source_type = EXCLUDED.source_type,
+        created_at = EXCLUDED.created_at`,
       [
         session.platform,
         session.workspace,
@@ -76,11 +93,18 @@ async function insertMessages(client, schema, sessionId, session, messages) {
       ]
     );
 
-    if (result.rowCount > 0) inserted += 1;
-    else skipped += 1;
+    if (!existing) inserted += 1;
+    else if (
+      existing.parent_external_id !== message.parentExternalId ||
+      existing.role !== message.role ||
+      existing.content !== message.content ||
+      existing.source_type !== message.sourceType ||
+      String(existing.created_at || '') !== String(message.createdAt || '')
+    ) updated += 1;
+    else unchanged += 1;
   }
 
-  return { inserted, skipped };
+  return { inserted, updated, unchanged };
 }
 
 async function findExistingWorkReport(client, schema, session, report) {
@@ -156,7 +180,8 @@ async function importOpenCodeSqlite(pool, config, dbPath, scope = 'workspace') {
       sessionsUpdated: 0,
       sessionsUnchanged: 0,
       messagesInserted: 0,
-      messagesSkipped: 0,
+      messagesUpdated: 0,
+      messagesUnchanged: 0,
       workReportsInserted: 0,
       workReportsUpdated: 0,
       workReportsUnchanged: 0,
@@ -164,7 +189,7 @@ async function importOpenCodeSqlite(pool, config, dbPath, scope = 'workspace') {
 
     for (const normalized of normalizedSessions) {
       const sessionResult = await upsertSession(client, config.db.schema, normalized.session);
-      const messageResult = await insertMessages(client, config.db.schema, sessionResult.id, normalized.session, normalized.messages);
+      const messageResult = await upsertMessages(client, config.db.schema, sessionResult.id, normalized.session, normalized.messages);
       const reportResult = await upsertWorkReports(client, config.db.schema, sessionResult.id, normalized.session, normalized.workReports);
 
       if (sessionResult.status === 'inserted') stats.sessionsInserted += 1;
@@ -172,7 +197,8 @@ async function importOpenCodeSqlite(pool, config, dbPath, scope = 'workspace') {
       else stats.sessionsUnchanged += 1;
 
       stats.messagesInserted += messageResult.inserted;
-      stats.messagesSkipped += messageResult.skipped;
+      stats.messagesUpdated += messageResult.updated;
+      stats.messagesUnchanged += messageResult.unchanged;
       stats.workReportsInserted += reportResult.inserted;
       stats.workReportsUpdated += reportResult.updated;
       stats.workReportsUnchanged += reportResult.unchanged;

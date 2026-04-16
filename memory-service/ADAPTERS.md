@@ -24,7 +24,7 @@ Current implementation note:
 - `session` maps to framework sessions
 - `message` plus `part` reconstruct framework messages
 - only `part.type = text` is stored as searchable message content in v1
-- reasoning, step markers, and other noisy parts are ignored by default
+- reasoning, step markers, synthetic tool-echo text, and other noisy parts are ignored by default
 - `todo` rows are used to derive one searchable `work_report` per session when todos exist
 - imports default to the current workspace scope via `MEMORY_WORKSPACE_ROOT`, with `--scope all` available for broader import
 - the SQLite DB path can be supplied as a CLI argument or preconfigured with `MEMORY_OPENCODE_DB_PATH`
