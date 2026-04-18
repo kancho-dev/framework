@@ -47,6 +47,10 @@ workspace/
       next-best-actions.md
       task-pickup.md
       review-and-test.md
+      memory-search.md
+      self-check.md
+      project-self-check.md
+      docs-sync.md
     TEMPLATES/
       TASK.md
       HANDOFF.md
@@ -78,6 +82,8 @@ At minimum, the agent should read:
 Then it should read the active workspace files from the root.
 Load skills under `framework/SKILLS/` only when they are relevant to the current run.
 
+When implementation work benefits from explicit review, use the Builder–Oracle loop rather than relying on vague completion claims.
+
 ## Task Directory Naming
 
 Use a slug for each task directory.
@@ -103,6 +109,8 @@ Rules:
 3. Code and project knowledge stay together.
 4. Every task gets its own directory and handoff files.
 5. Tool-specific integrations belong in adapters, not in the framework core.
+6. Roles define mindset and scope; skills define optional procedural playbooks.
+7. Review loops and documentation hygiene should stay lightweight and explicit.
 
 ## Repository Boundaries
 

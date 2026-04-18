@@ -189,6 +189,76 @@ Do not put temporary status here.
 
 Append-only run logs for task sessions.
 
+### Optional `NOTES.md`
+
+Tasks may also use an optional `NOTES.md` file as a transient inbox for the next run.
+
+Use it only for short-lived steering such as:
+- temporary operator instructions
+- review bounce notes
+- next-run corrections or priority nudges
+
+If used, the task run should:
+1. read `NOTES.md` at the start
+2. act on its contents during the session
+3. clear or consume it during that run
+4. move anything still important into durable files such as `HANDOFF.md`, `CONTEXT.md`, project `library/`, or `FIXES.md`
+
+Do not use `NOTES.md` for long-term knowledge.
+
+## Task Patterns
+
+Use the lightest task pattern that fits the work.
+
+### Direct Task
+
+One focused run on a bounded task.
+
+### Task Pickup
+
+Resume an existing task from `TASK.md`, `HANDOFF.md`, and `CONTEXT.md`.
+
+### Review Loop
+
+A Builder run produces a bounded slice, then an Oracle run reviews it.
+The Oracle should either:
+- approve it, or
+- bounce it back with specific required fixes
+
+### Maintenance
+
+A Historian or Overseer run cleans state, syncs docs, or reduces drift.
+
+### Research / Plan
+
+An Overseer run gathers evidence, clarifies scope, and prepares the next implementation slice.
+
+## Builder–Oracle Loop
+
+Use this as the default quality pattern when implementation work should be reviewed before being treated as complete.
+
+1. the user or Overseer defines or clarifies the task
+2. the Builder completes one bounded slice
+3. the Builder records what changed, what was checked, and what remains
+4. the Oracle reviews against the task goal and acceptance criteria
+5. the Oracle returns a verdict:
+   - approve
+   - bounce
+   - needs clarification
+6. if bounced, the next Builder run fixes the listed issues and resubmits
+
+The goal is a clear review loop, not vague completion claims.
+
+## Acceptance Criteria
+
+When creating or refining a task, prefer making these explicit:
+- desired outcome
+- constraints
+- acceptance criteria
+- evidence or verification expectations
+
+This helps Builders stay in scope and helps Oracles review against something concrete.
+
 ## What Goes Where
 
 - current workspace priority → `ACTIVE-CONTEXT.md`
@@ -198,6 +268,17 @@ Append-only run logs for task sessions.
 - durable project knowledge → `projects/[name]/library/*.md`
 - durable fixes and mistakes → `FIXES.md`
 - exact historical recall → optional memory service
+
+## Review Guidance
+
+For review-oriented runs, prefer structured verdicts.
+
+A good review result includes:
+- **Verdict:** approve / bounce / needs clarification
+- **Checked:** what was actually reviewed or run
+- **Findings:** what passed, failed, or remains uncertain
+- **Required fixes:** only when not approved
+- **Confidence:** high / medium / low when uncertainty remains
 
 ## End Of Session
 
