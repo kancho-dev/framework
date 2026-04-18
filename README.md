@@ -83,6 +83,8 @@ At minimum, the agent should read:
 Then it should read the active workspace files from the root.
 Load skills under `framework/SKILLS/` only when they are relevant to the current run.
 
+If current markdown files are not enough to answer a specific context question, load `framework/SKILLS/memory-search.md` and use the optional memory CLI under `framework/memory-service/` selectively (for example: `mem search`, `mem recent`, `mem sessions`, `mem lessons search`).
+
 When implementation work benefits from explicit review, use the Builder–Oracle loop rather than relying on vague completion claims.
 
 ## Task Directory Naming

@@ -27,10 +27,15 @@ Use the memory system selectively to recover relevant prior context without turn
 ## Steps
 
 1. Define the exact context gap before searching.
-2. Search for the smallest useful set of prior records.
-3. Prefer recent, scoped, and trustworthy results over broad transcript dumps.
-4. Extract only the facts that matter to the current run.
-5. If the result is durable and important, move it into the right markdown file instead of depending on repeated searches.
+2. Choose the smallest useful CLI query for that gap:
+   - `mem search "query"` for prior discussion or implementation details
+   - `mem recent 20` for quick recent catch-up
+   - `mem sessions` for recent session discovery with trace hints
+   - `mem lessons search "query"` for past mistakes, gotchas, or durable fixes
+3. Search for the smallest useful set of prior records.
+4. Prefer recent, scoped, and trustworthy results over broad transcript dumps.
+5. Extract only the facts that matter to the current run.
+6. If the result is durable and important, move it into the right markdown file instead of depending on repeated searches.
 
 ## Outputs
 
@@ -52,5 +57,6 @@ Use the memory system selectively to recover relevant prior context without turn
 ## Related Files / Tools
 
 - `framework/memory-service/`
+- `framework/memory-service/CLI.md`
 - `FIXES.md`
 - `projects/[name]/library/*.md`

@@ -34,6 +34,7 @@ Run = Base + Role + Skills + Context
 - **Role** = the primary mindset, scope, and constraints for the run
 - **Skills** = optional procedural playbooks loaded only when relevant
 - **Context** = the smallest set of workspace, task, and project files needed for the run
+- **Optional memory retrieval** = use the memory CLI only when current markdown files are not enough and a specific context gap remains
 
 ## Read Order
 
@@ -48,6 +49,7 @@ Read in this order:
 6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists
 7. relevant files under `projects/[name]/library/`
 8. only the role-relevant skills and extra context needed for the run
+9. if a specific context gap remains, optionally use `framework/SKILLS/memory-search.md` and the memory CLI under `framework/memory-service/`
 
 ### Task session
 
@@ -61,6 +63,7 @@ If you are working on a task under `projects/[name]/work/[task-slug]/`, read in 
 7. `projects/[name]/work/[task-slug]/CONTEXT.md`
 8. relevant files under `projects/[name]/library/`
 9. only the skills and extra context needed for the run
+10. if a specific context gap remains, optionally use `framework/SKILLS/memory-search.md` and the memory CLI under `framework/memory-service/`
 
 ## Workspace Files
 
@@ -308,6 +311,18 @@ Skills are optional playbooks under `framework/SKILLS/`.
 
 Load them only when they help with the current run.
 Do not read every skill by default.
+
+### Optional Memory Retrieval
+
+If current markdown files do not answer a specific context question, use `framework/SKILLS/memory-search.md` before doing broad manual history recovery.
+
+Use the memory CLI under `framework/memory-service/` selectively, for example:
+- `mem search "query"` — recover prior discussion or implementation context
+- `mem recent 20` — fast catch-up on recent conversation history
+- `mem sessions` — identify recent sessions and their trace hints
+- `mem lessons search "query"` — check for past mistakes, gotchas, or durable fixes before risky work
+
+Treat memory retrieval as optional support, not as the source of truth for current policy or current state.
 
 ## Tool Agnosticism
 
