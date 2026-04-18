@@ -22,6 +22,19 @@ Use this framework to keep software development work coherent across:
 4. Prefer the smallest structure that stays consistent.
 5. Use searchable memory only as a support layer, not as the source of truth for current state.
 
+## Runtime Model
+
+Use this runtime model for every run:
+
+```text
+Run = Base + Role + Skills + Context
+```
+
+- **Base** = always-read framework files
+- **Role** = the primary mindset, scope, and constraints for the run
+- **Skills** = optional procedural playbooks loaded only when relevant
+- **Context** = the smallest set of workspace, task, and project files needed for the run
+
 ## Read Order
 
 ### Main session
@@ -30,9 +43,11 @@ Read in this order:
 1. `framework/FRAMEWORK.md`
 2. `framework/SECURITY.md`
 3. `framework/ENGINEERING.md`
-4. `ACTIVE-CONTEXT.md`
-5. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists
-6. relevant files under `projects/[name]/library/`
+4. `framework/ROLES/OVERSEER.md`
+5. `ACTIVE-CONTEXT.md`
+6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists
+7. relevant files under `projects/[name]/library/`
+8. only the role-relevant skills and extra context needed for the run
 
 ### Task session
 
@@ -40,10 +55,12 @@ If you are working on a task under `projects/[name]/work/[task-slug]/`, read in 
 1. `framework/FRAMEWORK.md`
 2. `framework/SECURITY.md`
 3. `framework/ENGINEERING.md`
-4. `projects/[name]/work/[task-slug]/TASK.md`
-5. `projects/[name]/work/[task-slug]/HANDOFF.md`
-6. `projects/[name]/work/[task-slug]/CONTEXT.md`
-7. relevant files under `projects/[name]/library/`
+4. the role file for the run under `framework/ROLES/`
+5. `projects/[name]/work/[task-slug]/TASK.md`
+6. `projects/[name]/work/[task-slug]/HANDOFF.md`
+7. `projects/[name]/work/[task-slug]/CONTEXT.md`
+8. relevant files under `projects/[name]/library/`
+9. only the skills and extra context needed for the run
 
 ## Workspace Files
 
@@ -189,6 +206,27 @@ Before ending a meaningful session:
 2. append to today's daily brief
 3. record durable fixes in `FIXES.md` when relevant
 4. move lasting project knowledge into `projects/[name]/library/`
+
+## Roles And Skills
+
+### Roles
+
+Use one primary role per run.
+
+Default roles:
+- `framework/ROLES/OVERSEER.md` — top-level orchestration, planning, and review
+- `framework/ROLES/BUILDER.md` — implementation work
+- `framework/ROLES/ORACLE.md` — review and verification
+- `framework/ROLES/HISTORIAN.md` — documentation and state hygiene
+
+The default top-level session role is **Overseer**.
+
+### Skills
+
+Skills are optional playbooks under `framework/SKILLS/`.
+
+Load them only when they help with the current run.
+Do not read every skill by default.
 
 ## Tool Agnosticism
 

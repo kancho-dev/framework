@@ -39,8 +39,14 @@ workspace/
     SECURITY.md
     ENGINEERING.md
     ROLES/
-      MAIN.md
-      ENGINEER.md
+      OVERSEER.md
+      BUILDER.md
+      ORACLE.md
+      HISTORIAN.md
+    SKILLS/
+      next-best-actions.md
+      task-pickup.md
+      review-and-test.md
     TEMPLATES/
       TASK.md
       HANDOFF.md
@@ -67,8 +73,10 @@ At minimum, the agent should read:
 - `framework/FRAMEWORK.md`
 - `framework/SECURITY.md`
 - `framework/ENGINEERING.md`
+- the active role file under `framework/ROLES/`
 
 Then it should read the active workspace files from the root.
+Load skills under `framework/SKILLS/` only when they are relevant to the current run.
 
 ## Task Directory Naming
 
