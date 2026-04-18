@@ -51,6 +51,7 @@ workspace/
       self-check.md
       project-self-check.md
       docs-sync.md
+      task-closure.md
     TEMPLATES/
       TASK.md
       HANDOFF.md
