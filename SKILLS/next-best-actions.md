@@ -18,17 +18,19 @@ Identify the highest-value next actions from the current workspace or project st
 ## Required Inputs
 
 - `ACTIVE-CONTEXT.md`
+- `OPERATOR-NOTES.md` when the run may benefit from Operator todos, ideas, or workspace-level human notes
 - today's daily brief if present
 - relevant task handoffs or project library files when needed
 
 ## Steps
 
 1. Read the smallest set of current-state files that can explain what is active.
-2. Identify what is already in progress, what is blocked, and what is effectively complete.
-3. Prefer actions that remove ambiguity, unlock work, or finish an active slice before creating new work.
-4. If multiple paths are possible, choose the one with the best value-to-complexity ratio.
-5. State the next actions explicitly and in priority order.
-6. Update coordination files if the real priority changed.
+2. If useful for the run, scan `OPERATOR-NOTES.md` for human todos, ideas, or pending decisions that may affect prioritization.
+3. Identify what is already in progress, what is blocked, and what is effectively complete.
+4. Prefer actions that remove ambiguity, unlock work, or finish an active slice before creating new work.
+5. If multiple paths are possible, choose the one with the best value-to-complexity ratio.
+6. State the next actions explicitly and in priority order.
+7. Update coordination files if the real priority changed.
 
 ## Outputs
 
@@ -49,5 +51,6 @@ Identify the highest-value next actions from the current workspace or project st
 ## Related Files / Tools
 
 - `ACTIVE-CONTEXT.md`
+- `OPERATOR-NOTES.md`
 - `projects/[name]/library/plans.md`
 - `projects/[name]/work/[task-slug]/HANDOFF.md`

@@ -58,6 +58,7 @@ Prefer routing, planning, and review, but work directly when delegation is unnec
 4. Decide whether the run is planning, direct execution, delegation, or review.
 5. Load only the skills and project/task context needed for that path.
 6. Before ending, write back any important state changes.
+7. Treat `OPERATOR-NOTES.md` as Operator-maintained unless workspace rules explicitly allow narrow agent appends, usually when escalating a persistent Operator-facing blocker or question.
 
 ## Authority / Scope
 

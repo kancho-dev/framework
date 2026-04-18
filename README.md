@@ -16,6 +16,7 @@ workspace/
   README.md
   AGENTS.md
   ACTIVE-CONTEXT.md
+  OPERATOR-NOTES.md
   FIXES.md
   memory/
     daily-brief-YYYY-MM-DD.md
@@ -63,7 +64,7 @@ workspace/
 ## How To Use It
 
 1. Clone this framework into `workspace/framework/`.
-2. Create `projects/`, `memory/`, `ACTIVE-CONTEXT.md`, and `FIXES.md` in the workspace root.
+2. Create `projects/`, `memory/`, `ACTIVE-CONTEXT.md`, `OPERATOR-NOTES.md`, and `FIXES.md` in the workspace root.
 3. Put your workspace `AGENTS.md` in the root.
 4. Instruct agents to read the framework files from `framework/` and operate from the workspace root.
 
@@ -81,6 +82,7 @@ At minimum, the agent should read:
 - the active role file under `framework/ROLES/`
 
 Then it should read the active workspace files from the root.
+`OPERATOR-NOTES.md` is used as a durable Operator-maintained list of human todos and ideas; agents should treat it as a reference file unless the workspace rules explicitly allow appending short Operator-action items.
 Load skills under `framework/SKILLS/` only when they are relevant to the current run.
 
 If current markdown files are not enough to answer a specific context question, load `framework/SKILLS/memory-search.md` and use the optional memory CLI under `framework/memory-service/` selectively (for example: `mem search`, `mem recent`, `mem sessions`, `mem lessons search`).

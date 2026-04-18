@@ -77,6 +77,20 @@ Update it when:
 - blockers appear
 - the user changes direction
 
+### `OPERATOR-NOTES.md`
+
+Use this optional workspace-level file for durable Operator-maintained notes such as:
+- human todo items
+- ideas worth later investigation
+- concise workspace-level questions, blockers, or reminders
+
+Rules:
+- keep it lightweight and Operator-friendly rather than template-heavy
+- treat it as distinct from task-local `NOTES.md`
+- by default, agents should read it as reference context, not rewrite or restructure it
+- if a workspace explicitly allows agent writes, keep them minimal and limited to short Operator-action notes
+- the Operator removes todos and ideas after they are no longer useful
+
 ### `memory/daily-brief-YYYY-MM-DD.md`
 
 Use this file as the shared daily log.
@@ -208,6 +222,7 @@ If used, the task run should:
 4. move anything still important into durable files such as `HANDOFF.md`, `CONTEXT.md`, project `library/`, or `FIXES.md`
 
 Do not use `NOTES.md` for long-term knowledge.
+Do not use it as a substitute for workspace-level `OPERATOR-NOTES.md`.
 
 ## Task Patterns
 
@@ -265,6 +280,7 @@ This helps Builders stay in scope and helps Oracles review against something con
 ## What Goes Where
 
 - current workspace priority → `ACTIVE-CONTEXT.md`
+- Operator-facing human todos and ideas → `OPERATOR-NOTES.md`
 - daily progress summary → `memory/daily-brief-*.md`
 - stable task facts → `projects/[name]/work/[task-slug]/CONTEXT.md`
 - current task state → `projects/[name]/work/[task-slug]/HANDOFF.md`
@@ -288,6 +304,7 @@ Rules:
 - do not guess when a missing decision could change scope, correctness, or risk
 - prefer a concise explicit question over silent assumption-making
 - if the issue should persist across runs, record it in task or workspace state files
+- if workspace rules allow it, agents may record a short Operator-action note in `OPERATOR-NOTES.md` so the issue survives across runs without relying on chat history
 
 ## Review Guidance
 
