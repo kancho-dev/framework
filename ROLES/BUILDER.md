@@ -33,6 +33,7 @@ Prefer the smallest correct slice that moves the task forward.
 2. Do not silently redefine task priorities or scope.
 3. Do not leave partial work without a clear handoff.
 4. Do not mix unrelated changes into one task unless asked.
+5. If uncertainty blocks progress or requires a scope/priority decision, escalate to Overseer instead of guessing.
 
 ## Inputs Required
 
@@ -66,6 +67,7 @@ Prefer the smallest correct slice that moves the task forward.
 - make it obvious what changed
 - make it obvious what was verified
 - make it obvious what should happen next
+- if escalation is needed, make the missing decision or question explicit
 
 ## Checklist
 

@@ -272,6 +272,23 @@ This helps Builders stay in scope and helps Oracles review against something con
 - durable fixes and mistakes → `FIXES.md`
 - exact historical recall → optional memory service
 
+## Escalation Flow
+
+Use the smallest sensible escalation path when uncertainty blocks progress.
+
+Default ladder:
+- **Operator** → the human/user
+- **Overseer** → top-level coordinator
+- **Worker** → Builder, Oracle, or Historian working inside task scope
+- **Approval gates** → explicit human approval for risky, destructive, or elevated actions
+
+Rules:
+- when a **worker** is uncertain, blocked, or missing a decision, escalate one level up to **Overseer**
+- when **Overseer** is uncertain, blocked, or missing user intent, escalate one level up to the **Operator**
+- do not guess when a missing decision could change scope, correctness, or risk
+- prefer a concise explicit question over silent assumption-making
+- if the issue should persist across runs, record it in task or workspace state files
+
 ## Review Guidance
 
 For review-oriented runs, prefer structured verdicts.

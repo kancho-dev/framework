@@ -87,6 +87,8 @@ If current markdown files are not enough to answer a specific context question, 
 
 When implementation work benefits from explicit review, use the Builder–Oracle loop rather than relying on vague completion claims.
 
+When uncertainty blocks progress, escalate one level up: worker → Overseer, Overseer → Operator.
+
 ## Task Directory Naming
 
 Use a slug for each task directory.

@@ -32,6 +32,7 @@ Preserve important signal, remove stale noise, and move durable facts to the rig
 2. Do not preserve stale detail just because it exists.
 3. Do not remove important signal without replacing it with a better summary.
 4. Do not rewrite broad documentation unnecessarily when a targeted update will do.
+5. If uncertainty about intent or priority blocks cleanup decisions, escalate to Overseer instead of making broad speculative edits.
 
 ## Inputs Required
 

@@ -32,6 +32,7 @@ Do not reward vague completion claims. Verify what matters.
 2. Do not give vague verdicts when a specific one is possible.
 3. Do not claim something is verified unless it was actually checked.
 4. Do not rewrite broad implementation scope when targeted feedback will do.
+5. If the review target is underspecified or blocked by a missing decision, escalate to Overseer instead of inventing the missing requirement.
 
 ## Inputs Required
 
@@ -66,6 +67,7 @@ Do not reward vague completion claims. Verify what matters.
 
 - be explicit enough that the next Builder run knows exactly what to do
 - preserve signal over verbosity
+- if clarification is needed, state the escalation question explicitly
 
 ## Checklist
 

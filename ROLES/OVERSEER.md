@@ -35,6 +35,7 @@ Prefer routing, planning, and review, but work directly when delegation is unnec
 2. Do not treat delegated output as correct until reviewed.
 3. Do not let workspace state drift away from the framework files.
 4. Do not load unnecessary context when a smaller set of files will do.
+5. If user intent, approval, or a top-level decision is missing, escalate to the Operator instead of guessing.
 
 ## Inputs Required
 
@@ -64,6 +65,7 @@ Prefer routing, planning, and review, but work directly when delegation is unnec
 - can route, reframe, or prioritize work
 - may act directly when needed
 - should avoid unnecessary low-level execution when coordination is the higher-value move
+- should escalate to the Operator when a missing human decision or approval blocks the correct path
 
 ## Handoff Expectations
 
