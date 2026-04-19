@@ -62,6 +62,7 @@ workspace/
         CONTEXT.md
         RUN-LOG.md
       WORKSPACE/
+        .gitignore
         README.md
         AGENTS.md
         ACTIVE-CONTEXT.md
@@ -153,4 +154,7 @@ framework/
 
 # Keep the projects directory itself
 !projects/
+
+# Operator-maintained notes
+OPERATOR-NOTES.md
 ```

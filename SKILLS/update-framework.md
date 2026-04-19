@@ -29,11 +29,12 @@ Bring an already framework-managed workspace into alignment with newer framework
 2. Inspect the workspace root for the existing framework-managed files and directories.
 3. Compare the current workspace setup against the latest framework expectations.
 4. Add newly required files or directories when they are missing and templates clearly apply.
-5. Update or merge existing workspace files only when needed to support new framework behavior or guidance.
-6. Do not overwrite local workspace-specific instructions blindly.
-7. If a merge is non-obvious, ask the user before changing the file.
-8. Leave adapter-specific files such as `CLAUDE.md` intact unless the user explicitly wants them updated.
-9. Summarize what was added, updated, left unchanged, or escalated.
+5. Check whether the root `.gitignore` still matches the current framework repository model and ignore guidance.
+6. Update or merge existing workspace files only when needed to support new framework behavior or guidance.
+7. Do not overwrite local workspace-specific instructions blindly.
+8. If a merge is non-obvious, ask the user before changing the file.
+9. Leave adapter-specific files such as `CLAUDE.md` intact unless the user explicitly wants them updated.
+10. Summarize what was added, updated, left unchanged, or escalated.
 
 ## Outputs
 
@@ -49,7 +50,7 @@ Bring an already framework-managed workspace into alignment with newer framework
 ## Pitfalls / Anti-Patterns
 
 - treating update as a fresh install and recreating files unnecessarily
-- overwriting customized `AGENTS.md`, `README.md`, or other workspace files blindly
+- overwriting customized `AGENTS.md`, `.gitignore`, `README.md`, or other workspace files blindly
 - applying template changes that are not actually needed for the current framework update
 - changing adapter-specific files by default
 

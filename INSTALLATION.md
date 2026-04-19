@@ -31,6 +31,7 @@ Just adapt the same setup flow carefully.
 1. Confirm the current directory is the intended workspace root.
 2. Ensure the framework repository is present under `framework/`.
 3. Inspect whether the workspace already has:
+   - `.gitignore`
    - `README.md`
    - `AGENTS.md`
    - `CLAUDE.md`
@@ -40,10 +41,11 @@ Just adapt the same setup flow carefully.
    - `memory/`
    - `projects/`
 4. Create missing directories and files from templates when appropriate.
-5. If `AGENTS.md` is missing, create it from the workspace template.
-6. If `AGENTS.md` already exists, merge the framework-required guidance into it rather than replacing it.
-7. If `CLAUDE.md` exists, do not overwrite it. If relevant, suggest mirroring the same workspace guidance there.
-8. Leave the workspace in a state where an agent can begin operating with the framework immediately.
+5. Ensure the root `.gitignore` matches the intended repository model.
+6. If `AGENTS.md` is missing, create it from the workspace template.
+7. If `AGENTS.md` already exists, merge the framework-required guidance into it rather than replacing it.
+8. If `CLAUDE.md` exists, do not overwrite it. If relevant, suggest mirroring the same workspace guidance there.
+9. Leave the workspace in a state where an agent can begin operating with the framework immediately.
 
 ## Files To Create When Missing
 
@@ -51,6 +53,7 @@ Use templates under `framework/TEMPLATES/`.
 
 ### Workspace-level files
 
+- `.gitignore` → `framework/TEMPLATES/WORKSPACE/.gitignore`
 - `README.md` → `framework/TEMPLATES/WORKSPACE/README.md`
 - `AGENTS.md` → `framework/TEMPLATES/WORKSPACE/AGENTS.md`
 - `ACTIVE-CONTEXT.md` → `framework/TEMPLATES/WORKSPACE/ACTIVE-CONTEXT.md`
@@ -65,6 +68,30 @@ Use templates under `framework/TEMPLATES/`.
 - run log entry → `framework/TEMPLATES/TASKS/RUN-LOG.md`
 
 ## Existing File Guidance
+
+### `.gitignore`
+
+- if missing, create from the template
+- if present, merge the framework-related ignore rules into it rather than replacing unrelated local rules
+- by default, ignore nested project repositories, the nested `framework/` repository, and `OPERATOR-NOTES.md`
+
+Example root `.gitignore`:
+
+```gitignore
+# Nested project repositories
+projects/*/.git/
+projects/*/
+
+# Framework repository
+framework/.git/
+framework/
+
+# Keep the projects directory itself
+!projects/
+
+# Operator-maintained notes
+OPERATOR-NOTES.md
+```
 
 ### `README.md`
 
@@ -87,6 +114,7 @@ Use templates under `framework/TEMPLATES/`.
 
 - if missing, create from templates
 - if present, preserve existing content unless the user asks for restructuring
+- `OPERATOR-NOTES.md` is gitignored by default in the recommended root `.gitignore`
 
 ## When To Ask The User
 

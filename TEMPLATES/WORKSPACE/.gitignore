@@ -1,0 +1,13 @@
+# Nested project repositories
+projects/*/.git/
+projects/*/
+
+# Framework repository
+framework/.git/
+framework/
+
+# Keep the projects directory itself
+!projects/
+
+# Operator-maintained notes
+OPERATOR-NOTES.md
