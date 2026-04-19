@@ -37,6 +37,7 @@ workspace/
           runs/
   framework/
     FRAMEWORK.md
+    INSTALLATION.md
     SECURITY.md
     ENGINEERING.md
     ROLES/
@@ -45,6 +46,7 @@ workspace/
       ORACLE.md
       HISTORIAN.md
     SKILLS/
+      update-framework.md
       next-best-actions.md
       task-pickup.md
       review-and-test.md
@@ -54,24 +56,26 @@ workspace/
       docs-sync.md
       task-closure.md
     TEMPLATES/
-      TASK.md
-      HANDOFF.md
-      CONTEXT.md
-      RUN-LOG.md
+      TASKS/
+        TASK.md
+        HANDOFF.md
+        CONTEXT.md
+        RUN-LOG.md
+      WORKSPACE/
+        README.md
+        AGENTS.md
+        ACTIVE-CONTEXT.md
+        OPERATOR-NOTES.md
+        FIXES.md
     memory-service/
 ```
 
 ## How To Use It
 
 1. Clone this framework into `workspace/framework/`.
-2. Create `projects/`, `memory/`, `ACTIVE-CONTEXT.md`, `OPERATOR-NOTES.md`, and `FIXES.md` in the workspace root.
-3. Put your workspace `AGENTS.md` in the root.
+2. Follow `framework/INSTALLATION.md` to create or adopt the needed workspace files in the current root.
+3. Use templates under `framework/TEMPLATES/WORKSPACE/` for workspace-level files and `framework/TEMPLATES/TASKS/` for task files.
 4. Instruct agents to read the framework files from `framework/` and operate from the workspace root.
-
-Create a simple root `README.md` during workspace setup that explains:
-- what the workspace is for
-- what lives in `projects/`
-- the repository boundaries when the workspace, framework, and projects use separate repositories
 
 ## What The Agent Should Read
 
@@ -80,6 +84,12 @@ At minimum, the agent should read:
 - `framework/SECURITY.md`
 - `framework/ENGINEERING.md`
 - the active role file under `framework/ROLES/`
+
+For first-time setup or adoption runs, use:
+- `framework/INSTALLATION.md`
+
+For later framework-alignment runs in an already framework-managed workspace, also use:
+- `framework/SKILLS/update-framework.md`
 
 Then it should read the active workspace files from the root.
 `OPERATOR-NOTES.md` is used as a durable Operator-maintained list of human todos and ideas; agents should treat it as a reference file unless the workspace rules explicitly allow appending short Operator-action items.

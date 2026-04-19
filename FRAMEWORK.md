@@ -71,6 +71,9 @@ If you are working on a task under `projects/[name]/work/[task-slug]/`, read in 
 
 Use this file as hot memory for the whole workspace.
 
+A minimal starter template is available at:
+- `framework/TEMPLATES/WORKSPACE/ACTIVE-CONTEXT.md`
+
 Update it when:
 - priorities change
 - work starts or finishes
@@ -78,6 +81,9 @@ Update it when:
 - the user changes direction
 
 ### `OPERATOR-NOTES.md`
+
+A minimal starter template is available at:
+- `framework/TEMPLATES/WORKSPACE/OPERATOR-NOTES.md`
 
 Use this optional workspace-level file for durable Operator-maintained notes such as:
 - human todo items
@@ -106,6 +112,9 @@ Format:
 ```
 
 ### `FIXES.md`
+
+A minimal starter template is available at:
+- `framework/TEMPLATES/WORKSPACE/FIXES.md`
 
 Use this file for non-obvious bugs, failed approaches, and durable fixes.
 
@@ -179,10 +188,10 @@ Each task directory must contain:
 - `runs/`
 
 When creating a new task directory, initialize its files from:
-- `framework/TEMPLATES/TASK.md`
-- `framework/TEMPLATES/HANDOFF.md`
-- `framework/TEMPLATES/CONTEXT.md`
-- `framework/TEMPLATES/RUN-LOG.md` for new entries inside `runs/`
+- `framework/TEMPLATES/TASKS/TASK.md`
+- `framework/TEMPLATES/TASKS/HANDOFF.md`
+- `framework/TEMPLATES/TASKS/CONTEXT.md`
+- `framework/TEMPLATES/TASKS/RUN-LOG.md` for new entries inside `runs/`
 
 Do not invent task file formats ad hoc when the templates already apply.
 

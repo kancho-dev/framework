@@ -1,0 +1,9 @@
+# Operator Notes
+
+## todo
+
+- 
+
+## ideas
+
+- 
