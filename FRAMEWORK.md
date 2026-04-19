@@ -46,7 +46,7 @@ Read in this order:
 3. `framework/ENGINEERING.md`
 4. `framework/ROLES/OVERSEER.md`
 5. `ACTIVE-CONTEXT.md`
-6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists
+6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief file present under `memory/` if any exist
 7. relevant files under `projects/[name]/library/`
 8. only the role-relevant skills and extra context needed for the run
 9. if a specific context gap remains, optionally use `framework/SKILLS/memory-search.md` and the memory CLI under `framework/memory-service/`
@@ -102,6 +102,7 @@ Rules:
 Use this file as the shared daily log.
 
 Append a short factual entry after meaningful work.
+Use the real current system date/time from the live environment, not chat or session metadata. If needed, query it explicitly with `date '+%F %R %Z'`. Never use invented placeholder times such as `00:00`.
 
 Format:
 
@@ -330,7 +331,7 @@ A good review result includes:
 
 Before ending a meaningful session:
 1. update the relevant handoff or context files
-2. append to today's daily brief
+2. append to today's daily brief using the real current system date/time from the live environment
 3. record durable fixes in `FIXES.md` when relevant
 4. move lasting project knowledge into `projects/[name]/library/`
 

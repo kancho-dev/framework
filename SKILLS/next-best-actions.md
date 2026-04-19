@@ -19,7 +19,7 @@ Identify the highest-value next actions from the current workspace or project st
 
 - `ACTIVE-CONTEXT.md`
 - `OPERATOR-NOTES.md` when the run may benefit from Operator todos, ideas, or workspace-level human notes
-- today's daily brief if present
+- today's daily brief if present, otherwise the latest daily brief file if any exist
 - relevant task handoffs or project library files when needed
 
 ## Steps

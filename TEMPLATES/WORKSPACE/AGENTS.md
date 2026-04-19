@@ -10,7 +10,7 @@ At the start of a main session, read:
 3. `framework/ENGINEERING.md`
 4. `framework/ROLES/OVERSEER.md`
 5. `ACTIVE-CONTEXT.md`
-6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists
+6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief file present under `memory/` if any exist
 
 Load skills from `framework/SKILLS/` only when they are relevant to the current run.
 
@@ -25,6 +25,7 @@ When working inside a task directory, then read the task files in the order defi
 5. Keep task execution state under `projects/[name]/work/[task-slug]/`.
 6. Treat `framework/` as the source of operating guidance for this workspace.
 7. Treat `framework/` as read-only. Never edit files under `framework/` directly.
+8. For daily briefs and task run logs, use the real current system date/time from the live environment, not chat/session metadata. If needed, query it explicitly with `date '+%F %R %Z'`. Never use invented placeholder times such as `00:00`.
 
 ## Workspace-Specific Instructions
 

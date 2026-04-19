@@ -41,7 +41,7 @@ Prefer routing, planning, and review, but work directly when delegation is unnec
 
 - base framework files
 - `ACTIVE-CONTEXT.md`
-- today's daily brief if present
+- today's daily brief if present, otherwise the latest daily brief file if any exist
 - relevant project library files when making project decisions
 
 ## Outputs Required
