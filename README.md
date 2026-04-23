@@ -23,18 +23,20 @@ workspace/
   projects/
     my-project/
       README.md
-      project/
       library/
         decisions.md
         plans.md
         notes.md
         research.md
+        deliverables/
       work/
         nx-013-build-pipeline/
           TASK.md
           HANDOFF.md
           CONTEXT.md
           runs/
+          analysis.md
+      project/
   framework/
     FRAMEWORK.md
     INSTALLATION.md
@@ -77,6 +79,9 @@ workspace/
 2. Follow `framework/INSTALLATION.md` to create or adopt the needed workspace files in the current root.
 3. Use templates under `framework/TEMPLATES/WORKSPACE/` for workspace-level files and `framework/TEMPLATES/TASKS/` for task files.
 4. Instruct agents to read the framework files from `framework/` and operate from the workspace root.
+
+`framework/INSTALLATION.md` is the main adoption guide for both fresh workspaces and already-active/non-empty workspaces.
+Incremental adoption is normal: the framework does not require everything to start from a clean slate in one step.
 
 ## What The Agent Should Read
 
@@ -125,35 +130,40 @@ Rules:
 1. Curated markdown is the source of truth for active work.
 2. Searchable memory is optional and supports recall, not policy.
 3. Code and project knowledge stay together.
-4. Every task gets its own directory and handoff files.
+4. Every task gets its own directory and handoff files, but task directories may also contain additional working files when useful.
 5. Tool-specific integrations belong in adapters, not in the framework core.
 6. Roles define mindset and scope; skills define optional procedural playbooks.
 7. Review loops and documentation hygiene should stay lightweight and explicit.
+8. Polished reusable project outputs may live under `projects/[name]/library/deliverables/` when that helps keep final artifacts separate from general notes.
 
 ## Repository Boundaries
 
-Recommended repository model:
-- the workspace root is its own git repository
+Recommended default repository model:
+- the workspace root is its own git repository for workspace and project-coordination files
 - `framework/` remains its own git repository
-- each project under `projects/[name]/` is its own git repository
+- `projects/[name]/project/` is the actual software project and is expected to be its own git repository in the default setup
+- `projects/[name]/library/` and `projects/[name]/work/` belong to the workspace root repo by default
 
-This keeps workspace coordination files separate from the framework and from project code.
+This keeps the coordination model lightweight while preserving a clean boundary for project code in the default setup.
 
-When using this model, the workspace root repository should ignore nested repositories such as `framework/` and `projects/*/`.
+If you are adopting the framework into a non-empty workspace, use `framework/INSTALLATION.md` for the phased adoption path, repo-boundary checklist, and root `.gitignore` guidance.
 
-Example root `.gitignore`:
+If a team wants isolated git history for non-code coordination files too, separate per-project coordination repos are still possible as an advanced optional pattern rather than the default.
+
+Example root `.gitignore` for the default model:
 
 ```gitignore
-# Nested project repositories
-projects/*/.git/
-projects/*/
-
-# Framework repository
+# Nested framework repository
 framework/.git/
 framework/
 
-# Keep the projects directory itself
+# Nested project code repositories in the default setup
+projects/*/project/.git/
+projects/*/project/
+
+# Keep the coordination tree visible to the workspace repo
 !projects/
+!projects/*/
 
 # Operator-maintained notes
 OPERATOR-NOTES.md

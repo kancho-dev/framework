@@ -16,6 +16,7 @@ Use this path when the current directory already contains projects and/or agent-
 
 Do not treat this as a separate complex mode system.
 Just adapt the same setup flow carefully.
+Incremental adoption is normal: a real workspace may move into the framework in phases rather than all at once.
 
 ## Core Rules
 
@@ -30,7 +31,8 @@ Just adapt the same setup flow carefully.
 
 1. Confirm the current directory is the intended workspace root.
 2. Ensure the framework repository is present under `framework/`.
-3. Inspect whether the workspace already has:
+3. Decide whether the workspace is closer to a fresh setup or an existing-workspace adoption.
+4. Inspect whether the workspace already has:
    - `.gitignore`
    - `README.md`
    - `AGENTS.md`
@@ -40,12 +42,49 @@ Just adapt the same setup flow carefully.
    - `FIXES.md`
    - `memory/`
    - `projects/`
-4. Create missing directories and files from templates when appropriate.
-5. Ensure the root `.gitignore` matches the intended repository model.
-6. If `AGENTS.md` is missing, create it from the workspace template.
-7. If `AGENTS.md` already exists, merge the framework-required guidance into it rather than replacing it.
-8. If `CLAUDE.md` exists, do not overwrite it. If relevant, suggest mirroring the same workspace guidance there.
-9. Leave the workspace in a state where an agent can begin operating with the framework immediately.
+5. Create missing directories and files from templates when appropriate.
+6. Ensure the root `.gitignore` matches the intended repository model.
+7. If `AGENTS.md` is missing, create it from the workspace template.
+8. If `AGENTS.md` already exists, merge the framework-required guidance into it rather than replacing it.
+9. If `CLAUDE.md` exists, do not overwrite it. If relevant, suggest mirroring the same workspace guidance there.
+10. Leave the workspace in a state where an agent can begin operating with the framework immediately.
+
+## Recommended Incremental Adoption Sequence
+
+For an already-active workspace, prefer this order:
+
+1. confirm the workspace root and clone the framework into `framework/`
+2. inspect the current root files and repo boundaries before creating or merging anything
+3. fix the root `.gitignore` early so nested repositories do not become a recurring footgun
+4. create or merge the minimum workspace-level files needed for agent operation (`AGENTS.md`, `ACTIVE-CONTEXT.md`, `FIXES.md`, optional `OPERATOR-NOTES.md`)
+5. create `projects/` entries gradually rather than forcing every existing project into the full layout immediately
+6. migrate each project into `project/`, `library/`, and `work/` when that project actually needs framework-managed coordination
+7. leave the workspace usable after each step rather than waiting for one big migration to finish
+
+This framework supports phased adoption. A workspace does not need to become perfectly reorganized in one session before the framework is useful.
+
+## Repository Model And Boundary Check
+
+Current default repository model:
+- the workspace root is its own git repository for workspace files plus project coordination files
+- `framework/` remains its own git repository
+- `projects/[name]/library/` and `projects/[name]/work/` belong to the workspace root repo by default
+- `projects/[name]/project/` is the code location and is expected to be its own git repository in the default setup
+
+Why keep this as the default:
+- it removes separate coordination-repo decisions from the baseline setup
+- it keeps most coordination work in one place, which fits typical framework usage better
+- it preserves a clean boundary for project code without forcing extra git structure for project notes and tasks
+
+Separate per-project coordination repos remain possible as an advanced optional pattern, but they are not the default.
+
+Before finishing install/adoption, explicitly check:
+- which repository owns the workspace-root files
+- that `framework/` is treated as a nested repository rather than absorbed into the root repo
+- whether any `projects/[name]/project/` directories are their own repositories
+- whether the current workspace is in a mixed migration state and therefore needs ignore rules that protect nested `project/` repos without hiding workspace-owned `library/` and `work/`
+
+Do not infer repo ownership only from folder names. Check the actual repository boundaries and then align the root `.gitignore` to match them.
 
 ## Files To Create When Missing
 
@@ -73,21 +112,25 @@ Use templates under `framework/TEMPLATES/`.
 
 - if missing, create from the template
 - if present, merge the framework-related ignore rules into it rather than replacing unrelated local rules
-- by default, ignore nested project repositories, the nested `framework/` repository, and `OPERATOR-NOTES.md`
+- by default, ignore the nested `framework/` repository, nested `projects/[name]/project/` repositories, and `OPERATOR-NOTES.md`
+- do not ignore `projects/[name]/library/` or `projects/[name]/work/` in the default model; those belong to the workspace root repo
+- check this early in an existing-workspace adoption; it is one of the easiest places to make the workspace awkward by accident
+- if the workspace is in a mixed migration state, make sure the ignore rules still match the real nested-repo boundaries instead of assuming every project is already organized identically
 
 Example root `.gitignore`:
 
 ```gitignore
-# Nested project repositories
-projects/*/.git/
-projects/*/
-
-# Framework repository
+# Nested framework repository
 framework/.git/
 framework/
 
-# Keep the projects directory itself
+# Nested project code repositories in the default setup
+projects/*/project/.git/
+projects/*/project/
+
+# Keep the coordination tree visible to the workspace repo
 !projects/
+!projects/*/
 
 # Operator-maintained notes
 OPERATOR-NOTES.md
@@ -103,6 +146,7 @@ OPERATOR-NOTES.md
 - if missing, create from the template
 - if present, merge the framework-specific read order and workspace rules into the existing file
 - do not remove workspace-specific instructions already present
+- if the workspace also uses other root agent/editor entrypoint files such as `CLAUDE.md` or tool-specific rule files, decide deliberately whether they should mirror the same workspace guidance
 
 ### `CLAUDE.md`
 
@@ -130,4 +174,7 @@ A framework install/adoption is good enough when:
 - `framework/` is present in the workspace
 - the key workspace files exist or a deliberate keep/merge decision was made
 - the workspace agent instructions point agents to `framework/`
+- the root `.gitignore` matches the actual nested-repository boundaries
+- workspace-owned `library/` and `work` areas are not accidentally ignored in the default model
 - the workspace can support a normal Overseer session without extra hidden setup
+- an existing/non-empty workspace has a workable next step for phased migration instead of needing a full one-shot reorganization

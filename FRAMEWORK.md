@@ -128,15 +128,18 @@ Each project lives under `projects/[name]/`.
 ## Repository Structure
 
 Recommended default:
-- the workspace root has its own git repository for coordination files
+- the workspace root has its own git repository for workspace files plus project coordination files
 - `framework/` stays as its own git repository
-- each project under `projects/[name]/` has its own git repository
+- `projects/[name]/project/` is the actual software project and is expected to be its own git repository in the default setup
+- `projects/[name]/library/` and `projects/[name]/work/` belong to the workspace root repo by default
 
-This separation lets the workspace track shared operational state without mixing framework history or project history into the same repository.
+This keeps coordination lightweight while preserving a clean code boundary in the default setup.
 
-If you use this model, configure the workspace root repository to ignore nested repositories such as:
+If a team wants isolated git history for non-code coordination files too, separate per-project coordination repos are still possible as an advanced optional pattern.
+
+If you use the default model, configure the workspace root repository to ignore nested repositories such as:
 - `framework/`
-- `projects/*/`
+- `projects/*/project/`
 
 ### `projects/[name]/project/`
 
@@ -159,11 +162,15 @@ Keep at least:
 - `notes.md`
 - `research.md`
 
+Optional:
+- `deliverables/` for polished reusable project outputs created by tasks
+
 Use these files deliberately:
 - decisions that still matter go in `decisions.md`
 - active or upcoming work planning goes in `plans.md`
 - factual project notes go in `notes.md`
 - references, comparisons, and external findings go in `research.md`
+- polished reusable artifacts may live under `deliverables/` when a project benefits from keeping them separate from the core library markdown files
 
 ### `projects/[name]/work/`
 
@@ -215,6 +222,12 @@ Do not put temporary status here.
 ### `runs/`
 
 Append-only run logs for task sessions.
+
+### Additional task-local working files
+
+Tasks may also contain additional working files when useful, for example analysis notes, design drafts, migration comparisons, or other larger exploratory material.
+
+Use this for task-local work that is too substantial for `NOTES.md` and not yet ready for durable project knowledge under `library/`.
 
 ### Optional `NOTES.md`
 

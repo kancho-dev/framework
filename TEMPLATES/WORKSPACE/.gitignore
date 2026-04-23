@@ -1,13 +1,14 @@
-# Nested project repositories
-projects/*/.git/
-projects/*/
-
-# Framework repository
+# Nested framework repository
 framework/.git/
 framework/
 
-# Keep the projects directory itself
+# Nested project code repositories in the default setup
+projects/*/project/.git/
+projects/*/project/
+
+# Keep the coordination tree visible to the workspace repo
 !projects/
+!projects/*/
 
 # Operator-maintained notes
 OPERATOR-NOTES.md

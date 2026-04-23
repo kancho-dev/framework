@@ -20,6 +20,7 @@
 - Prior state: `HANDOFF.md`
 - Stable facts: `CONTEXT.md`
 - Optional transient steering: `NOTES.md`
+- Optional task-local working files when the task needs larger draft or analysis material
 
 ## Desired Outcome
 
