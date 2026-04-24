@@ -1,8 +1,22 @@
 # Portable Agent Framework
 
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+
 Minimal, agent-agnostic framework for AI-assisted software development.
 
 This repository is intended to be cloned into the root of each workspace as a dedicated framework directory.
+
+## Public Sharing Status
+
+Keep the story simple:
+- start with `INSTALLATION.md`
+- use the markdown files and templates first
+- treat `memory-service/` as optional support, not part of the minimum setup path
+
+If you are updating this repository from an internal workspace:
+- do not copy private workspace state, task history, internal-only notes, secrets, or user-specific local paths into public-facing docs or examples
+- sanitize examples so they stay generic and safe to share
+- keep reusable framework guidance here, and keep workspace-specific coordination outside this repo
 
 ## Intended Workspace Layout
 
@@ -79,6 +93,13 @@ workspace/
 2. Follow `framework/INSTALLATION.md` to create or adopt the needed workspace files in the current root.
 3. Use templates under `framework/TEMPLATES/WORKSPACE/` for workspace-level files and `framework/TEMPLATES/TASKS/` for task files.
 4. Instruct agents to read the framework files from `framework/` and operate from the workspace root.
+
+For most teams, the minimum path is:
+- `README.md` for orientation
+- `INSTALLATION.md` for setup/adoption
+- `FRAMEWORK.md` + role files for day-to-day operation
+
+You can ignore `memory-service/` unless markdown files are no longer enough for recall/search.
 
 `framework/INSTALLATION.md` is the main adoption guide for both fresh workspaces and already-active/non-empty workspaces.
 Incremental adoption is normal: the framework does not require everything to start from a clean slate in one step.

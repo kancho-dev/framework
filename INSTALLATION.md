@@ -4,6 +4,9 @@ Use this guide when setting up the framework in the current workspace.
 
 The goal is a clean, usable workspace setup, not a heavy installer.
 
+This is the main starting point for first-time adoption.
+`memory-service/` is optional and is not required for the basic framework workflow.
+
 ## Supported Situations
 
 ### Fresh workspace
@@ -167,6 +170,17 @@ Ask when:
 - an existing `AGENTS.md` or `README.md` should be merged but the right result is ambiguous
 - the user may want framework guidance mirrored into `CLAUDE.md`
 - a local convention conflicts with the framework defaults
+
+## Public-Repo Hygiene Reminder
+
+If you are updating these docs from an internal or client-specific workspace, do not copy:
+- private task history
+- internal coordination notes
+- secrets or credentials
+- user-specific local paths unless they are clearly generic placeholders
+- examples that expose non-public project names or repository details
+
+Keep this repository limited to reusable framework guidance that is safe to share with others.
 
 ## Done Criteria
 
