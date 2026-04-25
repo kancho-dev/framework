@@ -81,4 +81,4 @@ Import all Pi sessions found under the configured JSONL root, not just the curre
 
 The OpenCode adapter is SQLite-backed, not JSONL-backed.
 For OpenCode, the importer reconstructs framework messages from `message` + `part` tables and derives searchable work reports from `todo` rows.
-JSONL/session-file import is reserved as a likely future path for a Pi adapter.
+The Pi adapter is JSONL-backed and imports sessions/messages from local Pi session files, but does not derive work reports yet.
