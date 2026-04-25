@@ -95,7 +95,7 @@ Act as Historian and clean up stale state/docs without changing project code
 ```
 
 ```text
-Use `update-framework` skill to sync framework updates into this workspace
+Pull the latest changes in the framework repo and use `update-framework` skill to sync framework updates into this workspace
 ```
 
 ## Planning And Prioritization

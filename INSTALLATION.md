@@ -50,7 +50,8 @@ Incremental adoption is normal: a real workspace may move into the framework in 
 7. If `AGENTS.md` is missing, create it from the workspace template.
 8. If `AGENTS.md` already exists, merge the framework-required guidance into it rather than replacing it.
 9. If `CLAUDE.md` exists, do not overwrite it. If relevant, suggest mirroring the same workspace guidance there.
-10. Leave the workspace in a state where an agent can begin operating with the framework immediately.
+10. After successful install/adoption, create or update gitignored `framework/CURRENT_VERSION` from `framework/VERSION` so the workspace records the framework version it has installed.
+11. Leave the workspace in a state where an agent can begin operating with the framework immediately.
 
 ## Recommended Incremental Adoption Sequence
 
@@ -62,7 +63,8 @@ For an already-active workspace, prefer this order:
 4. create or merge the minimum workspace-level files needed for agent operation (`AGENTS.md`, `ACTIVE-CONTEXT.md`, `FIXES.md`, optional `OPERATOR-NOTES.md`)
 5. create `projects/` entries gradually rather than forcing every existing project into the full layout immediately
 6. migrate each project into `project/`, `library/`, and `work/` when that project actually needs framework-managed coordination
-7. leave the workspace usable after each step rather than waiting for one big migration to finish
+7. after successful install/adoption, create or update `framework/CURRENT_VERSION` from `framework/VERSION`
+8. leave the workspace usable after each step rather than waiting for one big migration to finish
 
 This framework supports phased adoption. A workspace does not need to become perfectly reorganized in one session before the framework is useful.
 
@@ -186,6 +188,7 @@ Keep this repository limited to reusable framework guidance that is safe to shar
 
 A framework install/adoption is good enough when:
 - `framework/` is present in the workspace
+- `framework/CURRENT_VERSION` exists and matches `framework/VERSION` after install/adoption
 - the key workspace files exist or a deliberate keep/merge decision was made
 - the workspace agent instructions point agents to `framework/`
 - the root `.gitignore` matches the actual nested-repository boundaries
