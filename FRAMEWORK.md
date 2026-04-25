@@ -47,6 +47,7 @@ Read in this order:
 4. `framework/ROLES/OVERSEER.md`
 5. `ACTIVE-CONTEXT.md`
 6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief file present under `memory/` if any exist
+   - If today's brief does not exist and you later create it, carry forward only important unfinished items from the latest previous brief into a short top section before adding normal entries.
 7. relevant files under `projects/[name]/library/`
 8. only the role-relevant skills and extra context needed for the run
 9. if a specific context gap remains, optionally use `framework/SKILLS/memory-search.md` and the memory CLI under `framework/memory-service/`
@@ -104,7 +105,28 @@ Use this file as the shared daily log.
 Append a short factual entry after meaningful work.
 Use the real current system date/time from the live environment, not chat or session metadata. If needed, query it explicitly with `date '+%F %R %Z'`. Never use invented placeholder times such as `00:00`.
 
-Format:
+When creating today's brief and a previous daily brief exists:
+1. review the latest previous brief for still-actionable `For next` items or obvious unfinished work
+2. create a short `Carry-forward from previous brief` section at the top
+3. include only important unfinished items that still appear relevant
+4. skip completed, obsolete, low-value, or duplicate items
+5. move durable multi-day state to `ACTIVE-CONTEXT.md`, task `HANDOFF.md`, project `library/`, `OPERATOR-NOTES.md`, or `FIXES.md` instead of relying only on carry-forward
+
+Suggested new-file shape:
+
+```markdown
+## Carry-forward from previous brief
+
+- [ ] [important unfinished item]
+
+---
+
+## HH:MM — [Session Type]
+**Did:** [what was accomplished]
+**For next:** [what the next session should know]
+```
+
+Normal entry format:
 
 ```markdown
 ## HH:MM — [Session Type]
