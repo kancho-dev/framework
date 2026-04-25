@@ -98,6 +98,7 @@ For most teams, the minimum path is:
 - `README.md` for orientation
 - `INSTALLATION.md` for setup/adoption
 - `FRAMEWORK.md` + role files for day-to-day operation
+- `USAGE-PROMPTS.md` for practical prompts and common day-to-day workflows
 
 You can ignore `memory-service/` unless markdown files are no longer enough for recall/search.
 
