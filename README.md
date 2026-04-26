@@ -108,6 +108,8 @@ workspace/
         ACTIVE-CONTEXT.md
         OPERATOR-NOTES.md
         FIXES.md
+      SKILLS/
+        INDEX.md
     memory-service/
 ```
 
@@ -127,7 +129,9 @@ For later framework-alignment runs in an already framework-managed workspace, al
 
 Then it should read the active workspace files from the root.
 `OPERATOR-NOTES.md` is used as a durable Operator-maintained list of human todos and ideas; agents should treat it as a reference file unless the workspace rules explicitly allow appending short Operator-action items.
-Load skills under `framework/SKILLS/` only when they are relevant to the current run. If the right skill is unclear, read `framework/SKILLS/INDEX.md` first, then read only the selected `framework/SKILLS/[skill-name]/SKILL.md` files.
+Load skills only when they are relevant to the current run. Framework skills live under `framework/SKILLS/`; if the right framework skill is unclear, read `framework/SKILLS/INDEX.md` first, then read only the selected `framework/SKILLS/[skill-name]/SKILL.md` files.
+
+Workspace-custom skills may live under root `SKILLS/`; if local skill choice is unclear or the user mentions a workspace-specific workflow, read `SKILLS/INDEX.md` if it exists, then read only the selected `SKILLS/[skill-name]/SKILL.md` files. Avoid creating workspace skills with the same name as framework skills unless the Operator explicitly wants a local override.
 
 If current markdown files are not enough to answer a specific context question, load `framework/SKILLS/memory-search/SKILL.md` and use the optional memory CLI under `framework/memory-service/` selectively (for example: `mem search`, `mem recent`, `mem sessions`, `mem lessons search`).
 

@@ -44,6 +44,8 @@ Review any script before running it and follow `framework/SECURITY.md`.
 
 ## Task Execution
 
+- `create-workspace-skill` — create a workspace-custom skill for a local workflow without changing the reusable framework.
+  - Read: `framework/SKILLS/create-workspace-skill/SKILL.md`
 - `task-pickup` — resume an existing task from task files and choose the next bounded step.
   - Read: `framework/SKILLS/task-pickup/SKILL.md`
 - `task-closure` — close or pause a task cleanly with updated task/project/workspace state.

@@ -45,6 +45,7 @@ Incremental adoption is normal: a real workspace may move into the framework in 
    - `FIXES.md`
    - `memory/`
    - `projects/`
+   - optional workspace-custom `SKILLS/`
 5. Create missing directories and files from templates when appropriate.
 6. Ensure the root `.gitignore` matches the intended repository model.
 7. If `AGENTS.md` is missing, create it from the workspace template.
@@ -103,6 +104,7 @@ Use templates under `framework/TEMPLATES/`.
 - `ACTIVE-CONTEXT.md` → `framework/TEMPLATES/WORKSPACE/ACTIVE-CONTEXT.md`
 - `OPERATOR-NOTES.md` → `framework/TEMPLATES/WORKSPACE/OPERATOR-NOTES.md`
 - `FIXES.md` → `framework/TEMPLATES/WORKSPACE/FIXES.md`
+- optional workspace skill index: `SKILLS/INDEX.md` → `framework/TEMPLATES/WORKSPACE/SKILLS/INDEX.md`
 
 ### Task files
 
@@ -164,6 +166,14 @@ OPERATOR-NOTES.md
 - if missing, create from templates
 - if present, preserve existing content unless the user asks for restructuring
 - `OPERATOR-NOTES.md` is gitignored by default in the recommended root `.gitignore`
+
+### Workspace-custom `SKILLS/`
+
+- not required for basic framework use
+- if the workspace has local repeated workflows, create `SKILLS/INDEX.md` from the workspace template and add skills under `SKILLS/[skill-name]/SKILL.md`
+- keep workspace-custom skills out of `framework/SKILLS/`; use `framework/SKILLS/create-workspace-skill/SKILL.md` when creating them
+- avoid workspace skill names that collide with framework skill names unless the Operator explicitly wants a local override
+- preserve existing local skill files if present and merge index guidance rather than replacing it
 
 ## When To Ask The User
 

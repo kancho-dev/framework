@@ -34,8 +34,9 @@ Keep workspace-level coordination files healthy, current, and concise.
 2. Summarize or remove stale detail instead of preserving old status verbatim.
 3. Check whether the day’s meaningful work has been recorded in the daily brief.
 4. If a non-obvious bug, mistake, or durable workaround appeared, record it in `FIXES.md`.
-5. Check for uncommitted changes if session workflow expects clean repo state.
-6. Leave the workspace easier for the next run to recover.
+5. If root `SKILLS/` exists, check for workspace-custom skill name collisions with framework skills under `framework/SKILLS/`; if a collision exists, record it as a cleanup item and ask the Operator whether to rename the local skill or treat it as an explicit override.
+6. Check for uncommitted changes if session workflow expects clean repo state.
+7. Leave the workspace easier for the next run to recover.
 
 ## Outputs
 
@@ -52,6 +53,7 @@ Keep workspace-level coordination files healthy, current, and concise.
 - letting `ACTIVE-CONTEXT.md` become a historical dump
 - recording temporary details in durable files
 - ending a meaningful session without updating shared state
+- letting workspace-custom skills accidentally shadow framework skills without an explicit Operator decision
 
 ## Related Files / Tools
 

@@ -13,7 +13,9 @@ At the start of a main session, read:
 6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief file present under `memory/` if any exist
    - If today's brief does not exist and you later create it, carry forward only important unfinished items from the latest previous brief into a short top section before adding normal entries.
 
-Load skills from `framework/SKILLS/` only when they are relevant to the current run. When skill choice is unclear, read `framework/SKILLS/INDEX.md` first, then read only the selected `framework/SKILLS/[skill-name]/SKILL.md` files.
+Load skills only when they are relevant to the current run. Framework skills live under `framework/SKILLS/`; when framework skill choice is unclear, read `framework/SKILLS/INDEX.md` first, then read only the selected `framework/SKILLS/[skill-name]/SKILL.md` files.
+
+Workspace-custom skills may live under root `SKILLS/`; when local skill choice is unclear or the user mentions a workspace-specific workflow, read `SKILLS/INDEX.md` if it exists, then read only the selected `SKILLS/[skill-name]/SKILL.md` files. Avoid creating workspace skills with the same name as framework skills; if a collision exists, ask whether to rename the local skill or treat it as an explicit override. Do not read every skill by default.
 
 When working inside a task directory, then read the task files in the order defined by `framework/FRAMEWORK.md`.
 

@@ -388,8 +388,14 @@ The default top-level session role is **Overseer**.
 
 Skills are optional playbooks under `framework/SKILLS/`.
 
-Use `framework/SKILLS/INDEX.md` to choose a skill when the user gives a general prompt or when the right skill is unclear.
-Each skill uses the path `framework/SKILLS/[skill-name]/SKILL.md`.
+Use `framework/SKILLS/INDEX.md` to choose a framework skill when the user gives a general prompt or when the right framework skill is unclear.
+Each framework skill uses the path `framework/SKILLS/[skill-name]/SKILL.md`.
+
+A workspace may also define custom local skills at `SKILLS/[skill-name]/SKILL.md`, with discovery through `SKILLS/INDEX.md`.
+Use workspace-custom skills for local workflows, project-specific procedures, or experiments that are not yet ready for the reusable framework.
+Avoid giving a workspace-custom skill the same name as a framework skill. When creating a local skill, check both indexes first; if a name collision exists, propose a distinct local name to the Operator.
+When a framework skill and workspace-custom skill both seem relevant, prefer the workspace-custom skill for local workflow details, but use the framework skill for general framework procedure unless the local skill explicitly overrides it.
+
 A skill directory may also contain optional `resources/`, `scripts/`, or `artifacts/` directories, but `SKILL.md` must remain enough to understand and run the skill.
 Load only the selected skill files that help with the current run, and load optional resources only when the skill says they are needed.
 Review scripts before running them and follow `framework/SECURITY.md`.
