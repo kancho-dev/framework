@@ -1,3 +1,8 @@
+---
+name: docs-sync
+description: "Update documentation so it matches the actual implemented or current project state."
+---
+
 # Skill: Docs Sync
 
 ## Purpose

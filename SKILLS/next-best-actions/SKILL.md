@@ -1,3 +1,8 @@
+---
+name: next-best-actions
+description: "Identify the highest-value next actions from the current workspace or project state without loading unnecessary context."
+---
+
 # Skill: Next Best Actions
 
 ## Purpose

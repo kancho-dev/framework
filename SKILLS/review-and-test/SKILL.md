@@ -1,3 +1,8 @@
+---
+name: review-and-test
+description: "Verify whether work actually satisfies the intended outcome and acceptance criteria, then return a structured verdict."
+---
+
 # Skill: Review And Test
 
 ## Purpose

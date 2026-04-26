@@ -49,8 +49,8 @@ Read in this order:
 6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief file present under `memory/` if any exist
    - If today's brief does not exist and you later create it, carry forward only important unfinished items from the latest previous brief into a short top section before adding normal entries.
 7. relevant files under `projects/[name]/library/`
-8. only the role-relevant skills and extra context needed for the run
-9. if a specific context gap remains, optionally use `framework/SKILLS/memory-search.md` and the memory CLI under `framework/memory-service/`
+8. when skill choice is unclear, read `framework/SKILLS/INDEX.md`, then only the role-relevant skills and extra context needed for the run
+9. if a specific context gap remains, optionally use `framework/SKILLS/memory-search/SKILL.md` and the memory CLI under `framework/memory-service/`
 
 ### Task session
 
@@ -63,8 +63,8 @@ If you are working on a task under `projects/[name]/work/[task-slug]/`, read in 
 6. `projects/[name]/work/[task-slug]/HANDOFF.md`
 7. `projects/[name]/work/[task-slug]/CONTEXT.md`
 8. relevant files under `projects/[name]/library/`
-9. only the skills and extra context needed for the run
-10. if a specific context gap remains, optionally use `framework/SKILLS/memory-search.md` and the memory CLI under `framework/memory-service/`
+9. when skill choice is unclear, read `framework/SKILLS/INDEX.md`, then only the skills and extra context needed for the run
+10. if a specific context gap remains, optionally use `framework/SKILLS/memory-search/SKILL.md` and the memory CLI under `framework/memory-service/`
 
 ## Workspace Files
 
@@ -388,12 +388,16 @@ The default top-level session role is **Overseer**.
 
 Skills are optional playbooks under `framework/SKILLS/`.
 
-Load them only when they help with the current run.
+Use `framework/SKILLS/INDEX.md` to choose a skill when the user gives a general prompt or when the right skill is unclear.
+Each skill uses the path `framework/SKILLS/[skill-name]/SKILL.md`.
+A skill directory may also contain optional `resources/`, `scripts/`, or `artifacts/` directories, but `SKILL.md` must remain enough to understand and run the skill.
+Load only the selected skill files that help with the current run, and load optional resources only when the skill says they are needed.
+Review scripts before running them and follow `framework/SECURITY.md`.
 Do not read every skill by default.
 
 ### Optional Memory Retrieval
 
-If current markdown files do not answer a specific context question, use `framework/SKILLS/memory-search.md` before doing broad manual history recovery.
+If current markdown files do not answer a specific context question, use `framework/SKILLS/memory-search/SKILL.md` before doing broad manual history recovery.
 
 Use the memory CLI under `framework/memory-service/` selectively, for example:
 - `mem search "query"` — recover prior discussion or implementation context

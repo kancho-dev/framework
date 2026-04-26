@@ -1,3 +1,8 @@
+---
+name: task-pickup
+description: "Resume an existing task cleanly by recovering current state, selecting the next bounded step, and preparing a clear handoff for the following run."
+---
+
 # Skill: Task Pickup
 
 ## Purpose

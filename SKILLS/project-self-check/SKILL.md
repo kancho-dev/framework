@@ -1,3 +1,8 @@
+---
+name: project-self-check
+description: "Keep a project’s task state, library files, and key docs aligned with the actual state of the project."
+---
+
 # Skill: Project Self-Check
 
 ## Purpose

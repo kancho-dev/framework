@@ -76,15 +76,25 @@ workspace/
       ORACLE.md
       HISTORIAN.md
     SKILLS/
-      update-framework.md
-      next-best-actions.md
-      task-pickup.md
-      review-and-test.md
-      memory-search.md
-      self-check.md
-      project-self-check.md
-      docs-sync.md
-      task-closure.md
+      INDEX.md
+      update-framework/
+        SKILL.md
+      next-best-actions/
+        SKILL.md
+      task-pickup/
+        SKILL.md
+      review-and-test/
+        SKILL.md
+      memory-search/
+        SKILL.md
+      self-check/
+        SKILL.md
+      project-self-check/
+        SKILL.md
+      docs-sync/
+        SKILL.md
+      task-closure/
+        SKILL.md
     TEMPLATES/
       TASKS/
         TASK.md
@@ -113,13 +123,13 @@ For first-time setup or adoption runs, use:
 - `framework/INSTALLATION.md`
 
 For later framework-alignment runs in an already framework-managed workspace, also use:
-- `framework/SKILLS/update-framework.md`
+- `framework/SKILLS/update-framework/SKILL.md`
 
 Then it should read the active workspace files from the root.
 `OPERATOR-NOTES.md` is used as a durable Operator-maintained list of human todos and ideas; agents should treat it as a reference file unless the workspace rules explicitly allow appending short Operator-action items.
-Load skills under `framework/SKILLS/` only when they are relevant to the current run.
+Load skills under `framework/SKILLS/` only when they are relevant to the current run. If the right skill is unclear, read `framework/SKILLS/INDEX.md` first, then read only the selected `framework/SKILLS/[skill-name]/SKILL.md` files.
 
-If current markdown files are not enough to answer a specific context question, load `framework/SKILLS/memory-search.md` and use the optional memory CLI under `framework/memory-service/` selectively (for example: `mem search`, `mem recent`, `mem sessions`, `mem lessons search`).
+If current markdown files are not enough to answer a specific context question, load `framework/SKILLS/memory-search/SKILL.md` and use the optional memory CLI under `framework/memory-service/` selectively (for example: `mem search`, `mem recent`, `mem sessions`, `mem lessons search`).
 
 When implementation work benefits from explicit review, use the Builder–Oracle loop rather than relying on vague completion claims.
 

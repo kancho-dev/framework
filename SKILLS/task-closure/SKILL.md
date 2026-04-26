@@ -1,3 +1,8 @@
+---
+name: task-closure
+description: "Close or pause a task cleanly by making sure its final state is reflected in task files, project knowledge, and shared workspace logs."
+---
+
 # Skill: Task Closure
 
 ## Purpose

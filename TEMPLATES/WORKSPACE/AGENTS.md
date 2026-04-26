@@ -13,7 +13,7 @@ At the start of a main session, read:
 6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief file present under `memory/` if any exist
    - If today's brief does not exist and you later create it, carry forward only important unfinished items from the latest previous brief into a short top section before adding normal entries.
 
-Load skills from `framework/SKILLS/` only when they are relevant to the current run.
+Load skills from `framework/SKILLS/` only when they are relevant to the current run. When skill choice is unclear, read `framework/SKILLS/INDEX.md` first, then read only the selected `framework/SKILLS/[skill-name]/SKILL.md` files.
 
 When working inside a task directory, then read the task files in the order defined by `framework/FRAMEWORK.md`.
 

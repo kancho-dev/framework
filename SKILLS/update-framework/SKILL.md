@@ -1,3 +1,8 @@
+---
+name: update-framework
+description: "Bring an already framework-managed workspace into alignment with newer framework changes using minimal safe updates."
+---
+
 # Skill: Update Framework
 
 ## Purpose

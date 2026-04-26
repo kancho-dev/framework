@@ -1,3 +1,8 @@
+---
+name: memory-search
+description: "Use the memory system selectively to recover relevant prior context without turning every run into a full-history read."
+---
+
 # Skill: Memory Search
 
 ## Purpose

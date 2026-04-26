@@ -1,3 +1,8 @@
+---
+name: self-check
+description: "Keep workspace-level coordination files healthy, current, and concise."
+---
+
 # Skill: Self-Check
 
 ## Purpose
