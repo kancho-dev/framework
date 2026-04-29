@@ -1,5 +1,20 @@
 .gitkeep
 
 .env
+.env.*
+!.env.example
 node_modules/
+**/node_modules/
 CURRENT_VERSION
+
+# Local tool runtime/private data
+tools/**/.cache/
+tools/**/.tmp/
+tools/**/tmp/
+tools/**/*.log
+tools/**/sessions/
+tools/**/exports/
+tools/**/*.jsonl
+tools/**/*.sqlite
+tools/**/*.sqlite3
+tools/**/*.db

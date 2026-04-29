@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Session Browser</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <aside class="sessions-pane">
+      <header>
+        <div class="brand">
+          <img src="/icon.svg" alt="" class="brand-logo" aria-hidden="true">
+          <div>
+            <p class="eyebrow">local · read-only · multi-source</p>
+            <h1>Session history</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <label class="auto-refresh" title="Reload session list and selected session every 10 seconds"><input id="auto-refresh" type="checkbox" checked><span>Auto 10s</span></label>
+          <button id="refresh">Refresh</button>
+        </div>
+      </header>
+      <div class="filters">
+        <input id="filter" type="search" placeholder="Filter by prompt, cwd, name, id…" autocomplete="off">
+        <select id="source-filter" aria-label="Filter by source">
+          <option value="all">All sources</option>
+        </select>
+        <select id="sort-mode" aria-label="Sort sessions">
+          <option value="updated-desc">Updated newest</option>
+          <option value="updated-asc">Updated oldest</option>
+          <option value="created-desc">Created newest</option>
+          <option value="created-asc">Created oldest</option>
+        </select>
+      </div>
+      <div id="status" class="status">Loading sessions…</div>
+      <ol id="sessions" class="sessions"></ol>
+    </aside>
+
+    <main class="reader-pane">
+      <section id="empty" class="empty">
+        <p class="eyebrow">browse-first local archive</p>
+        <h2>Select a session to read</h2>
+        <p>Browse recent Pi and OpenCode sessions by first prompt, cwd, and timeline. Open one to skim topic anchors, conversation, and actions.</p>
+      </section>
+      <section id="reader" class="reader hidden">
+        <header class="reader-header">
+          <button id="copy-restore" class="copy-restore-top" type="button" title="Copy command to restore this session in Pi">Copy restore cmd</button>
+          <p class="eyebrow" id="reader-source">Pi session</p>
+          <h2 id="reader-title"></h2>
+          <div id="reader-relations" class="relations hidden"></div>
+          <div id="reader-meta" class="meta"></div>
+          <div class="reader-actions">
+            <label><input id="show-tools" type="checkbox"> Show tool calls</label>
+            <div class="jump-actions">
+              <button id="jump-top" type="button">↑ Top</button>
+              <button id="jump-bottom" type="button">↓ Bottom</button>
+            </div>
+          </div>
+        </header>
+        <div class="reader-layout">
+          <nav class="topics">
+            <h3>Topics</h3>
+            <ol id="topics"></ol>
+          </nav>
+          <article id="messages" class="messages"></article>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

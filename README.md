@@ -1,6 +1,6 @@
 # Portable Agent Framework
 
-![Version](https://img.shields.io/badge/version-0.4.0-blue)
+![Version](https://img.shields.io/badge/version-0.5.0-blue)
 
 Minimal, agent-agnostic framework for AI-assisted software development.
 
@@ -29,6 +29,8 @@ Create a new task in project X for Y
 ```
 
 You can ignore `memory-service/` unless markdown files are no longer enough for recall/search. The minimum setup uses plain markdown files and templates.
+
+Optional local tools live under [`tools/`](tools/). The first included tool is [`tools/session-browser/`](tools/session-browser/), a local read-only browser for Pi and OpenCode coding-agent sessions.
 
 For manual setup or adoption of an already-active workspace, read [`INSTALLATION.md`](INSTALLATION.md).
 
@@ -111,6 +113,8 @@ workspace/
       SKILLS/
         INDEX.md
     memory-service/
+    tools/
+      session-browser/
 ```
 
 ## What The Agent Should Read

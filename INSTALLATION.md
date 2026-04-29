@@ -5,7 +5,7 @@ Use this guide when setting up the framework in the current workspace.
 The goal is a clean, usable workspace setup, not a heavy installer.
 
 This is the main starting point for first-time adoption.
-`memory-service/` is optional and is not required for the basic framework workflow.
+`memory-service/` and `tools/` are optional and are not required for the basic framework workflow.
 
 ## Supported Situations
 
@@ -112,6 +112,48 @@ Use templates under `framework/TEMPLATES/`.
 - `HANDOFF.md` → `framework/TEMPLATES/TASKS/HANDOFF.md`
 - `CONTEXT.md` → `framework/TEMPLATES/TASKS/CONTEXT.md`
 - run log entry → `framework/TEMPLATES/TASKS/RUN-LOG.md`
+
+## Optional Session Browser Tool
+
+The framework includes an optional local session browser under:
+
+```text
+framework/tools/session-browser/
+```
+
+It is a read-only web tool for browsing Pi JSONL sessions and OpenCode SQLite sessions for the current workspace.
+
+Quick start after the framework is present in a workspace:
+
+```bash
+cd framework/tools/session-browser
+npm start
+```
+
+Then open:
+
+```text
+http://localhost:8787
+```
+
+Requirements:
+
+- Node.js.
+- Optional for OpenCode support: `sqlite3` CLI on `PATH`.
+
+Useful configuration:
+
+- `WORKSPACE_ROOT` — workspace whose sessions should be shown.
+- `PORT` — local HTTP port, default `8787`.
+- `SESSION_SOURCES` — `pi`, `opencode`, or `pi,opencode`.
+- `PI_SESSION_ROOT` / `SESSION_ROOT` — Pi JSONL session root.
+- `OPENCODE_DB` / `OPENCODE_DATA_DIR` — OpenCode SQLite database/data location.
+
+Safety:
+
+- the tool is local-only and read-only by default;
+- do not commit private transcripts, cwd paths, tool outputs, copied databases, exports, logs, env files, or dependency/cache folders;
+- for full setup/use details, read `framework/tools/session-browser/README.md`.
 
 ## Existing File Guidance
 

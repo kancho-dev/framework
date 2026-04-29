@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/
+
+# Build output
+dist/
+build/
+.out/
+.next/
+coverage/
+
+# Runtime/cache files
+.cache/
+.tmp/
+tmp/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment/config
+.env
+.env.*
+!.env.example
+
+# Local session data or exports copied for experiments
+sessions/
+exports/
+*.jsonl
+*.sqlite
+*.sqlite3
+*.db
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -42,13 +42,36 @@ Bring an already framework-managed workspace into alignment with newer framework
 8. Check whether the root `.gitignore` still matches the current framework repository model and ignore guidance.
 9. Recheck that workspace-owned `projects/[name]/library/` and `projects/[name]/work/` are not being ignored under the default model.
 10. Add newly required files or directories when they are missing and templates clearly apply.
-11. Update or merge existing workspace files only when needed to support new framework behavior or guidance.
-12. Do not overwrite local workspace-specific instructions blindly.
-13. If a merge is non-obvious, ask the user before changing the file.
-14. Leave adapter-specific files such as `CLAUDE.md` intact unless the user explicitly wants them updated.
-15. If the workspace uses other root agent/editor entrypoint files, decide deliberately whether they should mirror the same workspace guidance.
-16. After the workspace has been updated, set `framework/CURRENT_VERSION` to match `framework/VERSION`.
-17. Summarize the old version, new version, what changed, what was added, updated, left unchanged, or escalated.
+11. If the newer framework includes optional tools such as `framework/tools/session-browser/`, do not force workspace changes; tell the Operator the tool is available after updating `framework/`, and point them to the tool README for optional setup/use.
+12. Update or merge existing workspace files only when needed to support new framework behavior or guidance.
+13. Do not overwrite local workspace-specific instructions blindly.
+14. If a merge is non-obvious, ask the user before changing the file.
+15. Leave adapter-specific files such as `CLAUDE.md` intact unless the user explicitly wants them updated.
+16. If the workspace uses other root agent/editor entrypoint files, decide deliberately whether they should mirror the same workspace guidance.
+17. After the workspace has been updated, set `framework/CURRENT_VERSION` to match `framework/VERSION`.
+18. Summarize the old version, new version, what changed, what was added, updated, left unchanged, or escalated.
+
+## Optional Session Browser Check
+
+If the updated framework includes `framework/tools/session-browser/`:
+
+1. Mention it to the Operator as an optional local, read-only browser for Pi and OpenCode coding-agent sessions.
+2. Do not force setup; the core framework workflow does not require it.
+3. If the Operator wants to use it, verify basic prerequisites:
+   - `node --version`
+   - optional for OpenCode: `sqlite3 --version`
+4. Point to the quick start:
+   - `cd framework/tools/session-browser && npm start`
+   - open `http://localhost:8787`
+5. For workspace-specific setup, suggest only the env vars that matter:
+   - `WORKSPACE_ROOT=/path/to/workspace`
+   - `SESSION_SOURCES=pi`, `SESSION_SOURCES=opencode`, or `SESSION_SOURCES=pi,opencode`
+   - `PORT=8790` when the default port is busy
+   - `PI_SESSION_ROOT` / `SESSION_ROOT` when Pi sessions are not in the default location
+   - `OPENCODE_DB` / `OPENCODE_DATA_DIR` when OpenCode data is not in the default location
+6. Remind the Operator that session transcripts, cwd paths, tool outputs, copied databases, exports, logs, and env files can be sensitive.
+7. Do not copy session files, OpenCode databases, exports, logs, or local `.env` files into the framework repo.
+8. For full details, refer to `framework/tools/session-browser/README.md`.
 
 ## Outputs
 
@@ -58,6 +81,7 @@ Bring an already framework-managed workspace into alignment with newer framework
 - repo-boundary and root `.gitignore` expectations rechecked rather than assumed
 - workspace-owned `library/` and `work` preserved under the default repo model while nested `project/` repositories remain ignored as expected
 - a clear summary of required follow-up when user input was needed
+- optional framework tools surfaced to the Operator without forcing workspace-specific setup
 
 ## Stop Conditions
 
@@ -72,6 +96,7 @@ Bring an already framework-managed workspace into alignment with newer framework
 - accidentally gitignoring workspace-owned `library/` or `work` paths while updating `.gitignore`
 - overwriting customized `AGENTS.md`, `.gitignore`, `README.md`, or other workspace files blindly
 - applying template changes that are not actually needed for the current framework update
+- copying private session data into `framework/tools/session-browser/` or treating optional tools as required workspace setup
 - updating `CURRENT_VERSION` before checking whether the old/new framework versions require workspace changes
 - changing adapter-specific files by default
 
