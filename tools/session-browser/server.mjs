@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -15,6 +15,7 @@ const OPENCODE_DB = resolve(process.env.OPENCODE_DB || join(OPENCODE_DATA_DIR, '
 const ENABLED_SOURCES = new Set(String(process.env.SESSION_SOURCES || 'pi,opencode').split(',').map((source) => source.trim().toLowerCase()).filter(Boolean));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
 const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
+const METADATA_PATH = resolve(process.env.SESSION_BROWSER_METADATA || join(TOOL_DIR, '.cache', 'metadata.json'));
 const execFileAsync = promisify(execFile);
 
 const mime = new Map([
@@ -300,6 +301,70 @@ function opencodeRef(sessionId) {
   return `opencode:${sessionId}`;
 }
 
+function sessionKey(sessionOrPath, source = null) {
+  if (typeof sessionOrPath === 'string') {
+    if (isOpenCodeRef(sessionOrPath)) return sessionOrPath;
+    return `pi:${resolve(sessionOrPath)}`;
+  }
+  if (sessionOrPath?.source === 'opencode') return opencodeRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^opencode:/, ''));
+  return `pi:${resolve(sessionOrPath?.path || '')}`;
+}
+
+function normalizeLabels(labels) {
+  if (!Array.isArray(labels)) return [];
+  return Array.from(new Set(labels.map((label) => String(label || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+function emptyMetadata() {
+  return { version: 1, sessions: {} };
+}
+
+async function readMetadata() {
+  try {
+    const parsed = JSON.parse(await readFile(METADATA_PATH, 'utf8'));
+    const sessions = parsed && typeof parsed.sessions === 'object' && !Array.isArray(parsed.sessions) ? parsed.sessions : {};
+    const normalized = emptyMetadata();
+    for (const [key, value] of Object.entries(sessions)) {
+      normalized.sessions[key] = { bookmarked: Boolean(value?.bookmarked), labels: normalizeLabels(value?.labels) };
+    }
+    return { metadata: normalized, error: null };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { metadata: emptyMetadata(), error: null };
+    return { metadata: emptyMetadata(), error: `Metadata unavailable: ${safeError(error)}` };
+  }
+}
+
+async function writeMetadata(metadata) {
+  await mkdir(dirname(METADATA_PATH), { recursive: true });
+  const tmp = `${METADATA_PATH}.${process.pid}.tmp`;
+  await writeFile(tmp, `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+  await rename(tmp, METADATA_PATH);
+}
+
+function metadataForSession(metadata, session) {
+  const item = metadata.sessions[sessionKey(session)] || {};
+  return { bookmarkKey: sessionKey(session), bookmarked: Boolean(item.bookmarked), labels: normalizeLabels(item.labels) };
+}
+
+function attachMetadata(session, metadata) {
+  return { ...session, metadata: metadataForSession(metadata, session) };
+}
+
+async function updateSessionMetadata(path, patch) {
+  const key = sessionKey(path);
+  const { metadata, error } = await readMetadata();
+  if (error) throw new Error(error);
+  const current = metadata.sessions[key] || { bookmarked: false, labels: [] };
+  const next = {
+    bookmarked: patch.bookmarked === undefined ? Boolean(current.bookmarked) : Boolean(patch.bookmarked),
+    labels: patch.labels === undefined ? normalizeLabels(current.labels) : normalizeLabels(patch.labels),
+  };
+  if (!next.bookmarked && next.labels.length === 0) delete metadata.sessions[key];
+  else metadata.sessions[key] = next;
+  await writeMetadata(metadata);
+  return { key, ...next };
+}
+
 function isOpenCodeRef(ref) {
   return typeof ref === 'string' && ref.startsWith('opencode:');
 }
@@ -568,6 +633,7 @@ async function loadOpenCodeSession(ref) {
 }
 
 async function listSessions() {
+  const { metadata, error: metadataError } = await readMetadata();
   const results = await Promise.allSettled([
     sourceEnabled('pi') ? listPiSessions() : [],
     sourceEnabled('opencode') ? listOpenCodeSessions() : [],
@@ -580,7 +646,7 @@ async function listSessions() {
     else sourceErrors.push(sourceError(source, result.reason));
   }
   sessions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-  return { sessions, sourceErrors };
+  return { sessions: sessions.map((session) => attachMetadata(session, metadata)), sourceErrors, metadataError, metadataPath: METADATA_PATH };
 }
 
 function isAllowedSessionPath(candidate) {
@@ -607,8 +673,8 @@ createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (url.pathname === '/api/sessions') {
-      const { sessions, sourceErrors } = await listSessions();
-      sendJson(res, 200, { workspaceRoot: WORKSPACE_ROOT, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, sourceErrors, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
+      const { sessions, sourceErrors, metadataError, metadataPath } = await listSessions();
+      sendJson(res, 200, { workspaceRoot: WORKSPACE_ROOT, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
       return;
     }
     if (url.pathname === '/api/session') {
@@ -622,7 +688,27 @@ createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Session is outside the current workspace root' });
         return;
       }
-      sendJson(res, 200, session);
+      const { metadata, error: metadataError } = await readMetadata();
+      sendJson(res, 200, { ...attachMetadata(session, metadata), metadataError });
+      return;
+    }
+    if (url.pathname === '/api/metadata' && req.method === 'PUT') {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; if (body.length > 64 * 1024) req.destroy(); });
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          const path = payload.path || payload.ref;
+          if (!path || !isAllowedSessionPath(path)) {
+            sendJson(res, 400, { error: 'Invalid session path' });
+            return;
+          }
+          const updated = await updateSessionMetadata(path, payload);
+          sendJson(res, 200, { metadataPath: METADATA_PATH, metadata: updated });
+        } catch (error) {
+          sendJson(res, 500, { error: safeError(error), metadataPath: METADATA_PATH });
+        }
+      });
       return;
     }
     await serveStatic(req, res);
@@ -634,4 +720,5 @@ createServer(async (req, res) => {
   console.log(`Workspace root: ${WORKSPACE_ROOT}`);
   console.log(`Pi session root: ${PI_SESSION_ROOT}`);
   console.log(`OpenCode DB: ${OPENCODE_DB}`);
+  console.log(`Metadata: ${METADATA_PATH}`);
 });

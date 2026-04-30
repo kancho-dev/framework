@@ -24,16 +24,28 @@
         </div>
       </header>
       <div class="filters">
-        <input id="filter" type="search" placeholder="Filter by prompt, cwd, name, id…" autocomplete="off">
-        <select id="source-filter" aria-label="Filter by source">
-          <option value="all">All sources</option>
-        </select>
-        <select id="sort-mode" aria-label="Sort sessions">
-          <option value="updated-desc">Updated newest</option>
-          <option value="updated-asc">Updated oldest</option>
-          <option value="created-desc">Created newest</option>
-          <option value="created-asc">Created oldest</option>
-        </select>
+        <input id="filter" type="search" placeholder="Filter by prompt, cwd, name, id, label…" autocomplete="off">
+        <div class="quick-filters">
+          <label class="bookmark-filter"><input id="bookmark-filter" type="checkbox"><span>★ Bookmarked</span></label>
+          <select id="label-filter" aria-label="Filter by label">
+            <option value="all">All labels</option>
+          </select>
+          <button id="clear-filters" type="button">Clear</button>
+        </div>
+        <details class="filter-options">
+          <summary>More filters & sort ▾</summary>
+          <div>
+            <select id="source-filter" aria-label="Filter by source">
+              <option value="all">All sources</option>
+            </select>
+            <select id="sort-mode" aria-label="Sort sessions">
+              <option value="updated-desc">Updated newest</option>
+              <option value="updated-asc">Updated oldest</option>
+              <option value="created-desc">Created newest</option>
+              <option value="created-asc">Created oldest</option>
+            </select>
+          </div>
+        </details>
       </div>
       <div id="status" class="status">Loading sessions…</div>
       <ol id="sessions" class="sessions"></ol>
@@ -47,11 +59,18 @@
       </section>
       <section id="reader" class="reader hidden">
         <header class="reader-header">
-          <button id="copy-restore" class="copy-restore-top" type="button" title="Copy command to restore this session in Pi">Copy restore cmd</button>
+          <div class="reader-top-actions">
+            <button id="bookmark-selected" type="button">☆ Bookmark</button>
+            <button id="copy-restore" type="button" title="Copy command to restore this session in Pi">Copy restore cmd</button>
+          </div>
           <p class="eyebrow" id="reader-source">Pi session</p>
           <h2 id="reader-title"></h2>
           <div id="reader-relations" class="relations hidden"></div>
           <div id="reader-meta" class="meta"></div>
+          <div class="label-tools">
+            <div id="label-editor" class="label-editor"></div>
+            <div class="label-add"><input id="label-input" type="text" placeholder="Add label…"><button id="add-label" type="button">Add</button></div>
+          </div>
           <div class="reader-actions">
             <label><input id="show-tools" type="checkbox"> Show tool calls</label>
             <div class="jump-actions">
