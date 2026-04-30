@@ -68,6 +68,12 @@ Default OpenCode database:
 ~/.local/share/opencode/opencode.db
 ```
 
+macOS default OpenCode database:
+
+```text
+~/Library/Application Support/opencode/opencode.db
+```
+
 ## Supported Sources
 
 ### Pi

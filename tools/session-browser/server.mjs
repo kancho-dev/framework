@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,12 +10,24 @@ import { promisify } from 'node:util';
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = parsePort(process.env.PORT || '8787');
 const PI_SESSION_ROOT = resolve(process.env.SESSION_ROOT || process.env.PI_SESSION_ROOT || join(process.env.PI_CODING_AGENT_DIR || join(homedir(), '.pi', 'agent'), 'sessions'));
-const OPENCODE_DATA_DIR = resolve(process.env.OPENCODE_DATA_DIR || join(homedir(), '.local', 'share', 'opencode'));
+function defaultOpenCodeDataDir() {
+  const macDir = join(homedir(), 'Library', 'Application Support', 'opencode');
+  const linuxDir = join(homedir(), '.local', 'share', 'opencode');
+  if (process.platform === 'darwin') {
+    if (existsSync(macDir)) return macDir;
+    if (existsSync(linuxDir)) return linuxDir;
+    return macDir;
+  }
+  return linuxDir;
+}
+
+const OPENCODE_DATA_DIR = resolve(process.env.OPENCODE_DATA_DIR || defaultOpenCodeDataDir());
 const OPENCODE_DB = resolve(process.env.OPENCODE_DB || join(OPENCODE_DATA_DIR, 'opencode.db'));
 const ENABLED_SOURCES = new Set(String(process.env.SESSION_SOURCES || 'pi,opencode').split(',').map((source) => source.trim().toLowerCase()).filter(Boolean));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
 const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
 const execFileAsync = promisify(execFile);
+const SOURCE_TIMEOUT_MS = Number(process.env.SESSION_SOURCE_TIMEOUT_MS || '8000');
 
 const mime = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -64,6 +76,18 @@ function sourceEnabled(source) {
 
 function sourceError(source, error) {
   return { source, error: safeSourceError(error) };
+}
+
+async function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function findWorkspaceRoot(start) {
@@ -523,12 +547,39 @@ function summarizeOpenCodeSession(session, messages, parts) {
 
 async function listOpenCodeSessions() {
   if (!await exists(OPENCODE_DB)) return [];
-  const { sessions, messages, parts } = await loadOpenCodeRows();
-  return sessions.map((session) => summarizeOpenCodeSession(
-    session,
-    messages.filter((message) => message.sessionId === session.id),
-    parts.filter((part) => part.sessionId === session.id),
-  )).filter((session) => !session.archivedAt && isUnderRoot(session.cwd, WORKSPACE_ROOT));
+  const sessions = await sqliteJson(OPENCODE_DB, `
+    select s.id, s.directory, s.title, s.parent_id as parentId, s.time_created as createdAt, s.time_updated as updatedAt, s.time_archived as archivedAt, p.worktree
+    from session s
+    left join project p on p.id = s.project_id
+    where s.time_archived is null
+    order by s.time_updated desc
+    limit 500
+  `);
+  return sessions
+    .map((session) => ({
+      id: session.id,
+      source: 'opencode',
+      path: opencodeRef(session.id),
+      parentId: session.parentId || null,
+      cwd: session.directory || session.worktree || '',
+      name: session.title,
+      firstPrompt: '',
+      createdAt: timestampFromMs(session.createdAt),
+      updatedAt: timestampFromMs(session.updatedAt),
+      leafId: null,
+      messageCount: 0,
+      userMessageCount: 0,
+      assistantMessageCount: 0,
+      assistantRawMessageCount: 0,
+      toolMessageCount: 0,
+      toolResultCount: 0,
+      toolCallCount: 0,
+      toolNames: [],
+      tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      tokenPressure: { total: 0 },
+      archivedAt: timestampFromMs(session.archivedAt),
+    }))
+    .filter((session) => !session.archivedAt && isUnderRoot(session.cwd, WORKSPACE_ROOT));
 }
 
 async function loadOpenCodeSession(ref) {
@@ -569,8 +620,8 @@ async function loadOpenCodeSession(ref) {
 
 async function listSessions() {
   const results = await Promise.allSettled([
-    sourceEnabled('pi') ? listPiSessions() : [],
-    sourceEnabled('opencode') ? listOpenCodeSessions() : [],
+    sourceEnabled('pi') ? withTimeout(listPiSessions(), SOURCE_TIMEOUT_MS, 'Pi source') : [],
+    sourceEnabled('opencode') ? withTimeout(listOpenCodeSessions(), SOURCE_TIMEOUT_MS, 'OpenCode source') : [],
   ]);
   const sourceErrors = [];
   const sessions = [];
