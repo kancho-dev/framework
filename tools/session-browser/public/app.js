@@ -1,4 +1,4 @@
-const state = { sessions: [], selectedPath: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', sortMode: 'updated-desc', sourceErrors: [] };
+const state = { sessions: [], selectedPath: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, labelFilter: 'all', sourceErrors: [], metadataError: null };
 
 const els = {
   refresh: document.querySelector('#refresh'),
@@ -6,6 +6,9 @@ const els = {
   filter: document.querySelector('#filter'),
   sourceFilter: document.querySelector('#source-filter'),
   sortMode: document.querySelector('#sort-mode'),
+  bookmarkFilter: document.querySelector('#bookmark-filter'),
+  labelFilter: document.querySelector('#label-filter'),
+  clearFilters: document.querySelector('#clear-filters'),
   status: document.querySelector('#status'),
   sessions: document.querySelector('#sessions'),
   empty: document.querySelector('#empty'),
@@ -16,6 +19,10 @@ const els = {
   readerMeta: document.querySelector('#reader-meta'),
   showTools: document.querySelector('#show-tools'),
   copyRestore: document.querySelector('#copy-restore'),
+  bookmarkSelected: document.querySelector('#bookmark-selected'),
+  labelEditor: document.querySelector('#label-editor'),
+  labelInput: document.querySelector('#label-input'),
+  addLabel: document.querySelector('#add-label'),
   jumpTop: document.querySelector('#jump-top'),
   jumpBottom: document.querySelector('#jump-bottom'),
   topics: document.querySelector('#topics'),
@@ -48,10 +55,20 @@ function shortPath(value, max = 72) {
   return `…${text.slice(-(max - 1))}`;
 }
 
+function sessionLabels(session) {
+  return session?.metadata?.labels || [];
+}
+
+function isBookmarked(session) {
+  return Boolean(session?.metadata?.bookmarked);
+}
+
 function matches(session, query) {
   if (state.sourceFilter !== 'all' && session.source !== state.sourceFilter) return false;
+  if (state.bookmarkFilter && !isBookmarked(session)) return false;
+  if (state.labelFilter !== 'all' && !sessionLabels(session).includes(state.labelFilter)) return false;
   if (!query.trim()) return true;
-  const haystack = [session.id, session.name, session.cwd, session.firstPrompt, session.path].join(' ').toLowerCase();
+  const haystack = [session.id, session.name, session.cwd, session.firstPrompt, session.path, sessionLabels(session).join(' ')].join(' ').toLowerCase();
   return query.toLowerCase().split(/\s+/).every((term) => haystack.includes(term));
 }
 
@@ -150,17 +167,26 @@ function restoreCommand(detail) {
   return '';
 }
 
+function renderLabelPills(labels) {
+  if (!labels?.length) return '';
+  return `<div class="label-row">${labels.map((label) => `<span class="label-pill" data-label="${escapeHtml(label)}">${escapeHtml(label)}</span>`).join('')}</div>`;
+}
+
 function renderSessions() {
   const query = els.filter.value;
   const sessions = sortSessions(state.sessions.filter((session) => matches(session, query)));
-  const errorText = state.sourceErrors.length ? ` · ${state.sourceErrors.map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`).join(', ')}` : '';
+  const errorText = [
+    ...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`),
+    state.metadataError || '',
+  ].filter(Boolean).length ? ` · ${[...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`), state.metadataError || ''].filter(Boolean).join(', ')}` : '';
   els.status.textContent = `${sessions.length} of ${state.sessions.length} sessions · workspace ${state.workspaceRoot || ''}${errorText}`;
   els.sessions.innerHTML = sessions.map((session) => `
     <li>
-      <button class="session-card ${session.path === state.selectedPath ? 'active' : ''}" data-path="${escapeHtml(session.path)}">
-        <div class="card-top"><span class="card-badges"><span class="badge">${escapeHtml(sourceLabel(session.source))}</span> ${tokenPressurePill(session)}</span><span class="card-updated">Updated ${escapeHtml(formatDate(session.updatedAt))}</span></div>
+      <button class="session-card ${session.path === state.selectedPath ? 'active' : ''} ${isBookmarked(session) ? 'bookmarked' : ''}" data-path="${escapeHtml(session.path)}">
+        <div class="card-top"><span class="card-badges">${isBookmarked(session) ? '<span class="bookmark-mark on">★</span>' : ''}<span class="badge">${escapeHtml(sourceLabel(session.source))}</span> ${tokenPressurePill(session)}</span><span class="card-updated">Updated ${escapeHtml(formatDate(session.updatedAt))}</span></div>
         <div class="prompt">${escapeHtml(session.name || session.firstPrompt || '(no user prompt found)')}</div>
         ${session.parentId ? '<div class="relation-line"><span class="relation-badge">child session</span></div>' : ''}
+        ${renderLabelPills(sessionLabels(session))}
         <div class="cwd">${escapeHtml(shortPath(session.cwd || '(unknown cwd)'))}</div>
         <div class="time-pair">Created ${escapeHtml(formatDate(session.createdAt))}</div>
         <div class="counts">${session.userMessageCount} user · ${session.assistantMessageCount} assistant · ${session.toolMessageCount || session.toolCallCount} tool</div>
@@ -180,6 +206,14 @@ function renderRelations(detail) {
   for (const child of detail.childSessions || []) links.push(relationButton(child, 'Child:'));
   els.readerRelations.classList.toggle('hidden', links.length === 0);
   els.readerRelations.innerHTML = links.join('');
+}
+
+function renderLabelFilter() {
+  const labels = Array.from(new Set(state.sessions.flatMap((session) => sessionLabels(session)))).sort((a, b) => a.localeCompare(b));
+  const current = state.labelFilter;
+  els.labelFilter.innerHTML = ['all', ...labels].map((label) => `<option value="${escapeHtml(label)}">${escapeHtml(label === 'all' ? 'All labels' : label)}</option>`).join('');
+  els.labelFilter.value = labels.includes(current) ? current : 'all';
+  state.labelFilter = els.labelFilter.value;
 }
 
 function renderSourceFilter() {
@@ -339,7 +373,7 @@ function modeBadge(mode) {
 
 function renderEntry(entry, allEntries) {
   const role = roleLabel(entry);
-  const timestamp = formatTime(entry.timestamp);
+  const timestamp = formatDate(entry.timestamp);
   if (entry.type === 'message' && role === 'toolResult') return '';
 
   if (entry.type === 'message' && role === 'assistant') {
@@ -358,7 +392,8 @@ function renderEntry(entry, allEntries) {
   }
 
   if (entry.type === 'message' && role === 'user') {
-    return `<section class="message user" id="entry-${escapeHtml(entry.id)}"><span class="timestamp">${escapeHtml(timestamp)}</span><div class="message-role">user</div><div class="content">${escapeHtml(textFromContent(entry.message.content))}</div></section>`;
+    const text = textFromContent(entry.message.content);
+    return `<section class="message user" id="entry-${escapeHtml(entry.id)}"><button type="button" class="copy-user-prompt" title="Copy prompt" aria-label="Copy prompt">⧉</button><div class="message-head"><div class="message-role">user</div><div class="message-actions"><span class="timestamp">${escapeHtml(timestamp)}</span></div></div><div class="content">${escapeHtml(text)}</div></section>`;
   }
 
   if (entry.type === 'compaction') {
@@ -383,6 +418,8 @@ function renderSelectedDetail() {
   const command = restoreCommand(detail);
   els.copyRestore.classList.toggle('hidden', !command);
   els.copyRestore.title = command ? `Copy command: ${command}` : '';
+  els.bookmarkSelected.textContent = isBookmarked(detail) ? '★ Bookmarked' : '☆ Bookmark';
+  els.bookmarkSelected.classList.toggle('active', isBookmarked(detail));
   els.readerTitle.innerHTML = `${escapeHtml(detail.name || detail.firstPrompt || detail.id)} ${tokenPressurePill(detail)}`;
   renderRelations(detail);
   const metaItems = [
@@ -396,11 +433,35 @@ function renderSelectedDetail() {
     `Tokens: ${formatTokens(detail.tokens)}`,
   ];
   els.readerMeta.innerHTML = metaItems.map((item) => `<span>${escapeHtml(item)}</span>`).join('');
+  renderLabelEditor(detail);
   els.topics.innerHTML = detail.topicAnchors.map((anchor) => `
     <li><a href="#entry-${escapeHtml(anchor.id)}">${anchor.depth === 'first-prompt' ? '★ ' : ''}${escapeHtml(anchor.title)}</a></li>
   `).join('');
   els.messages.classList.toggle('hide-tools', !els.showTools.checked);
   els.messages.innerHTML = detail.activeEntries.map((entry) => renderEntry(entry, detail.entries)).join('');
+}
+
+function renderLabelEditor(detail) {
+  els.labelEditor.innerHTML = sessionLabels(detail).map((label) => `
+    <span class="editable-label">${escapeHtml(label)} <button type="button" class="remove-label" data-label="${escapeHtml(label)}">×</button></span>
+  `).join('') || '<span class="no-labels">No labels yet</span>';
+}
+
+function syncMetadata(path, metadata) {
+  for (const session of state.sessions) {
+    if (session.path === path) session.metadata = metadata;
+  }
+  if (state.selectedDetail?.path === path) state.selectedDetail.metadata = metadata;
+  renderLabelFilter();
+  renderSessions();
+  if (state.selectedDetail?.path === path) renderSelectedDetail();
+}
+
+async function saveMetadata(path, patch) {
+  const res = await fetch('/api/metadata', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, ...patch }) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to save metadata');
+  syncMetadata(path, data.metadata);
 }
 
 function updateSelectedSummary(detail) {
@@ -453,7 +514,10 @@ async function loadSessions({ reloadSelected = false } = {}) {
   state.sessionRoot = data.sessionRoot;
   state.sourceErrors = data.sourceErrors || [];
   state.workspaceRoot = data.workspaceRoot;
+  state.metadataError = data.metadataError || null;
+  state.metadataPath = data.metadataPath;
   renderSourceFilter();
+  renderLabelFilter();
   renderSessions();
   if (reloadSelected && state.selectedPath) await reloadSelectedSession();
 }
@@ -476,6 +540,14 @@ els.refresh.addEventListener('click', (event) => {
 els.autoRefresh.addEventListener('change', () => setAutoRefresh(els.autoRefresh.checked));
 els.filter.addEventListener('focus', () => setBrowseMode(true));
 els.filter.addEventListener('input', renderSessions);
+els.bookmarkFilter.addEventListener('change', () => {
+  state.bookmarkFilter = els.bookmarkFilter.checked;
+  renderSessions();
+});
+els.labelFilter.addEventListener('change', () => {
+  state.labelFilter = els.labelFilter.value;
+  renderSessions();
+});
 els.sourceFilter.addEventListener('change', () => {
   state.sourceFilter = els.sourceFilter.value;
   renderSessions();
@@ -484,9 +556,43 @@ els.sortMode.addEventListener('change', () => {
   state.sortMode = els.sortMode.value;
   renderSessions();
 });
+els.clearFilters.addEventListener('click', () => {
+  els.filter.value = '';
+  els.bookmarkFilter.checked = false;
+  state.bookmarkFilter = false;
+  state.sourceFilter = 'all';
+  state.labelFilter = 'all';
+  state.sortMode = 'updated-desc';
+  els.sourceFilter.value = 'all';
+  els.labelFilter.value = 'all';
+  els.sortMode.value = 'updated-desc';
+  renderSessions();
+});
 els.showTools.addEventListener('change', () => {
   renderSelectedDetail();
   requestAnimationFrame(updateReaderHeaderHeight);
+});
+els.bookmarkSelected.addEventListener('click', async () => {
+  if (!state.selectedDetail) return;
+  await saveMetadata(state.selectedDetail.path, { bookmarked: !isBookmarked(state.selectedDetail) });
+});
+els.addLabel.addEventListener('click', async () => {
+  if (!state.selectedDetail) return;
+  const label = els.labelInput.value.trim();
+  if (!label) return;
+  await saveMetadata(state.selectedDetail.path, { labels: [...sessionLabels(state.selectedDetail), label] });
+  els.labelInput.value = '';
+});
+els.labelInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    els.addLabel.click();
+  }
+});
+els.labelEditor.addEventListener('click', async (event) => {
+  const button = event.target.closest('.remove-label');
+  if (!button || !state.selectedDetail) return;
+  await saveMetadata(state.selectedDetail.path, { labels: sessionLabels(state.selectedDetail).filter((label) => label !== button.dataset.label) });
 });
 els.copyRestore.addEventListener('click', async () => {
   const command = state.selectedDetail ? restoreCommand(state.selectedDetail) : '';
@@ -502,15 +608,31 @@ els.jumpBottom.addEventListener('click', () => {
   pane.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' });
 });
 els.sessions.addEventListener('click', (event) => {
+  const label = event.target.closest('.label-pill');
+  if (label) {
+    event.stopPropagation();
+    state.labelFilter = label.dataset.label;
+    els.labelFilter.value = state.labelFilter;
+    renderSessions();
+    return;
+  }
   const card = event.target.closest('.session-card');
   if (card) selectSession(card.dataset.path).catch((error) => { els.readerTitle.textContent = error.message; });
 });
 els.messages.addEventListener('click', async (event) => {
-  const button = event.target.closest('.copy-code');
-  if (!button) return;
-  const code = button.closest('.code-block')?.querySelector('code')?.textContent || '';
-  await copyText(code);
-  flashButton(button);
+  const copyCode = event.target.closest('.copy-code');
+  if (copyCode) {
+    const code = copyCode.closest('.code-block')?.querySelector('code')?.textContent || '';
+    await copyText(code);
+    flashButton(copyCode);
+    return;
+  }
+  const copyPrompt = event.target.closest('.copy-user-prompt');
+  if (copyPrompt) {
+    const prompt = copyPrompt.closest('.message.user')?.querySelector('.content')?.textContent || '';
+    await copyText(prompt);
+    flashButton(copyPrompt);
+  }
 });
 
 els.readerRelations.addEventListener('click', (event) => {
