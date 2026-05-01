@@ -17,6 +17,8 @@ const PUBLIC_DIR = join(TOOL_DIR, 'public');
 const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
 const METADATA_PATH = resolve(process.env.SESSION_BROWSER_METADATA || join(TOOL_DIR, '.cache', 'metadata.json'));
 const execFileAsync = promisify(execFile);
+const SOURCE_TIMEOUT_MS = Number(process.env.SESSION_SOURCE_TIMEOUT_MS || '8000');
+const REQUEST_TIMEOUT_MS = Number(process.env.SESSION_REQUEST_TIMEOUT_MS || '10000');
 
 const mime = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -65,6 +67,18 @@ function sourceEnabled(source) {
 
 function sourceError(source, error) {
   return { source, error: safeSourceError(error) };
+}
+
+async function withTimeout(promise, label, timeoutMs) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function findWorkspaceRoot(start) {
@@ -588,12 +602,36 @@ function summarizeOpenCodeSession(session, messages, parts) {
 
 async function listOpenCodeSessions() {
   if (!await exists(OPENCODE_DB)) return [];
-  const { sessions, messages, parts } = await loadOpenCodeRows();
-  return sessions.map((session) => summarizeOpenCodeSession(
-    session,
-    messages.filter((message) => message.sessionId === session.id),
-    parts.filter((part) => part.sessionId === session.id),
-  )).filter((session) => !session.archivedAt && isUnderRoot(session.cwd, WORKSPACE_ROOT));
+  const sessions = await sqliteJson(
+    OPENCODE_DB,
+    `select id, directory, title, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
+     from session
+     where time_archived is null
+     order by time_updated desc
+     limit 200`
+  );
+  return sessions.map((session) => ({
+    source: 'opencode',
+    path: `opencode:${session.id}`,
+    id: session.id,
+    cwd: session.directory || '',
+    name: session.title || '',
+    firstPrompt: '',
+    createdAt: timestampFromMs(session.createdAt),
+    updatedAt: timestampFromMs(session.updatedAt),
+    leafId: null,
+    messageCount: 0,
+    userMessageCount: 0,
+    assistantMessageCount: 0,
+    assistantRawMessageCount: 0,
+    toolMessageCount: 0,
+    toolResultCount: 0,
+    toolCallCount: 0,
+    toolNames: [],
+    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    tokenPressure: { total: 0 },
+    archivedAt: timestampFromMs(session.archivedAt),
+  })).filter((summary) => isUnderRoot(summary.cwd, WORKSPACE_ROOT));
 }
 
 async function loadOpenCodeSession(ref) {
@@ -635,8 +673,12 @@ async function loadOpenCodeSession(ref) {
 async function listSessions() {
   const { metadata, error: metadataError } = await readMetadata();
   const results = await Promise.allSettled([
-    sourceEnabled('pi') ? listPiSessions() : [],
-    sourceEnabled('opencode') ? listOpenCodeSessions() : [],
+    sourceEnabled('pi')
+      ? withTimeout(listPiSessions(), 'pi source', SOURCE_TIMEOUT_MS)
+      : [],
+    sourceEnabled('opencode')
+      ? withTimeout(listOpenCodeSessions(), 'opencode source', SOURCE_TIMEOUT_MS)
+      : [],
   ]);
   const sourceErrors = [];
   const sessions = [];
@@ -673,7 +715,8 @@ createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (url.pathname === '/api/sessions') {
-      const { sessions, sourceErrors, metadataError, metadataPath } = await listSessions();
+      const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(), '/api/sessions', REQUEST_TIMEOUT_MS)
+        .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: METADATA_PATH }));
       sendJson(res, 200, { workspaceRoot: WORKSPACE_ROOT, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
       return;
     }
