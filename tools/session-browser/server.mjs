@@ -196,14 +196,33 @@ function hasAssistantText(message) {
   return message.content.some((block) => block?.type === 'text' && typeof block.text === 'string' && block.text.trim());
 }
 
+function emptyUsage() {
+  return {
+    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    tokenPressure: { total: 0 },
+  };
+}
+
+function emptyListStats() {
+  return {
+    messageCount: 0,
+    userMessageCount: 0,
+    assistantMessageCount: 0,
+    assistantRawMessageCount: 0,
+    toolMessageCount: 0,
+    toolResultCount: 0,
+    toolCallCount: 0,
+    toolNames: [],
+  };
+}
+
 function collectStats(entries) {
   const stats = {
     assistantAnswerCount: 0,
     toolMessageCount: 0,
     toolCallCount: 0,
     toolNames: [],
-    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    tokenPressure: { total: 0 },
+    ...emptyUsage(),
   };
   const toolNames = new Set();
   for (const entry of entries) {
@@ -484,10 +503,7 @@ async function loadOpenCodeDiffs(sessionId) {
 }
 
 function openCodeUsage(messages, parts) {
-  const stats = {
-    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    tokenPressure: { total: 0 },
-  };
+  const stats = emptyUsage();
   for (const item of [...messages, ...parts]) {
     const data = item.data || {};
     const tokens = data.tokens || {};
@@ -506,60 +522,14 @@ function openCodeUsage(messages, parts) {
   return stats;
 }
 
-function openCodeUsageBySession(messages, parts) {
-  const usage = new Map();
-  const ensure = (sessionId) => {
-    if (!usage.has(sessionId)) {
-      usage.set(sessionId, {
-        tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-        tokenPressure: { total: 0 },
-      });
-    }
-    return usage.get(sessionId);
-  };
-
-  for (const item of [...messages, ...parts]) {
-    const sessionId = item.sessionId;
-    if (!sessionId) continue;
-    const stats = ensure(sessionId);
-    const data = item.data || {};
-    const tokens = data.tokens || {};
-    const input = tokens.input || tokens.prompt || 0;
-    const output = tokens.output || tokens.completion || 0;
-    const cacheRead = tokens.cacheRead || tokens.cache_read || tokens.cache?.read || 0;
-    const cacheWrite = tokens.cacheWrite || tokens.cache_write || tokens.cache?.write || 0;
-    const total = tokens.total || input + output + cacheRead + cacheWrite;
-    stats.tokens.input += input;
-    stats.tokens.output += output;
-    stats.tokens.cacheRead += cacheRead;
-    stats.tokens.cacheWrite += cacheWrite;
-    stats.tokens.total += total;
-    stats.tokenPressure.total = Math.max(stats.tokenPressure.total, input + output + cacheWrite);
-  }
-
-  return usage;
-}
-
 async function loadOpenCodeRows(sessionId = null) {
-  const sessionWhere = sessionId ? `where s.id = ${sqlString(sessionId)}` : '';
-  let sessions;
-  try {
-    sessions = await sqliteJson(OPENCODE_DB, `
-      select s.id, s.directory, s.title, s.parent_id as parentId, s.time_created as createdAt, s.time_updated as updatedAt, s.time_archived as archivedAt, p.worktree
-      from session s
-      left join project p on p.id = s.project_id
-      ${sessionWhere}
-      order by s.time_updated desc
-    `);
-  } catch (error) {
-    if (!safeError(error).includes('no such table: project')) throw error;
-    sessions = await sqliteJson(OPENCODE_DB, `
-      select s.id, s.directory, s.title, s.parent_id as parentId, s.time_created as createdAt, s.time_updated as updatedAt, s.time_archived as archivedAt, null as worktree
-      from session s
-      ${sessionWhere}
-      order by s.time_updated desc
-    `);
-  }
+  const sessionWhere = sessionId ? `where id = ${sqlString(sessionId)}` : '';
+  const sessions = await sqliteJson(OPENCODE_DB, `
+    select id, directory, title, parent_id as parentId, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
+    from session
+    ${sessionWhere}
+    order by time_updated desc
+  `);
   if (!sessions.length) return { sessions: [], messages: [], parts: [] };
   const ids = sessions.map((session) => session.id);
   const placeholders = ids.map(sqlString).join(',');
@@ -626,7 +596,7 @@ function summarizeOpenCodeSession(session, messages, parts) {
     source: 'opencode',
     path: opencodeRef(session.id),
     parentId: session.parentId || null,
-    cwd: session.directory || session.worktree || '',
+    cwd: session.directory || '',
     name: session.title,
     firstPrompt: truncate(extractOpenCodeText(messageParts.get(userMessages[0]?.id) || [])),
     createdAt: timestampFromMs(session.createdAt),
@@ -699,7 +669,7 @@ async function listOpenCodeSessions() {
     const sessionId = row.sessionId;
     if (!sessionId) continue;
     if (!usageBySession.has(sessionId)) {
-      usageBySession.set(sessionId, { tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, tokenPressure: { total: 0 } });
+      usageBySession.set(sessionId, emptyUsage());
     }
     const usage = usageBySession.get(sessionId);
     const input = Number(row.input || 0);
@@ -726,16 +696,8 @@ async function listOpenCodeSessions() {
     createdAt: timestampFromMs(session.createdAt),
     updatedAt: timestampFromMs(session.updatedAt),
     leafId: null,
-    messageCount: 0,
-    userMessageCount: 0,
-    assistantMessageCount: 0,
-    assistantRawMessageCount: 0,
-    toolMessageCount: 0,
-    toolResultCount: 0,
-    toolCallCount: 0,
-    toolNames: [],
-    tokens: usageBySession.get(session.id)?.tokens || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    tokenPressure: usageBySession.get(session.id)?.tokenPressure || { total: 0 },
+    ...emptyListStats(),
+    ...(usageBySession.get(session.id) || emptyUsage()),
     archivedAt: timestampFromMs(session.archivedAt),
   })).filter((summary) => isUnderRoot(summary.cwd, WORKSPACE_ROOT));
 }

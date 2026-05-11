@@ -189,7 +189,6 @@ function renderSessions() {
         ${renderLabelPills(sessionLabels(session))}
         <div class="cwd">${escapeHtml(shortPath(session.cwd || '(unknown cwd)'))}</div>
         <div class="time-pair">Created ${escapeHtml(formatDate(session.createdAt))}</div>
-        <div class="counts">${session.userMessageCount} user · ${session.assistantMessageCount} assistant · ${session.toolMessageCount || session.toolCallCount} tool</div>
         <div class="token-bar ${tokenPressureLevel(session)}"><span style="width: ${tokenPressurePercent(session)}%"></span></div>
       </button>
     </li>
