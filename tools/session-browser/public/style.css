@@ -100,7 +100,7 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 .token-bar.high span { background: #ff9f43; }
 .token-bar.critical span { background: var(--error); }
 .prompt { color: var(--text); margin-bottom: 8px; }
-.cwd, .counts, .time-pair, .meta { color: var(--muted); font-size: 11px; }
+.cwd, .time-pair, .meta { color: var(--muted); font-size: 11px; }
 .time-pair { margin-top: 2px; }
 .reader-pane { min-width: 0; height: 100vh; overflow: auto; }
 .empty { max-width: 680px; padding: 14vh 32px; color: var(--muted); }

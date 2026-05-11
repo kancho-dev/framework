@@ -17,6 +17,8 @@ const PUBLIC_DIR = join(TOOL_DIR, 'public');
 const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
 const METADATA_PATH = resolve(process.env.SESSION_BROWSER_METADATA || join(TOOL_DIR, '.cache', 'metadata.json'));
 const execFileAsync = promisify(execFile);
+const SOURCE_TIMEOUT_MS = Number(process.env.SESSION_SOURCE_TIMEOUT_MS || '8000');
+const REQUEST_TIMEOUT_MS = Number(process.env.SESSION_REQUEST_TIMEOUT_MS || '10000');
 
 const mime = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -65,6 +67,18 @@ function sourceEnabled(source) {
 
 function sourceError(source, error) {
   return { source, error: safeSourceError(error) };
+}
+
+async function withTimeout(promise, label, timeoutMs) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function findWorkspaceRoot(start) {
@@ -182,14 +196,33 @@ function hasAssistantText(message) {
   return message.content.some((block) => block?.type === 'text' && typeof block.text === 'string' && block.text.trim());
 }
 
+function emptyUsage() {
+  return {
+    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    tokenPressure: { total: 0 },
+  };
+}
+
+function emptyListStats() {
+  return {
+    messageCount: 0,
+    userMessageCount: 0,
+    assistantMessageCount: 0,
+    assistantRawMessageCount: 0,
+    toolMessageCount: 0,
+    toolResultCount: 0,
+    toolCallCount: 0,
+    toolNames: [],
+  };
+}
+
 function collectStats(entries) {
   const stats = {
     assistantAnswerCount: 0,
     toolMessageCount: 0,
     toolCallCount: 0,
     toolNames: [],
-    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    tokenPressure: { total: 0 },
+    ...emptyUsage(),
   };
   const toolNames = new Set();
   for (const entry of entries) {
@@ -375,6 +408,7 @@ function timestampFromMs(value) {
 
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
+  if (typeof value === 'object') return value;
   try {
     return JSON.parse(value);
   } catch {
@@ -469,17 +503,14 @@ async function loadOpenCodeDiffs(sessionId) {
 }
 
 function openCodeUsage(messages, parts) {
-  const stats = {
-    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    tokenPressure: { total: 0 },
-  };
+  const stats = emptyUsage();
   for (const item of [...messages, ...parts]) {
     const data = item.data || {};
     const tokens = data.tokens || {};
     const input = tokens.input || tokens.prompt || 0;
     const output = tokens.output || tokens.completion || 0;
-    const cacheRead = tokens.cacheRead || tokens.cache_read || 0;
-    const cacheWrite = tokens.cacheWrite || tokens.cache_write || 0;
+    const cacheRead = tokens.cacheRead || tokens.cache_read || tokens.cache?.read || 0;
+    const cacheWrite = tokens.cacheWrite || tokens.cache_write || tokens.cache?.write || 0;
     const total = tokens.total || input + output + cacheRead + cacheWrite;
     stats.tokens.input += input;
     stats.tokens.output += output;
@@ -492,13 +523,12 @@ function openCodeUsage(messages, parts) {
 }
 
 async function loadOpenCodeRows(sessionId = null) {
-  const sessionWhere = sessionId ? `where s.id = ${sqlString(sessionId)}` : '';
+  const sessionWhere = sessionId ? `where id = ${sqlString(sessionId)}` : '';
   const sessions = await sqliteJson(OPENCODE_DB, `
-    select s.id, s.directory, s.title, s.parent_id as parentId, s.time_created as createdAt, s.time_updated as updatedAt, s.time_archived as archivedAt, p.worktree
-    from session s
-    left join project p on p.id = s.project_id
+    select id, directory, title, parent_id as parentId, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
+    from session
     ${sessionWhere}
-    order by s.time_updated desc
+    order by time_updated desc
   `);
   if (!sessions.length) return { sessions: [], messages: [], parts: [] };
   const ids = sessions.map((session) => session.id);
@@ -566,7 +596,7 @@ function summarizeOpenCodeSession(session, messages, parts) {
     source: 'opencode',
     path: opencodeRef(session.id),
     parentId: session.parentId || null,
-    cwd: session.directory || session.worktree || '',
+    cwd: session.directory || '',
     name: session.title,
     firstPrompt: truncate(extractOpenCodeText(messageParts.get(userMessages[0]?.id) || [])),
     createdAt: timestampFromMs(session.createdAt),
@@ -588,12 +618,88 @@ function summarizeOpenCodeSession(session, messages, parts) {
 
 async function listOpenCodeSessions() {
   if (!await exists(OPENCODE_DB)) return [];
-  const { sessions, messages, parts } = await loadOpenCodeRows();
-  return sessions.map((session) => summarizeOpenCodeSession(
-    session,
-    messages.filter((message) => message.sessionId === session.id),
-    parts.filter((part) => part.sessionId === session.id),
-  )).filter((session) => !session.archivedAt && isUnderRoot(session.cwd, WORKSPACE_ROOT));
+  const sessions = await sqliteJson(
+    OPENCODE_DB,
+    `select id, parent_id as parentId, directory, title, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
+     from session
+     where time_archived is null
+     order by time_updated desc
+     limit 200`
+  );
+  if (!sessions.length) return [];
+  const sessionIds = sessions.map((session) => sqlString(session.id)).join(',');
+  let messageUsageRows = [];
+  let partUsageRows = [];
+  try {
+    messageUsageRows = await sqliteJson(OPENCODE_DB, `
+      select
+        session_id as sessionId,
+        sum(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0)) as input,
+        sum(coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0)) as output,
+        sum(coalesce(json_extract(data, '$.tokens.cacheRead'), json_extract(data, '$.tokens.cache_read'), json_extract(data, '$.tokens.cache.read'), 0)) as cacheRead,
+        sum(coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as cacheWrite,
+        sum(coalesce(json_extract(data, '$.tokens.total'), 0)) as explicitTotal,
+        max(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0) + coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0) + coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as pressure
+      from message
+      where session_id in (${sessionIds})
+      group by session_id
+    `);
+  } catch {
+    messageUsageRows = [];
+  }
+  try {
+    partUsageRows = await sqliteJson(OPENCODE_DB, `
+      select
+        session_id as sessionId,
+        sum(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0)) as input,
+        sum(coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0)) as output,
+        sum(coalesce(json_extract(data, '$.tokens.cacheRead'), json_extract(data, '$.tokens.cache_read'), json_extract(data, '$.tokens.cache.read'), 0)) as cacheRead,
+        sum(coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as cacheWrite,
+        sum(coalesce(json_extract(data, '$.tokens.total'), 0)) as explicitTotal,
+        max(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0) + coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0) + coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as pressure
+      from part
+      where session_id in (${sessionIds})
+      group by session_id
+    `);
+  } catch {
+    partUsageRows = [];
+  }
+  const usageBySession = new Map();
+  for (const row of [...messageUsageRows, ...partUsageRows]) {
+    const sessionId = row.sessionId;
+    if (!sessionId) continue;
+    if (!usageBySession.has(sessionId)) {
+      usageBySession.set(sessionId, emptyUsage());
+    }
+    const usage = usageBySession.get(sessionId);
+    const input = Number(row.input || 0);
+    const output = Number(row.output || 0);
+    const cacheRead = Number(row.cacheRead || 0);
+    const cacheWrite = Number(row.cacheWrite || 0);
+    const explicitTotal = Number(row.explicitTotal || 0);
+    usage.tokens.input += input;
+    usage.tokens.output += output;
+    usage.tokens.cacheRead += cacheRead;
+    usage.tokens.cacheWrite += cacheWrite;
+    usage.tokens.total += explicitTotal || (input + output + cacheRead + cacheWrite);
+    usage.tokenPressure.total = Math.max(usage.tokenPressure.total, Number(row.pressure || 0));
+  }
+
+  return sessions.map((session) => ({
+    source: 'opencode',
+    path: `opencode:${session.id}`,
+    id: session.id,
+    parentId: session.parentId || null,
+    cwd: session.directory || '',
+    name: session.title || '',
+    firstPrompt: '',
+    createdAt: timestampFromMs(session.createdAt),
+    updatedAt: timestampFromMs(session.updatedAt),
+    leafId: null,
+    ...emptyListStats(),
+    ...(usageBySession.get(session.id) || emptyUsage()),
+    archivedAt: timestampFromMs(session.archivedAt),
+  })).filter((summary) => isUnderRoot(summary.cwd, WORKSPACE_ROOT));
 }
 
 async function loadOpenCodeSession(ref) {
@@ -635,8 +741,12 @@ async function loadOpenCodeSession(ref) {
 async function listSessions() {
   const { metadata, error: metadataError } = await readMetadata();
   const results = await Promise.allSettled([
-    sourceEnabled('pi') ? listPiSessions() : [],
-    sourceEnabled('opencode') ? listOpenCodeSessions() : [],
+    sourceEnabled('pi')
+      ? withTimeout(listPiSessions(), 'pi source', SOURCE_TIMEOUT_MS)
+      : [],
+    sourceEnabled('opencode')
+      ? withTimeout(listOpenCodeSessions(), 'opencode source', SOURCE_TIMEOUT_MS)
+      : [],
   ]);
   const sourceErrors = [];
   const sessions = [];
@@ -673,7 +783,8 @@ createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (url.pathname === '/api/sessions') {
-      const { sessions, sourceErrors, metadataError, metadataPath } = await listSessions();
+      const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(), '/api/sessions', REQUEST_TIMEOUT_MS)
+        .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: METADATA_PATH }));
       sendJson(res, 200, { workspaceRoot: WORKSPACE_ROOT, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
       return;
     }

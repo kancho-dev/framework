@@ -90,7 +90,7 @@ The OpenCode adapter reads the local SQLite database through:
 sqlite3 -readonly
 ```
 
-It filters sessions to the configured `WORKSPACE_ROOT` using the OpenCode session directory/worktree.
+It filters sessions to the configured `WORKSPACE_ROOT` using the OpenCode session directory.
 
 Restore command copied by the UI:
 
