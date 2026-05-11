@@ -389,6 +389,7 @@ function timestampFromMs(value) {
 
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
+  if (typeof value === 'object') return value;
   try {
     return JSON.parse(value);
   } catch {
@@ -492,8 +493,8 @@ function openCodeUsage(messages, parts) {
     const tokens = data.tokens || {};
     const input = tokens.input || tokens.prompt || 0;
     const output = tokens.output || tokens.completion || 0;
-    const cacheRead = tokens.cacheRead || tokens.cache_read || 0;
-    const cacheWrite = tokens.cacheWrite || tokens.cache_write || 0;
+    const cacheRead = tokens.cacheRead || tokens.cache_read || tokens.cache?.read || 0;
+    const cacheWrite = tokens.cacheWrite || tokens.cache_write || tokens.cache?.write || 0;
     const total = tokens.total || input + output + cacheRead + cacheWrite;
     stats.tokens.input += input;
     stats.tokens.output += output;
@@ -503,6 +504,40 @@ function openCodeUsage(messages, parts) {
     stats.tokenPressure.total = Math.max(stats.tokenPressure.total, input + output + cacheWrite);
   }
   return stats;
+}
+
+function openCodeUsageBySession(messages, parts) {
+  const usage = new Map();
+  const ensure = (sessionId) => {
+    if (!usage.has(sessionId)) {
+      usage.set(sessionId, {
+        tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        tokenPressure: { total: 0 },
+      });
+    }
+    return usage.get(sessionId);
+  };
+
+  for (const item of [...messages, ...parts]) {
+    const sessionId = item.sessionId;
+    if (!sessionId) continue;
+    const stats = ensure(sessionId);
+    const data = item.data || {};
+    const tokens = data.tokens || {};
+    const input = tokens.input || tokens.prompt || 0;
+    const output = tokens.output || tokens.completion || 0;
+    const cacheRead = tokens.cacheRead || tokens.cache_read || tokens.cache?.read || 0;
+    const cacheWrite = tokens.cacheWrite || tokens.cache_write || tokens.cache?.write || 0;
+    const total = tokens.total || input + output + cacheRead + cacheWrite;
+    stats.tokens.input += input;
+    stats.tokens.output += output;
+    stats.tokens.cacheRead += cacheRead;
+    stats.tokens.cacheWrite += cacheWrite;
+    stats.tokens.total += total;
+    stats.tokenPressure.total = Math.max(stats.tokenPressure.total, input + output + cacheWrite);
+  }
+
+  return usage;
 }
 
 async function loadOpenCodeRows(sessionId = null) {
@@ -621,6 +656,65 @@ async function listOpenCodeSessions() {
      order by time_updated desc
      limit 200`
   );
+  if (!sessions.length) return [];
+  const sessionIds = sessions.map((session) => sqlString(session.id)).join(',');
+  let messageUsageRows = [];
+  let partUsageRows = [];
+  try {
+    messageUsageRows = await sqliteJson(OPENCODE_DB, `
+      select
+        session_id as sessionId,
+        sum(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0)) as input,
+        sum(coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0)) as output,
+        sum(coalesce(json_extract(data, '$.tokens.cacheRead'), json_extract(data, '$.tokens.cache_read'), json_extract(data, '$.tokens.cache.read'), 0)) as cacheRead,
+        sum(coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as cacheWrite,
+        sum(coalesce(json_extract(data, '$.tokens.total'), 0)) as explicitTotal,
+        max(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0) + coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0) + coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as pressure
+      from message
+      where session_id in (${sessionIds})
+      group by session_id
+    `);
+  } catch {
+    messageUsageRows = [];
+  }
+  try {
+    partUsageRows = await sqliteJson(OPENCODE_DB, `
+      select
+        session_id as sessionId,
+        sum(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0)) as input,
+        sum(coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0)) as output,
+        sum(coalesce(json_extract(data, '$.tokens.cacheRead'), json_extract(data, '$.tokens.cache_read'), json_extract(data, '$.tokens.cache.read'), 0)) as cacheRead,
+        sum(coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as cacheWrite,
+        sum(coalesce(json_extract(data, '$.tokens.total'), 0)) as explicitTotal,
+        max(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0) + coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0) + coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as pressure
+      from part
+      where session_id in (${sessionIds})
+      group by session_id
+    `);
+  } catch {
+    partUsageRows = [];
+  }
+  const usageBySession = new Map();
+  for (const row of [...messageUsageRows, ...partUsageRows]) {
+    const sessionId = row.sessionId;
+    if (!sessionId) continue;
+    if (!usageBySession.has(sessionId)) {
+      usageBySession.set(sessionId, { tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, tokenPressure: { total: 0 } });
+    }
+    const usage = usageBySession.get(sessionId);
+    const input = Number(row.input || 0);
+    const output = Number(row.output || 0);
+    const cacheRead = Number(row.cacheRead || 0);
+    const cacheWrite = Number(row.cacheWrite || 0);
+    const explicitTotal = Number(row.explicitTotal || 0);
+    usage.tokens.input += input;
+    usage.tokens.output += output;
+    usage.tokens.cacheRead += cacheRead;
+    usage.tokens.cacheWrite += cacheWrite;
+    usage.tokens.total += explicitTotal || (input + output + cacheRead + cacheWrite);
+    usage.tokenPressure.total = Math.max(usage.tokenPressure.total, Number(row.pressure || 0));
+  }
+
   return sessions.map((session) => ({
     source: 'opencode',
     path: `opencode:${session.id}`,
@@ -640,8 +734,8 @@ async function listOpenCodeSessions() {
     toolResultCount: 0,
     toolCallCount: 0,
     toolNames: [],
-    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    tokenPressure: { total: 0 },
+    tokens: usageBySession.get(session.id)?.tokens || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    tokenPressure: usageBySession.get(session.id)?.tokenPressure || { total: 0 },
     archivedAt: timestampFromMs(session.archivedAt),
   })).filter((summary) => isUnderRoot(summary.cwd, WORKSPACE_ROOT));
 }
