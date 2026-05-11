@@ -507,13 +507,24 @@ function openCodeUsage(messages, parts) {
 
 async function loadOpenCodeRows(sessionId = null) {
   const sessionWhere = sessionId ? `where s.id = ${sqlString(sessionId)}` : '';
-  const sessions = await sqliteJson(OPENCODE_DB, `
-    select s.id, s.directory, s.title, s.parent_id as parentId, s.time_created as createdAt, s.time_updated as updatedAt, s.time_archived as archivedAt, p.worktree
-    from session s
-    left join project p on p.id = s.project_id
-    ${sessionWhere}
-    order by s.time_updated desc
-  `);
+  let sessions;
+  try {
+    sessions = await sqliteJson(OPENCODE_DB, `
+      select s.id, s.directory, s.title, s.parent_id as parentId, s.time_created as createdAt, s.time_updated as updatedAt, s.time_archived as archivedAt, p.worktree
+      from session s
+      left join project p on p.id = s.project_id
+      ${sessionWhere}
+      order by s.time_updated desc
+    `);
+  } catch (error) {
+    if (!safeError(error).includes('no such table: project')) throw error;
+    sessions = await sqliteJson(OPENCODE_DB, `
+      select s.id, s.directory, s.title, s.parent_id as parentId, s.time_created as createdAt, s.time_updated as updatedAt, s.time_archived as archivedAt, null as worktree
+      from session s
+      ${sessionWhere}
+      order by s.time_updated desc
+    `);
+  }
   if (!sessions.length) return { sessions: [], messages: [], parts: [] };
   const ids = sessions.map((session) => session.id);
   const placeholders = ids.map(sqlString).join(',');
@@ -604,7 +615,7 @@ async function listOpenCodeSessions() {
   if (!await exists(OPENCODE_DB)) return [];
   const sessions = await sqliteJson(
     OPENCODE_DB,
-    `select id, directory, title, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
+    `select id, parent_id as parentId, directory, title, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
      from session
      where time_archived is null
      order by time_updated desc
@@ -614,6 +625,7 @@ async function listOpenCodeSessions() {
     source: 'opencode',
     path: `opencode:${session.id}`,
     id: session.id,
+    parentId: session.parentId || null,
     cwd: session.directory || '',
     name: session.title || '',
     firstPrompt: '',
