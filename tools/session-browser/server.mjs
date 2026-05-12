@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
-import { dirname, extname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
@@ -15,6 +15,7 @@ const OPENCODE_DB = resolve(process.env.OPENCODE_DB || join(OPENCODE_DATA_DIR, '
 const ENABLED_SOURCES = new Set(String(process.env.SESSION_SOURCES || 'pi,opencode').split(',').map((source) => source.trim().toLowerCase()).filter(Boolean));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
 const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
+const WORKSPACE_NAME = basename(WORKSPACE_ROOT) || WORKSPACE_ROOT;
 const METADATA_PATH = resolve(process.env.SESSION_BROWSER_METADATA || join(TOOL_DIR, '.cache', 'metadata.json'));
 const execFileAsync = promisify(execFile);
 const SOURCE_TIMEOUT_MS = Number(process.env.SESSION_SOURCE_TIMEOUT_MS || '8000');
@@ -785,7 +786,7 @@ createServer(async (req, res) => {
     if (url.pathname === '/api/sessions') {
       const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(), '/api/sessions', REQUEST_TIMEOUT_MS)
         .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: METADATA_PATH }));
-      sendJson(res, 200, { workspaceRoot: WORKSPACE_ROOT, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
+      sendJson(res, 200, { workspaceRoot: WORKSPACE_ROOT, workspaceName: WORKSPACE_NAME, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
       return;
     }
     if (url.pathname === '/api/session') {
@@ -824,7 +825,7 @@ createServer(async (req, res) => {
     }
     await serveStatic(req, res);
   } catch (error) {
-    sendJson(res, 500, { error: safeError(error), workspaceRoot: WORKSPACE_ROOT, sessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB });
+    sendJson(res, 500, { error: safeError(error), workspaceRoot: WORKSPACE_ROOT, workspaceName: WORKSPACE_NAME, sessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB });
   }
 }).listen(PORT, () => {
   console.log(`Session Browser: http://localhost:${PORT}`);

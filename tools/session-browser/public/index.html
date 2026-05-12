@@ -13,9 +13,11 @@
       <header>
         <div class="brand">
           <img src="/icon.svg" alt="" class="brand-logo" aria-hidden="true">
-          <div>
-            <p class="eyebrow">local · read-only · multi-source</p>
-            <h1>Session history</h1>
+          <div class="brand-copy">
+            <div class="title-line">
+              <h1>Session history</h1>
+              <span id="workspace-name" class="workspace-badge">Workspace</span>
+            </div>
           </div>
         </div>
         <div class="header-actions">
@@ -63,7 +65,6 @@
             <button id="bookmark-selected" type="button">☆ Bookmark</button>
             <button id="copy-restore" type="button" title="Copy command to restore this session in Pi">Copy restore cmd</button>
           </div>
-          <p class="eyebrow" id="reader-source">Pi session</p>
           <h2 id="reader-title"></h2>
           <div id="reader-relations" class="relations hidden"></div>
           <div id="reader-meta" class="meta"></div>

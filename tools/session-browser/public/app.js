@@ -10,10 +10,10 @@ const els = {
   labelFilter: document.querySelector('#label-filter'),
   clearFilters: document.querySelector('#clear-filters'),
   status: document.querySelector('#status'),
+  workspaceName: document.querySelector('#workspace-name'),
   sessions: document.querySelector('#sessions'),
   empty: document.querySelector('#empty'),
   reader: document.querySelector('#reader'),
-  readerSource: document.querySelector('#reader-source'),
   readerTitle: document.querySelector('#reader-title'),
   readerRelations: document.querySelector('#reader-relations'),
   readerMeta: document.querySelector('#reader-meta'),
@@ -53,6 +53,10 @@ function shortPath(value, max = 72) {
   const text = String(value || '');
   if (text.length <= max) return text;
   return `…${text.slice(-(max - 1))}`;
+}
+
+function workspaceDisplayName() {
+  return state.workspaceName || String(state.workspaceRoot || '').split('/').filter(Boolean).at(-1) || 'workspace';
 }
 
 function sessionLabels(session) {
@@ -179,16 +183,16 @@ function renderSessions() {
     ...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`),
     state.metadataError || '',
   ].filter(Boolean).length ? ` · ${[...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`), state.metadataError || ''].filter(Boolean).join(', ')}` : '';
-  els.status.textContent = `${sessions.length} of ${state.sessions.length} sessions · workspace ${state.workspaceRoot || ''}${errorText}`;
+  els.workspaceName.textContent = workspaceDisplayName();
+  els.workspaceName.title = state.workspaceRoot ? `Workspace: ${state.workspaceRoot}` : 'Workspace';
+  els.status.textContent = `${sessions.length} of ${state.sessions.length} sessions · ${workspaceDisplayName()}${errorText}`;
   els.sessions.innerHTML = sessions.map((session) => `
     <li>
       <button class="session-card ${session.path === state.selectedPath ? 'active' : ''} ${isBookmarked(session) ? 'bookmarked' : ''}" data-path="${escapeHtml(session.path)}">
-        <div class="card-top"><span class="card-badges">${isBookmarked(session) ? '<span class="bookmark-mark on">★</span>' : ''}<span class="badge">${escapeHtml(sourceLabel(session.source))}</span> ${tokenPressurePill(session)}</span><span class="card-updated">Updated ${escapeHtml(formatDate(session.updatedAt))}</span></div>
+        <div class="card-top"><span class="card-badges">${isBookmarked(session) ? '<span class="bookmark-mark on">★</span>' : ''}<span class="badge">${escapeHtml(sourceLabel(session.source))}</span> ${tokenPressurePill(session)}</span><span class="card-times"><span>Updated: ${escapeHtml(formatDate(session.updatedAt))}</span><span>Created: ${escapeHtml(formatDate(session.createdAt))}</span></span></div>
         <div class="prompt">${escapeHtml(session.name || session.firstPrompt || '(no user prompt found)')}</div>
         ${session.parentId ? '<div class="relation-line"><span class="relation-badge">child session</span></div>' : ''}
         ${renderLabelPills(sessionLabels(session))}
-        <div class="cwd">${escapeHtml(shortPath(session.cwd || '(unknown cwd)'))}</div>
-        <div class="time-pair">Created ${escapeHtml(formatDate(session.createdAt))}</div>
         <div class="token-bar ${tokenPressureLevel(session)}"><span style="width: ${tokenPressurePercent(session)}%"></span></div>
       </button>
     </li>
@@ -413,25 +417,27 @@ function renderEntry(entry, allEntries) {
 function renderSelectedDetail() {
   const detail = state.selectedDetail;
   if (!detail) return;
-  els.readerSource.textContent = `${sourceLabel(detail.source)} session`;
   const command = restoreCommand(detail);
   els.copyRestore.classList.toggle('hidden', !command);
   els.copyRestore.title = command ? `Copy command: ${command}` : '';
   els.bookmarkSelected.textContent = isBookmarked(detail) ? '★ Bookmarked' : '☆ Bookmark';
   els.bookmarkSelected.classList.toggle('active', isBookmarked(detail));
-  els.readerTitle.innerHTML = `${escapeHtml(detail.name || detail.firstPrompt || detail.id)} ${tokenPressurePill(detail)}`;
+  els.readerTitle.textContent = detail.name || detail.firstPrompt || detail.id;
   renderRelations(detail);
-  const metaItems = [
-    `Created: ${formatDate(detail.createdAt)}`,
-    `Updated: ${formatDate(detail.updatedAt)}`,
-    `Cwd: ${shortPath(detail.cwd)}`,
-    `Messages: ${detail.userMessageCount} user, ${detail.assistantMessageCount} assistant`,
-    `Tool Messages: ${detail.toolMessageCount || detail.toolCallCount}`,
-    `Tool Calls: ${detail.toolCallCount}`,
-    `Token pressure: ${formatCompactNumber(tokenPressureTotal(detail))} recorded`,
-    `Tokens: ${formatTokens(detail.tokens)}`,
+  const primaryMeta = [
+    `<span class="badge">${escapeHtml(sourceLabel(detail.source))}</span>`,
+    tokenPressurePill(detail),
+    `<span><strong>Created:</strong> ${escapeHtml(formatDate(detail.createdAt))}</span>`,
+    `<span><strong>Updated:</strong> ${escapeHtml(formatDate(detail.updatedAt))}</span>`,
   ];
-  els.readerMeta.innerHTML = metaItems.map((item) => `<span>${escapeHtml(item)}</span>`).join('');
+  const secondaryMeta = [
+    ['Cwd:', shortPath(detail.cwd)],
+    ['Messages:', `${detail.userMessageCount} user, ${detail.assistantMessageCount} assistant`],
+    ['Tool Messages:', detail.toolMessageCount || detail.toolCallCount],
+    ['Tool Calls:', detail.toolCallCount],
+    ['Tokens:', formatTokens(detail.tokens)],
+  ];
+  els.readerMeta.innerHTML = `<div class="meta-row primary">${primaryMeta.join('')}</div><div class="meta-row secondary">${secondaryMeta.map(([label, value]) => `<span><strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}</span>`).join('')}</div>`;
   renderLabelEditor(detail);
   els.topics.innerHTML = detail.topicAnchors.map((anchor) => `
     <li><a href="#entry-${escapeHtml(anchor.id)}">${anchor.depth === 'first-prompt' ? '★ ' : ''}${escapeHtml(anchor.title)}</a></li>
@@ -513,6 +519,7 @@ async function loadSessions({ reloadSelected = false } = {}) {
   state.sessionRoot = data.sessionRoot;
   state.sourceErrors = data.sourceErrors || [];
   state.workspaceRoot = data.workspaceRoot;
+  state.workspaceName = data.workspaceName;
   state.metadataError = data.metadataError || null;
   state.metadataPath = data.metadataPath;
   renderSourceFilter();
