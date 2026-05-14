@@ -105,6 +105,7 @@ Use templates under `framework/TEMPLATES/`.
 - `OPERATOR-NOTES.md` → `framework/TEMPLATES/WORKSPACE/OPERATOR-NOTES.md`
 - `FIXES.md` → `framework/TEMPLATES/WORKSPACE/FIXES.md`
 - optional workspace skill index: `SKILLS/INDEX.md` → `framework/TEMPLATES/WORKSPACE/SKILLS/INDEX.md`
+- optional project skill index: `projects/[name]/SKILLS/INDEX.md` → `framework/TEMPLATES/PROJECT/SKILLS/INDEX.md`
 
 ### Task files
 
@@ -209,12 +210,14 @@ OPERATOR-NOTES.md
 - if present, preserve existing content unless the user asks for restructuring
 - `OPERATOR-NOTES.md` is gitignored by default in the recommended root `.gitignore`
 
-### Workspace-custom `SKILLS/`
+### Local skills and tool-native capabilities
 
 - not required for basic framework use
-- if the workspace has local repeated workflows, create `SKILLS/INDEX.md` from the workspace template and add skills under `SKILLS/[skill-name]/SKILL.md`
-- keep workspace-custom skills out of `framework/SKILLS/`; use `framework/SKILLS/create-workspace-skill/SKILL.md` when creating them
-- avoid workspace skill names that collide with framework skill names unless the Operator explicitly wants a local override
+- project-local capabilities may already exist in a project repo, for example tool-native skills/commands such as `.claude/skills/`, or documented project workflows; preserve them and reference them from project instructions when useful
+- if one project needs portable framework-native skills, add them under `projects/[name]/SKILLS/[skill-name]/SKILL.md` with `projects/[name]/SKILLS/INDEX.md`
+- if the workspace has cross-project local workflows, create `SKILLS/INDEX.md` from the workspace template and add skills under `SKILLS/[skill-name]/SKILL.md`
+- keep local framework-native skills out of `framework/SKILLS/`; use `framework/SKILLS/create-workspace-skill/SKILL.md` as the baseline pattern when creating them
+- local-capability precedence is project-local → workspace → framework; avoid same-name local skills unless the Operator explicitly wants an override
 - preserve existing local skill files if present and merge index guidance rather than replacing it
 
 ## When To Ask The User

@@ -1,6 +1,6 @@
 # Portable Agent Framework
 
-![Version](https://img.shields.io/badge/version-0.6.2-blue)
+![Version](https://img.shields.io/badge/version-0.6.3-blue)
 
 Minimal, agent-agnostic framework for AI-assisted software development.
 
@@ -133,9 +133,9 @@ For later framework-alignment runs in an already framework-managed workspace, al
 
 Then it should read the active workspace files from the root.
 `OPERATOR-NOTES.md` is used as a durable Operator-maintained list of human todos and ideas; agents should treat it as a reference file unless the workspace rules explicitly allow appending short Operator-action items.
-Load skills only when they are relevant to the current run. Framework skills live under `framework/SKILLS/`; if the right framework skill is unclear, read `framework/SKILLS/INDEX.md` first, then read only the selected `framework/SKILLS/[skill-name]/SKILL.md` files.
+Load skills only when they are relevant to the current run. Use local-capability precedence: project-local skills/commands/instructions, then workspace-custom skills under root `SKILLS/`, then framework skills under `framework/SKILLS/`.
 
-Workspace-custom skills may live under root `SKILLS/`; if local skill choice is unclear or the user mentions a workspace-specific workflow, read `SKILLS/INDEX.md` if it exists, then read only the selected `SKILLS/[skill-name]/SKILL.md` files. Avoid creating workspace skills with the same name as framework skills unless the Operator explicitly wants a local override.
+Project-local capabilities may be framework-native skills under `projects/[name]/SKILLS/`, tool-native skills/commands inside the project repo, or documented project workflows. Use them only when relevant to that project and supported by the current agent/tool. When skill choice is unclear, read only the relevant indexes/manifests needed to choose; then read only the selected skill files. Avoid same-name local skills unless the Operator explicitly wants an override.
 
 If current markdown files are not enough to answer a specific context question, load `framework/SKILLS/memory-search/SKILL.md` and use the optional memory CLI under `framework/memory-service/` selectively (for example: `mem search`, `mem recent`, `mem sessions`, `mem lessons search`).
 

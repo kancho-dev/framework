@@ -8,15 +8,17 @@ Workspace-custom skills live at:
 SKILLS/[skill-name]/SKILL.md
 ```
 
-Framework skills live separately under:
+Project-local capabilities and framework skills live separately. Project-local capabilities may include framework-native skills, tool-native skills/commands, or documented project workflows, for example:
 
 ```text
+projects/[name]/SKILLS/[skill-name]/SKILL.md
+projects/[name]/project/.claude/skills/[skill-name]/...
 framework/SKILLS/[skill-name]/SKILL.md
 ```
 
-Prefer framework skills for general framework workflows. Use workspace-custom skills for local workflows, project-specific procedures, or experimental skills that are not yet ready to become part of the reusable framework.
+Use local-capability precedence: project-local → workspace → framework. Use project-local capabilities for one project's workflows, workspace-custom skills for cross-project local workflows or experiments, and framework skills for reusable framework procedures.
 
-Avoid giving a workspace-custom skill the same name as a framework skill. If a collision exists, ask the Operator whether to rename the local skill or treat it as an explicit override.
+Avoid giving local skills the same name as skills in another scope unless an explicit override is intended. If a collision exists and intent is unclear, ask the Operator whether to rename the local skill or treat it as an override.
 
 ## Skills
 

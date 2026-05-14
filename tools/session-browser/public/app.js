@@ -22,6 +22,7 @@ const els = {
   bookmarkSelected: document.querySelector('#bookmark-selected'),
   labelEditor: document.querySelector('#label-editor'),
   labelInput: document.querySelector('#label-input'),
+  labelSuggestions: document.querySelector('#label-suggestions'),
   addLabel: document.querySelector('#add-label'),
   jumpTop: document.querySelector('#jump-top'),
   jumpBottom: document.querySelector('#jump-bottom'),
@@ -57,6 +58,10 @@ function shortPath(value, max = 72) {
 
 function workspaceDisplayName() {
   return state.workspaceName || String(state.workspaceRoot || '').split('/').filter(Boolean).at(-1) || 'workspace';
+}
+
+function updateDocumentTitle() {
+  if (state.workspaceName) document.title = `${state.workspaceName} - Sessions`;
 }
 
 function sessionLabels(session) {
@@ -211,12 +216,21 @@ function renderRelations(detail) {
   els.readerRelations.innerHTML = links.join('');
 }
 
+function allLabels() {
+  return Array.from(new Set(state.sessions.flatMap((session) => sessionLabels(session)))).sort((a, b) => a.localeCompare(b));
+}
+
+function renderLabelSuggestions(labels = allLabels()) {
+  els.labelSuggestions.innerHTML = labels.map((label) => `<option value="${escapeHtml(label)}"></option>`).join('');
+}
+
 function renderLabelFilter() {
-  const labels = Array.from(new Set(state.sessions.flatMap((session) => sessionLabels(session)))).sort((a, b) => a.localeCompare(b));
+  const labels = allLabels();
   const current = state.labelFilter;
   els.labelFilter.innerHTML = ['all', ...labels].map((label) => `<option value="${escapeHtml(label)}">${escapeHtml(label === 'all' ? 'All labels' : label)}</option>`).join('');
   els.labelFilter.value = labels.includes(current) ? current : 'all';
   state.labelFilter = els.labelFilter.value;
+  renderLabelSuggestions(labels);
 }
 
 function renderSourceFilter() {
@@ -520,6 +534,7 @@ async function loadSessions({ reloadSelected = false } = {}) {
   state.sourceErrors = data.sourceErrors || [];
   state.workspaceRoot = data.workspaceRoot;
   state.workspaceName = data.workspaceName;
+  updateDocumentTitle();
   state.metadataError = data.metadataError || null;
   state.metadataPath = data.metadataPath;
   renderSourceFilter();

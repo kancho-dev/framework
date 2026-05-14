@@ -49,7 +49,7 @@ Read in this order:
 6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief file present under `memory/` if any exist
    - If today's brief does not exist and you later create it, carry forward only important unfinished items from the latest previous brief into a short top section before adding normal entries.
 7. relevant files under `projects/[name]/library/`
-8. when skill choice is unclear, read `framework/SKILLS/INDEX.md`, then only the role-relevant skills and extra context needed for the run
+8. when skill choice is unclear, use local-capability precedence: relevant project-local skills/commands/instructions, then workspace skills under `SKILLS/`, then framework skills under `framework/SKILLS/`; read only the needed indexes/manifests and selected skill files
 9. if a specific context gap remains, optionally use `framework/SKILLS/memory-search/SKILL.md` and the memory CLI under `framework/memory-service/`
 
 ### Task session
@@ -63,7 +63,7 @@ If you are working on a task under `projects/[name]/work/[task-slug]/`, read in 
 6. `projects/[name]/work/[task-slug]/HANDOFF.md`
 7. `projects/[name]/work/[task-slug]/CONTEXT.md`
 8. relevant files under `projects/[name]/library/`
-9. when skill choice is unclear, read `framework/SKILLS/INDEX.md`, then only the skills and extra context needed for the run
+9. when skill choice is unclear, use local-capability precedence: relevant project-local skills/commands/instructions, then workspace skills under `SKILLS/`, then framework skills under `framework/SKILLS/`; read only the needed indexes/manifests and selected skill files
 10. if a specific context gap remains, optionally use `framework/SKILLS/memory-search/SKILL.md` and the memory CLI under `framework/memory-service/`
 
 ## Workspace Files
@@ -391,10 +391,12 @@ Skills are optional playbooks under `framework/SKILLS/`.
 Use `framework/SKILLS/INDEX.md` to choose a framework skill when the user gives a general prompt or when the right framework skill is unclear.
 Each framework skill uses the path `framework/SKILLS/[skill-name]/SKILL.md`.
 
-A workspace may also define custom local skills at `SKILLS/[skill-name]/SKILL.md`, with discovery through `SKILLS/INDEX.md`.
-Use workspace-custom skills for local workflows, project-specific procedures, or experiments that are not yet ready for the reusable framework.
-Avoid giving a workspace-custom skill the same name as a framework skill. When creating a local skill, check both indexes first; if a name collision exists, propose a distinct local name to the Operator.
-When a framework skill and workspace-custom skill both seem relevant, prefer the workspace-custom skill for local workflow details, but use the framework skill for general framework procedure unless the local skill explicitly overrides it.
+Projects and workspaces may also define local skills or tool-native capabilities:
+- project-local capabilities: project-specific framework skills such as `projects/[name]/SKILLS/[skill-name]/SKILL.md`, project repo tool-native skills/commands such as `.claude/skills/`, or documented project workflows
+- workspace-custom skills: `SKILLS/[skill-name]/SKILL.md`, discovered through `SKILLS/INDEX.md`
+
+Use project-local capabilities for one project's workflows, workspace-custom skills for cross-project local workflows or experiments, and framework skills for reusable framework procedures.
+When multiple capabilities could apply, prefer the most specific relevant source: project-local → workspace → framework. Treat `projects/[name]/SKILLS/` as the portable framework-native option, not the only valid project-specific skill location. Tool-native skills/commands are only usable when supported by the current agent/tool and should not be assumed portable. If the same skill name exists in more than one scope, treat the more specific skill as an override only when it is clearly intentional from the index, project instructions, or Operator instructions; otherwise ask before proceeding. When creating local skills, avoid name collisions unless an explicit override is intended.
 
 A skill directory may also contain optional `resources/`, `scripts/`, or `artifacts/` directories, but `SKILL.md` must remain enough to understand and run the skill.
 Load only the selected skill files that help with the current run, and load optional resources only when the skill says they are needed.
