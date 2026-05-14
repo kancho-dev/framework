@@ -12,3 +12,7 @@ projects/*/project/
 
 # Operator-maintained notes
 OPERATOR-NOTES.md
+
+# Tool-local workspace adapters and caches
+.pi/
+.opencode/

@@ -48,6 +48,7 @@ Do not reward vague completion claims. Verify what matters.
 - findings
 - required fixes if not approved
 - confidence level when uncertainty remains
+- for meaningful task reviews, a task run log, updated `HANDOFF.md`, and a daily brief entry unless the review is explicitly read-only or delegated to a no-write reviewer
 
 ## Execution Pattern
 
@@ -56,6 +57,7 @@ Do not reward vague completion claims. Verify what matters.
 3. Read the task scope, expected outcome, and produced changes.
 4. Verify through concrete checks where possible.
 5. Return a structured verdict with evidence.
+6. For a meaningful task review, record the verdict in the task `runs/`, update `HANDOFF.md` with the review outcome and next action, and append today's daily brief. If the Oracle session is intentionally read-only or delegated and cannot write files, the coordinating session should import the review result into those files afterward.
 
 ## Authority / Scope
 
@@ -68,6 +70,7 @@ Do not reward vague completion claims. Verify what matters.
 - be explicit enough that the next Builder run knows exactly what to do
 - preserve signal over verbosity
 - if clarification is needed, state the escalation question explicitly
+- make the review outcome durable in the task handoff/run log unless the review was explicitly no-write
 
 ## Checklist
 

@@ -5,7 +5,7 @@ Use this guide when setting up the framework in the current workspace.
 The goal is a clean, usable workspace setup, not a heavy installer.
 
 This is the main starting point for first-time adoption.
-`memory-service/` and `tools/` are optional and are not required for the basic framework workflow.
+`memory-service/`, `tools/`, and native command templates are optional and are not required for the basic framework workflow.
 
 ## Supported Situations
 
@@ -114,6 +114,22 @@ Use templates under `framework/TEMPLATES/`.
 - `CONTEXT.md` → `framework/TEMPLATES/TASKS/CONTEXT.md`
 - run log entry → `framework/TEMPLATES/TASKS/RUN-LOG.md`
 
+## Optional Native Commands
+
+The framework includes optional Markdown command templates under:
+
+```text
+framework/prompts/
+```
+
+These templates expose slash commands such as `/next-best-actions`, `/update-framework`, and `/workspace-maintenance` in Pi when symlinked or copied into workspace `.pi/prompts/`, and in OpenCode when symlinked or copied into workspace `.opencode/commands/`.
+
+Recommended Linux/macOS setup is symlinking tool-local command files to `framework/prompts/*.md`, so prompt changes arrive with normal framework updates. Copying the files is the simpler fallback, especially on Windows or filesystems where symlinks are inconvenient. In either case, inspect existing command files first and ask before replacing same-name local prompts/commands.
+
+Detailed Pi and OpenCode setup options are documented in `framework/COMMANDS.md`. Do not mutate OpenCode `opencode.json` automatically during basic framework installation unless the Operator explicitly asks for it and the target config is clear.
+
+Native commands are convenience adapters only. The framework remains usable through normal prompts.
+
 ## Optional Session Browser Tool
 
 The framework includes an optional local session browser under:
@@ -162,7 +178,7 @@ Safety:
 
 - if missing, create from the template
 - if present, merge the framework-related ignore rules into it rather than replacing unrelated local rules
-- by default, ignore the nested `framework/` repository, nested `projects/[name]/project/` repositories, and `OPERATOR-NOTES.md`
+- by default, ignore the nested `framework/` repository, nested `projects/[name]/project/` repositories, `OPERATOR-NOTES.md`, and tool-local adapter/cache directories such as `.pi/` and `.opencode/`
 - do not ignore `projects/[name]/library/` or `projects/[name]/work/` in the default model; those belong to the workspace root repo
 - check this early in an existing-workspace adoption; it is one of the easiest places to make the workspace awkward by accident
 - if the workspace is in a mixed migration state, make sure the ignore rules still match the real nested-repo boundaries instead of assuming every project is already organized identically
@@ -184,6 +200,10 @@ projects/*/project/
 
 # Operator-maintained notes
 OPERATOR-NOTES.md
+
+# Tool-local workspace adapters and caches
+.pi/
+.opencode/
 ```
 
 ### `README.md`

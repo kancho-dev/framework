@@ -1,6 +1,6 @@
 # Portable Agent Framework
 
-![Version](https://img.shields.io/badge/version-0.6.3-blue)
+![Version](https://img.shields.io/badge/version-0.7.0-blue)
 
 Minimal, agent-agnostic framework for AI-assisted software development.
 
@@ -12,7 +12,7 @@ Ask your coding agent to install the framework for you from the root of the work
 Clone https://github.com/kancho-dev/framework.git into this workspace as `framework/`, then read `framework/INSTALLATION.md` and perform the initial framework setup for this workspace
 ```
 
-After setup, use the framework by asking your agent for the outcome you want. For copy-friendly examples, see [`USAGE-PROMPTS.md`](USAGE-PROMPTS.md).
+After setup, use the framework by asking your agent for the outcome you want. For copy-friendly examples, see [`USAGE-PROMPTS.md`](USAGE-PROMPTS.md). For optional Pi/OpenCode native command integration, see [`COMMANDS.md`](COMMANDS.md).
 
 Useful starting prompts:
 
@@ -203,4 +203,8 @@ projects/*/project/
 
 # Operator-maintained notes
 OPERATOR-NOTES.md
+
+# Tool-local workspace adapters and caches
+.pi/
+.opencode/
 ```

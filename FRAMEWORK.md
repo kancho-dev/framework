@@ -304,11 +304,12 @@ Use this as the default quality pattern when implementation work should be revie
 2. the Builder completes one bounded slice
 3. the Builder records what changed, what was checked, and what remains
 4. the Oracle reviews against the task goal and acceptance criteria
-5. the Oracle returns a verdict:
+5. the Oracle records a durable review result in the task run log and handoff, unless the review is explicitly read-only/no-write
+6. the Oracle returns a verdict:
    - approve
    - bounce
    - needs clarification
-6. if bounced, the next Builder run fixes the listed issues and resubmits
+7. if bounced, the next Builder run fixes the listed issues and resubmits
 
 The goal is a clear review loop, not vague completion claims.
 
@@ -362,9 +363,11 @@ A good review result includes:
 - **Required fixes:** only when not approved
 - **Confidence:** high / medium / low when uncertainty remains
 
+For meaningful task reviews, also write the review result to `projects/[name]/work/[task-slug]/runs/`, update `HANDOFF.md` with the verdict and next action, and append the daily brief. If a delegated/read-only reviewer cannot write files, the coordinating session should import the review result afterward.
+
 ## End Of Session
 
-Before ending a meaningful session:
+Before ending a meaningful session, including review sessions:
 1. update the relevant handoff or context files
 2. append to today's daily brief using the real current system date/time from the live environment
 3. record durable fixes in `FIXES.md` when relevant
