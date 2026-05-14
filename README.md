@@ -1,6 +1,6 @@
 # Portable Agent Framework
 
-![Version](https://img.shields.io/badge/version-0.7.0-blue)
+![Version](https://img.shields.io/badge/version-0.7.1-blue)
 
 Minimal, agent-agnostic framework for AI-assisted software development.
 
@@ -135,7 +135,7 @@ Then it should read the active workspace files from the root.
 `OPERATOR-NOTES.md` is used as a durable Operator-maintained list of human todos and ideas; agents should treat it as a reference file unless the workspace rules explicitly allow appending short Operator-action items.
 Load skills only when they are relevant to the current run. Use local-capability precedence: project-local skills/commands/instructions, then workspace-custom skills under root `SKILLS/`, then framework skills under `framework/SKILLS/`.
 
-Project-local capabilities may be framework-native skills under `projects/[name]/SKILLS/`, tool-native skills/commands inside the project repo, or documented project workflows. Use them only when relevant to that project and supported by the current agent/tool. When skill choice is unclear, read only the relevant indexes/manifests needed to choose; then read only the selected skill files. Avoid same-name local skills unless the Operator explicitly wants an override.
+Project-local capabilities may be framework-native skills under `projects/[name]/SKILLS/`, tool-native skills/commands inside the project repo, or documented project workflows. Use them only when relevant to that project and supported by the current agent/tool. When skill choice is unclear, read only the relevant indexes/manifests needed to choose; then read only the selected skill files. Avoid same-name local skills unless the Operator explicitly wants an override. If confusion remains about which project, workspace, or framework skill to use, ask the Operator before executing the skill.
 
 If current markdown files are not enough to answer a specific context question, load `framework/SKILLS/memory-search/SKILL.md` and use the optional memory CLI under `framework/memory-service/` selectively (for example: `mem search`, `mem recent`, `mem sessions`, `mem lessons search`).
 
