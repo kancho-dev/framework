@@ -24,10 +24,13 @@ Bring an already framework-managed workspace into alignment with newer framework
 
 - `framework/INSTALLATION.md`
 - `framework/README.md`
+- `framework/MIGRATIONS.md` when present
+- `framework/WORKSPACE.md`, `framework/TASKS.md`, and `framework/SKILLS.md` when present
 - `framework/VERSION`
 - `framework/CURRENT_VERSION` when present
 - relevant templates under `framework/TEMPLATES/`
 - the current workspace root contents
+- local workspace/project skills and skill indexes when framework guidance changed
 - the current framework files already present in the workspace
 
 ## Steps
@@ -36,22 +39,27 @@ Bring an already framework-managed workspace into alignment with newer framework
 2. Read `framework/INSTALLATION.md` to understand the current expected setup shape, including the phased adoption guidance for existing workspaces.
 3. Read `framework/CURRENT_VERSION` if it exists, and read the newly pulled `framework/VERSION`.
 4. If `CURRENT_VERSION` is missing, treat the workspace as having an unknown installed framework version, create it from `VERSION` after the update, and mention that version-specific diff review was not possible.
-5. If both versions exist and differ, inspect the framework changes between the old installed version and the new `VERSION` before changing workspace files. Prefer git tag comparison when tags exist, for example `git -C framework diff vOLD..vNEW -- INSTALLATION.md FRAMEWORK.md ROLES/ SKILLS/ TEMPLATES/ README.md USAGE-PROMPTS.md COMMANDS.md prompts/`; otherwise compare the current files directly and note the limitation.
-6. Inspect the workspace root for the existing framework-managed files and directories.
-7. Compare the current workspace setup against the latest framework expectations.
-8. Check the actual repository boundaries before editing config files so the update does not guess wrongly about which repo owns what.
-9. Check whether the root `.gitignore` still matches the current framework repository model and ignore guidance.
-10. Recheck that workspace-owned `projects/[name]/library/` and `projects/[name]/work/` are not being ignored under the default model.
-11. Add newly required files or directories when they are missing and templates clearly apply.
-12. If the newer framework includes optional tools such as `framework/tools/session-browser/`, do not force workspace changes; tell the Operator the tool is available after updating `framework/`, and point them to the tool README for optional setup/use.
-13. If the newer framework includes optional native command templates under `framework/prompts/`, do not force setup; tell the Operator they are available and point them to `framework/COMMANDS.md` for Pi symlink/copy setup and OpenCode guidance.
-14. Update or merge existing workspace files only when needed to support new framework behavior or guidance.
-15. Do not overwrite local workspace-specific instructions blindly.
-16. If a merge is non-obvious, ask the user before changing the file.
-17. Leave adapter-specific files such as `CLAUDE.md` intact unless the user explicitly wants them updated.
-18. If the workspace uses other root agent/editor entrypoint files, decide deliberately whether they should mirror the same workspace guidance.
-19. After the workspace has been updated, set `framework/CURRENT_VERSION` to match `framework/VERSION`.
-20. Summarize the old version, new version, what changed, what was added, updated, left unchanged, or escalated.
+5. If both versions exist and differ, inspect the framework changes between the old installed version and the new `VERSION` before changing workspace files. Prefer git tag comparison when tags exist, for example `git -C framework diff vOLD..vNEW -- INSTALLATION.md MIGRATIONS.md FRAMEWORK.md WORKSPACE.md TASKS.md SKILLS.md ROLES/ SKILLS/ TEMPLATES/ README.md USAGE-PROMPTS.md COMMANDS.md prompts/`; otherwise compare the current files directly and note the limitation.
+6. If `framework/MIGRATIONS.md` exists, read only the migration sections that apply between the old installed version and the new `VERSION`.
+7. Inspect the workspace root for the existing framework-managed files and directories.
+8. Compare the current workspace setup against the latest framework expectations.
+9. Check the actual repository boundaries before editing config files so the update does not guess wrongly about which repo owns what.
+10. Check whether the root `.gitignore` still matches the current framework repository model and ignore guidance.
+11. Recheck that workspace-owned `projects/[name]/library/` and `projects/[name]/work/` are not being ignored under the default model.
+12. When framework guidance changed, check local skill indexes and local skills for stale framework assumptions before declaring the workspace aligned:
+   - `SKILLS/INDEX.md` and `SKILLS/*/SKILL.md`;
+   - `projects/[name]/SKILLS/INDEX.md` and `projects/[name]/SKILLS/*/SKILL.md`;
+   - tool-native project skills or commands when they are relevant and supported by the current agent/tool.
+13. Add newly required files or directories when they are missing and templates clearly apply.
+14. If the newer framework includes optional tools such as `framework/tools/session-browser/`, do not force workspace changes; tell the Operator the tool is available after updating `framework/`, and point them to the tool README for optional setup/use.
+15. If the newer framework includes optional native command templates under `framework/prompts/`, do not force setup; tell the Operator they are available and point them to `framework/COMMANDS.md` for Pi symlink/copy setup and OpenCode guidance.
+16. Update or merge existing workspace files only when needed to support new framework behavior or guidance.
+17. Do not overwrite local workspace-specific instructions blindly.
+18. If a merge is non-obvious, ask the user before changing the file.
+19. Leave adapter-specific files such as `CLAUDE.md` intact unless the user explicitly wants them updated.
+20. If the workspace uses other root agent/editor entrypoint files, decide deliberately whether they should mirror the same workspace guidance.
+21. After the workspace has been updated, set `framework/CURRENT_VERSION` to match `framework/VERSION`.
+22. Summarize the old version, new version, what changed, what was added, updated, left unchanged, or escalated.
 
 ## Optional Session Browser Check
 
@@ -98,6 +106,8 @@ If the updated framework includes `framework/tools/session-browser/`:
 - accidentally gitignoring workspace-owned `library/` or `work` paths while updating `.gitignore`
 - overwriting customized `AGENTS.md`, `.gitignore`, `README.md`, or other workspace files blindly
 - applying template changes that are not actually needed for the current framework update
+- skipping applicable `MIGRATIONS.md` notes when framework behavior or file organization changed
+- missing stale assumptions in workspace-custom or project-local skills after framework guidance changes
 - copying private session data into `framework/tools/session-browser/` or treating optional tools as required workspace setup
 - updating `CURRENT_VERSION` before checking whether the old/new framework versions require workspace changes
 - changing adapter-specific files by default
@@ -106,5 +116,9 @@ If the updated framework includes `framework/tools/session-browser/`:
 
 - `framework/INSTALLATION.md`
 - `framework/README.md`
+- `framework/MIGRATIONS.md`
+- `framework/WORKSPACE.md`
+- `framework/TASKS.md`
+- `framework/SKILLS.md`
 - `framework/TEMPLATES/WORKSPACE/`
 - `framework/TEMPLATES/TASKS/`

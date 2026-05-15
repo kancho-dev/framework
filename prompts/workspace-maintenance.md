@@ -6,7 +6,7 @@ Use the framework from this workspace as Historian.
 
 Perform lightweight workspace maintenance for the requested focus, if any: $ARGUMENTS
 
-Default to documentation/state hygiene, not code changes. Read the framework-required base files, the Historian role, and the smallest relevant context.
+Default to documentation/state hygiene, not code changes. Read the framework-required base files, the Historian role, and the smallest relevant context. Load reference docs such as `WORKSPACE.md`, `TASKS.md`, or `SKILLS.md` only if they are needed.
 
 Use the relevant maintenance skills instead of improvising the flow:
 - use `self-check` for workspace-level coordination files, daily briefs, fixes, and repo-state hygiene;

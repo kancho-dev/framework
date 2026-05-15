@@ -83,7 +83,7 @@ Review any script before running it and follow `framework/SECURITY.md`.
    - `scripts/` for reviewed deterministic helpers
    - `artifacts/` for reusable examples, templates, or generated outputs
 7. Create or update `SKILLS/INDEX.md` so agents can discover the local skill.
-8. If the workspace `AGENTS.md` does not mention workspace-custom skills, add concise guidance to read `SKILLS/INDEX.md` when local skills may be relevant.
+8. If the workspace `AGENTS.md` does not mention workspace-custom skills or the current skill-discovery trigger, add concise guidance: check relevant skill indexes before improvising when the prompt names a skill-like workflow, asks to "check skills", or describes a repeatable framework procedure; then load only the selected `SKILL.md`.
 9. If the skill captures durable project knowledge, also update the relevant project `library/` files.
 10. Record the change in the daily brief or task run log when meaningful.
 
@@ -109,10 +109,12 @@ Review any script before running it and follow `framework/SECURITY.md`.
 - adding scripts when a short checklist is enough
 - shadowing a framework skill with a workspace skill of the same name
 - forgetting to update `SKILLS/INDEX.md`
+- adding always-read skill-index guidance instead of conditional skill-discovery trigger guidance
 
 ## Related Files / Tools
 
 - `SKILLS/INDEX.md`
 - `AGENTS.md`
 - `framework/SKILLS/INDEX.md`
+- `framework/SKILLS.md`
 - `framework/SECURITY.md`

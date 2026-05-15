@@ -1,49 +1,65 @@
 # Portable Agent Framework
 
-![Version](https://img.shields.io/badge/version-0.7.1-blue)
+![Version](https://img.shields.io/badge/version-0.8.0-blue)
 
-Minimal, agent-agnostic framework for AI-assisted software development.
+A minimal, agent-agnostic framework for keeping AI-assisted software development coherent across sessions, tasks, projects, and tools.
 
-## How To Use It
+The framework uses plain markdown files for active state, project knowledge, task handoffs, and lightweight review loops. Optional tools add search, session browsing, and native command shortcuts when you need them.
 
-Ask your coding agent to install the framework for you from the root of the workspace where you want to use it:
+## Quick Start
 
-```text
-Clone https://github.com/kancho-dev/framework.git into this workspace as `framework/`, then read `framework/INSTALLATION.md` and perform the initial framework setup for this workspace
-```
-
-After setup, use the framework by asking your agent for the outcome you want. For copy-friendly examples, see [`USAGE-PROMPTS.md`](USAGE-PROMPTS.md). For optional Pi/OpenCode native command integration, see [`COMMANDS.md`](COMMANDS.md).
-
-Useful starting prompts:
+From the root of the workspace where you want to use the framework, ask your coding agent:
 
 ```text
-Use the `next-best-actions` skill and tell me what we should do next
+Clone https://github.com/kancho-dev/framework.git into this workspace as `framework/`, then read `framework/INSTALLATION.md` and perform the initial framework setup for this workspace.
 ```
-
-```text
-Create a new project named X
-```
-
-```text
-Create a new task in project X for Y
-```
-
-You can ignore `memory-service/` unless markdown files are no longer enough for recall/search. The minimum setup uses plain markdown files and templates.
-
-Optional local tools live under [`tools/`](tools/). The first included tool is [`tools/session-browser/`](tools/session-browser/), a local read-only browser for Pi and OpenCode coding-agent sessions.
 
 For manual setup or adoption of an already-active workspace, read [`INSTALLATION.md`](INSTALLATION.md).
 
+After setup, ask for the outcome you want, for example:
+
+```text
+Use the `next-best-actions` skill and tell me what we should do next.
+```
+
+```text
+Create a new project named X.
+```
+
+```text
+Create a new task in project X for Y.
+```
+
+For more copy-friendly examples, see [`USAGE-PROMPTS.md`](USAGE-PROMPTS.md).
+
+## What The Framework Gives You
+
+- **Continuity across sessions** — important state is written to files instead of living only in chat history.
+- **Project-local knowledge** — plans, decisions, notes, research, and task state stay near the project they describe.
+- **Explicit task handoffs** — multi-session work can be resumed without reconstructing everything from memory.
+- **Role-based runs** — Overseer, Builder, Oracle, and Historian roles keep planning, execution, review, and cleanup distinct.
+- **Optional skills** — procedural playbooks are loaded only when relevant.
+- **Lightweight review loops** — Builder/Oracle flow gives meaningful work a concrete quality gate.
+- **Tool agnosticism** — the core is markdown-first and does not depend on one agent client, model vendor, or UI.
+
+## Minimum Mental Model
+
+The framework has three layers:
+
+1. **Core workflow** — markdown state, roles, task handoffs, security, and review.
+2. **Reference guidance** — installation, usage prompts, skills, task patterns, and workspace structure.
+3. **Optional extensions** — session browser, native command adapters, and memory service.
+
+You can start with only the core workflow. Add extensions only when they help your actual process.
+
 ## Intended Workspace Layout
 
-The framework is intended to live in the workspace root as `framework/`, next to the active workspace files.
+The framework is intended to live in the workspace root as `framework/`, next to active workspace files.
 
 Recommended shape:
 
 ```text
 workspace/
-  .gitignore
-  README.md
   AGENTS.md
   ACTIVE-CONTEXT.md
   OPERATOR-NOTES.md
@@ -60,151 +76,119 @@ workspace/
         research.md
         deliverables/
       work/
-        nx-013-build-pipeline/
+        task-slug/
           TASK.md
           HANDOFF.md
           CONTEXT.md
           runs/
-          analysis.md
       project/
   framework/
     FRAMEWORK.md
-    INSTALLATION.md
     SECURITY.md
     ENGINEERING.md
     ROLES/
-      OVERSEER.md
-      BUILDER.md
-      ORACLE.md
-      HISTORIAN.md
     SKILLS/
-      INDEX.md
-      update-framework/
-        SKILL.md
-      next-best-actions/
-        SKILL.md
-      task-pickup/
-        SKILL.md
-      review-and-test/
-        SKILL.md
-      memory-search/
-        SKILL.md
-      self-check/
-        SKILL.md
-      project-self-check/
-        SKILL.md
-      docs-sync/
-        SKILL.md
-      task-closure/
-        SKILL.md
     TEMPLATES/
-      TASKS/
-        TASK.md
-        HANDOFF.md
-        CONTEXT.md
-        RUN-LOG.md
-      WORKSPACE/
-        .gitignore
-        README.md
-        AGENTS.md
-        ACTIVE-CONTEXT.md
-        OPERATOR-NOTES.md
-        FIXES.md
-      SKILLS/
-        INDEX.md
     memory-service/
     tools/
-      session-browser/
 ```
 
-## What The Agent Should Read
+The default repository model keeps:
 
-At minimum, the agent should read:
-- `framework/FRAMEWORK.md`
-- `framework/SECURITY.md`
-- `framework/ENGINEERING.md`
-- the active role file under `framework/ROLES/`
+- the workspace root as the repo for workspace and project-coordination files;
+- `framework/` as its own nested repository;
+- `projects/[name]/project/` as the actual software project repository;
+- `projects/[name]/library/` and `projects/[name]/work/` in the workspace root repo by default.
 
-For first-time setup or adoption runs, use:
-- `framework/INSTALLATION.md`
+See [`INSTALLATION.md`](INSTALLATION.md) for repository-boundary and `.gitignore` guidance.
 
-For later framework-alignment runs in an already framework-managed workspace, also use:
-- `framework/SKILLS/update-framework/SKILL.md`
+## Core Workflow
 
-Then it should read the active workspace files from the root.
-`OPERATOR-NOTES.md` is used as a durable Operator-maintained list of human todos and ideas; agents should treat it as a reference file unless the workspace rules explicitly allow appending short Operator-action items.
-Load skills only when they are relevant to the current run. Use local-capability precedence: project-local skills/commands/instructions, then workspace-custom skills under root `SKILLS/`, then framework skills under `framework/SKILLS/`.
+Typical use looks like this:
 
-Project-local capabilities may be framework-native skills under `projects/[name]/SKILLS/`, tool-native skills/commands inside the project repo, or documented project workflows. Use them only when relevant to that project and supported by the current agent/tool. When skill choice is unclear, read only the relevant indexes/manifests needed to choose; then read only the selected skill files. Avoid same-name local skills unless the Operator explicitly wants an override. If confusion remains about which project, workspace, or framework skill to use, ask the Operator before executing the skill.
+1. Keep workspace direction in `ACTIVE-CONTEXT.md`.
+2. Keep durable project knowledge in `projects/[name]/library/`.
+3. Use `projects/[name]/work/[task-slug]/` for multi-session, delegated, risky, or review-heavy work.
+4. Use roles to clarify the run:
+   - **Overseer** — plan, route, prioritize, review direction.
+   - **Builder** — implement a bounded slice.
+   - **Oracle** — review and verify.
+   - **Historian** — clean up docs and state.
+5. Append meaningful progress to `memory/daily-brief-YYYY-MM-DD.md`.
+6. Use optional skills and tools only when they fit the run.
 
-If current markdown files are not enough to answer a specific context question, load `framework/SKILLS/memory-search/SKILL.md` and use the optional memory CLI under `framework/memory-service/` selectively (for example: `mem search`, `mem recent`, `mem sessions`, `mem lessons search`).
+## Optional Extensions
 
-When implementation work benefits from explicit review, use the Builder–Oracle loop rather than relying on vague completion claims.
+### Session Browser
 
-When uncertainty blocks progress, escalate one level up: worker → Overseer, Overseer → Operator.
+[`tools/session-browser/`](tools/session-browser/) is an optional but high-value local tool for browsing and searching Pi and OpenCode coding-agent sessions.
 
-## Task Directory Naming
+It can be useful both inside framework-managed workspaces and as a standalone session browser in other directories.
 
-Use a slug for each task directory.
+Quick start:
 
-Preferred pattern:
-- `[project-id]-[task-slug]`
+```bash
+cd framework/tools/session-browser
+npm start
+```
 
-Examples:
-- `nx-013-build-pipeline`
-- `api-auth-cleanup`
-- `docs-release-prep`
+Then open:
 
-Rules:
-- lowercase
-- words separated by `-`
-- keep it short and descriptive
-- include a project/task ID when one exists
+```text
+http://localhost:8787
+```
+
+Read [`tools/session-browser/README.md`](tools/session-browser/README.md) for setup, configuration, and safety details.
+
+### Native Commands
+
+[`prompts/`](prompts/) contains optional Pi/OpenCode-compatible command templates such as `/next-best-actions`, `/update-framework`, and `/workspace-maintenance`.
+
+Use [`COMMANDS.md`](COMMANDS.md) if you want native slash-command integration. The framework remains usable through normal prompts without these adapters.
+
+### Memory Service
+
+[`memory-service/`](memory-service/) is an optional searchable recall layer for older sessions, lessons, and imported agent history.
+
+Use it when curated markdown files are not enough for a specific context question. Markdown remains the source of truth for current state, policy, and task handoffs.
+
+## Documentation Map
+
+- [`INSTALLATION.md`](INSTALLATION.md) — first-time setup and existing-workspace adoption.
+- [`MIGRATIONS.md`](MIGRATIONS.md) — version-specific checks for updating existing framework-managed workspaces.
+- [`FRAMEWORK.md`](FRAMEWORK.md) — compact agent operating protocol.
+- [`WORKSPACE.md`](WORKSPACE.md) — workspace files, project structure, repository boundaries, and state placement.
+- [`TASKS.md`](TASKS.md) — micro/minimal/full tasks, task files, task patterns, and review loops.
+- [`SKILLS.md`](SKILLS.md) — skill resolution, local capability precedence, and skill format guidance.
+- [`SECURITY.md`](SECURITY.md) — command/setup safety rules.
+- [`ENGINEERING.md`](ENGINEERING.md) — implementation guidance for code and docs changes.
+- [`ROLES/`](ROLES/) — role instructions for Overseer, Builder, Oracle, and Historian.
+- [`SKILLS/`](SKILLS/) — optional procedural playbooks.
+- [`USAGE-PROMPTS.md`](USAGE-PROMPTS.md) — copy-friendly prompt examples.
+- [`COMMANDS.md`](COMMANDS.md) — optional native command integration.
+- [`memory-service/`](memory-service/) — optional searchable memory CLI/service.
+- [`tools/session-browser/`](tools/session-browser/) — optional local session browser.
 
 ## Design Principles
 
 1. Curated markdown is the source of truth for active work.
-2. Searchable memory is optional and supports recall, not policy.
+2. Searchable memory supports recall, not policy.
 3. Code and project knowledge stay together.
-4. Every task gets its own directory and handoff files, but task directories may also contain additional working files when useful.
+4. Use the smallest task structure that stays consistent.
 5. Tool-specific integrations belong in adapters, not in the framework core.
-6. Roles define mindset and scope; skills define optional procedural playbooks.
+6. Roles define mindset and scope; skills define optional procedures.
 7. Review loops and documentation hygiene should stay lightweight and explicit.
-8. Polished reusable project outputs may live under `projects/[name]/library/deliverables/` when that helps keep final artifacts separate from general notes.
 
-## Repository Boundaries
+## Contributing
 
-Recommended default repository model:
-- the workspace root is its own git repository for workspace and project-coordination files
-- `framework/` remains its own git repository
-- `projects/[name]/project/` is the actual software project and is expected to be its own git repository in the default setup
-- `projects/[name]/library/` and `projects/[name]/work/` belong to the workspace root repo by default
+Contributions are welcome when they keep the framework portable, lightweight, and safe to share.
 
-This keeps the coordination model lightweight while preserving a clean boundary for project code in the default setup.
+Before proposing a change:
 
-If you are adopting the framework into a non-empty workspace, use `framework/INSTALLATION.md` for the phased adoption path, repo-boundary checklist, and root `.gitignore` guidance.
+- prefer subtraction or simplification over adding new required process;
+- keep optional tooling clearly separate from the core workflow;
+- avoid committing private workspace state, secrets, transcripts, or client-specific details;
+- update related docs/templates when behavior changes;
+- include review evidence for meaningful code, tool, or instruction changes.
 
-If a team wants isolated git history for non-code coordination files too, separate per-project coordination repos are still possible as an advanced optional pattern rather than the default.
-
-Example root `.gitignore` for the default model:
-
-```gitignore
-# Nested framework repository
-framework/.git/
-framework/
-
-# Nested project code repositories in the default setup
-projects/*/project/.git/
-projects/*/project/
-
-# Keep the coordination tree visible to the workspace repo
-!projects/
-!projects/*/
-
-# Operator-maintained notes
-OPERATOR-NOTES.md
-
-# Tool-local workspace adapters and caches
-.pi/
-.opencode/
-```
+For substantial changes, open a focused task or issue first so the goal, scope, and acceptance criteria are clear.

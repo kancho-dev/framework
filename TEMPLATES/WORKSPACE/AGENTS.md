@@ -7,17 +7,16 @@ Operate from the workspace root.
 At the start of a main session, read:
 1. `framework/FRAMEWORK.md`
 2. `framework/SECURITY.md`
-3. `framework/ENGINEERING.md`
-4. `framework/ROLES/OVERSEER.md`
-5. `ACTIVE-CONTEXT.md`
-6. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief file present under `memory/` if any exist
+3. `framework/ROLES/OVERSEER.md`
+4. `ACTIVE-CONTEXT.md`
+5. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief file present under `memory/` if any exist
    - If today's brief does not exist and you later create it, carry forward only important unfinished items from the latest previous brief into a short top section before adding normal entries.
 
-Load skills only when they are relevant to the current run. Use local-capability precedence: project-local skills/commands/instructions, then workspace-custom skills under root `SKILLS/`, then framework skills under `framework/SKILLS/`.
+Before code or documentation implementation changes, also read `framework/ENGINEERING.md`.
 
-Project-local capabilities may be framework-native skills under `projects/[name]/SKILLS/`, tool-native skills/commands inside the project repo, or documented project workflows. Use them only when relevant to that project and supported by the current agent/tool. When skill choice is unclear, read only the relevant indexes/manifests needed to choose; then read only the selected skill files. Avoid creating same-name local skills unless an explicit override is intended; if a collision exists and intent is unclear, ask whether to rename the local skill or treat it as an override. If confusion remains about which project, workspace, or framework skill to use, ask the Operator before executing the skill. Do not read every skill by default.
+Load skills only when they are relevant to the current run. Check relevant skill indexes before improvising when the prompt names a skill-like workflow, asks to "check skills", or describes a repeatable framework procedure. Use local-capability precedence: project-local skills/commands/instructions, then workspace-custom skills under root `SKILLS/`, then framework skills under `framework/SKILLS/`. See `framework/SKILLS.md` for details.
 
-When working inside a task directory, then read the task files in the order defined by `framework/FRAMEWORK.md`.
+When working inside a task directory, read the task files in the order defined by `framework/FRAMEWORK.md`; use `framework/TASKS.md` when task structure or review guidance is needed.
 
 ## Workspace Rules
 

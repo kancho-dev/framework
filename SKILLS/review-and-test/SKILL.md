@@ -41,12 +41,14 @@ Verify whether work actually satisfies the intended outcome and acceptance crite
    - **Findings:** issues, risks, or confirmation
    - **Required fixes:** only when not approved
    - **Confidence:** high / medium / low
+7. For meaningful Oracle task reviews, keep the review as a separate Oracle task run when possible. If write-capable, record a run log, update task state, and append the daily brief unless the review is explicitly read-only/no-write.
 
 ## Outputs
 
 - a clear review verdict
 - evidence of what was checked
 - actionable fixes when bouncing work
+- durable review state for meaningful write-capable Oracle reviews
 
 ## Stop Conditions
 
@@ -59,9 +61,12 @@ Verify whether work actually satisfies the intended outcome and acceptance crite
 - vague feedback like "needs work"
 - silently expanding the task beyond its actual goal
 - claiming verification without actually checking
+- mixing meaningful Oracle review evidence into the Builder implementation run instead of a separate Oracle run when one is practical
 
 ## Related Files / Tools
 
+- `framework/TASKS.md`
 - `projects/[name]/work/[task-slug]/TASK.md`
-- `projects/[name]/work/[task-slug]/HANDOFF.md`
+- `projects/[name]/work/[task-slug]/HANDOFF.md` for full tasks
+- `projects/[name]/work/[task-slug]/runs/`
 - project tests/build commands

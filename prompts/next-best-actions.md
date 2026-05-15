@@ -4,7 +4,7 @@ argument-hint: "[focus]"
 ---
 Use the framework from this workspace as Overseer.
 
-Invoke the `next-best-actions` skill. Read only the framework-required base files and the smallest relevant workspace/project/task context needed for this request.
+Invoke the `next-best-actions` skill. Read only the framework-required base files and the smallest relevant workspace/project/task context needed for this request. Load reference docs such as `WORKSPACE.md`, `TASKS.md`, or `SKILLS.md` only if they are needed.
 
 Focus, if provided: $ARGUMENTS
 

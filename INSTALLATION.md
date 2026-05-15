@@ -5,7 +5,11 @@ Use this guide when setting up the framework in the current workspace.
 The goal is a clean, usable workspace setup, not a heavy installer.
 
 This is the main starting point for first-time adoption.
-`memory-service/`, `tools/`, and native command templates are optional and are not required for the basic framework workflow.
+`tools/`, native command templates, and `memory-service/` are optional and are not required for the basic framework workflow.
+
+For the compact operating protocol, read `framework/FRAMEWORK.md`. Load reference docs such as `framework/WORKSPACE.md`, `framework/TASKS.md`, and `framework/SKILLS.md` only when they are relevant.
+
+When updating an existing framework-managed workspace across versions, use `framework/SKILLS/update-framework/SKILL.md` and check `framework/MIGRATIONS.md` for version-specific migration notes.
 
 ## Supported Situations
 
@@ -20,6 +24,8 @@ Use this path when the current directory already contains projects and/or agent-
 Do not treat this as a separate complex mode system.
 Just adapt the same setup flow carefully.
 Incremental adoption is normal: a real workspace may move into the framework in phases rather than all at once.
+
+If the workspace is already framework-managed and is being updated from an older framework version, check `framework/MIGRATIONS.md` before changing workspace-owned instructions, local skills, prompt copies, or task guidance.
 
 ## Core Rules
 
@@ -109,10 +115,18 @@ Use templates under `framework/TEMPLATES/`.
 
 ### Task files
 
+For minimal trackable tasks:
+
+- compact `TASK.md` → `framework/TEMPLATES/TASKS/MINIMAL-TASK.md`
+
+For full tasks:
+
 - `TASK.md` → `framework/TEMPLATES/TASKS/TASK.md`
 - `HANDOFF.md` → `framework/TEMPLATES/TASKS/HANDOFF.md`
 - `CONTEXT.md` → `framework/TEMPLATES/TASKS/CONTEXT.md`
 - run log entry → `framework/TEMPLATES/TASKS/RUN-LOG.md`
+
+See `framework/TASKS.md` for when to use micro, minimal, or full task tracking.
 
 ## Optional Native Commands
 

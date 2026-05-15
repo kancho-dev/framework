@@ -15,7 +15,7 @@ Each framework command should specify:
 - **safety**: approval gates for edits, commands, risky operations, or ambiguous merges;
 - **output**: the expected summary or artifact.
 
-Prefer prompts that tell the agent to follow `framework/FRAMEWORK.md`, `framework/SECURITY.md`, and `framework/ENGINEERING.md` rather than duplicating the whole framework in every command.
+Prefer prompts that tell the agent to follow `framework/FRAMEWORK.md` and `framework/SECURITY.md`, plus `framework/ENGINEERING.md` before implementation changes, rather than duplicating the whole framework in every command.
 
 ## First Command Set
 
