@@ -2,23 +2,12 @@
 
 ## Current State
 
-[State what currently works, what is in progress, and what remains unresolved.]
+[What is true now.]
 
-## Last Session
+## Next Action
 
-[Summarize what was just done.]
+[What the next run should do first.]
 
-## Next Steps
+## Blockers / Watch Outs
 
-- [Highest-priority next action]
-- [Next action]
-
-## Watch Out For
-
-- [Blocker, risk, dependency, or gotcha]
-
-## Instructions To The Next Agent
-
-1. Start with the highest-priority unfinished next step.
-2. Re-check the relevant code before changing it.
-3. Update this handoff before ending the session.
+[None, or what blocks progress / could surprise the next agent.]

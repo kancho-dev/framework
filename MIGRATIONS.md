@@ -11,7 +11,7 @@ For the update procedure, use `framework/SKILLS/update-framework/SKILL.md`.
 This release reduces the always-read core and moves detailed guidance out of `FRAMEWORK.md` into focused reference docs:
 
 - `WORKSPACE.md` — workspace/project layout and state placement.
-- `TASKS.md` — micro/minimal/full tasks, task files, review loops, and task closure.
+- `TASKS.md` — micro tasks, tracked task directories, task files, review loops, and task closure.
 - `SKILLS.md` — skill discovery, precedence, index format, collisions, and optional resources.
 
 Existing full-task workspaces remain compatible. Minimal and micro task guidance is additive.
@@ -33,15 +33,15 @@ Existing full-task workspaces remain compatible. Minimal and micro task guidance
 
    Look for old assumptions such as:
    - `ENGINEERING.md` as always-read for every session;
-   - every task directory requiring `HANDOFF.md` and `CONTEXT.md`;
+   - older local experiments with non-standard task directory shapes;
    - detailed task/workspace/skill rules living only in `FRAMEWORK.md`;
    - skill indexes acting as mini manuals rather than routing tables;
    - Oracle reviews being mixed into Builder implementation runs instead of recorded as separate Oracle task runs when meaningful.
 
-3. **Do not restructure existing task directories just for this update.**
-   - Existing full tasks with `TASK.md`, `HANDOFF.md`, `CONTEXT.md`, and `runs/` remain valid.
-   - Minimal tasks are available for new simple trackable work.
-   - Promote minimal tasks to full tasks only when the work becomes multi-session, delegated, blocked, risky, review-heavy, or rich in stable context.
+3. **Keep the standard task-directory invariant.**
+   - Existing tracked tasks with `TASK.md`, `HANDOFF.md`, `CONTEXT.md`, and `runs/` remain valid.
+   - New task directories should use the same standard shape.
+   - Tiny one-run work can stay micro with no task directory and a daily brief / active-state update only when meaningful.
 
 ### Recommended checks
 
@@ -52,6 +52,6 @@ Existing full-task workspaces remain compatible. Minimal and micro task guidance
 
 ### Not required
 
-- No migration is needed for existing full task directories.
+- No migration is needed for existing standard task directories.
 - No optional tool setup is required. `tools/session-browser/`, native command adapters, and `memory-service/` remain optional.
-- No local skill rewrite is needed unless the skill encodes stale read order, stale task structure, or moved documentation references.
+- No local skill rewrite is needed unless the skill encodes stale read order, non-standard task structure, or moved documentation references.

@@ -67,6 +67,6 @@ Verify whether work actually satisfies the intended outcome and acceptance crite
 
 - `framework/TASKS.md`
 - `projects/[name]/work/[task-slug]/TASK.md`
-- `projects/[name]/work/[task-slug]/HANDOFF.md` for full tasks
+- `projects/[name]/work/[task-slug]/HANDOFF.md`
 - `projects/[name]/work/[task-slug]/runs/`
 - project tests/build commands

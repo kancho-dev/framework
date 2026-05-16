@@ -94,7 +94,7 @@ If the correct skill or scope remains unclear, ask the Operator before executing
 This core file intentionally stays short. Load details only when needed:
 
 - `framework/WORKSPACE.md` — workspace files, project structure, repository boundaries, what-goes-where.
-- `framework/TASKS.md` — micro/minimal/full tasks, task files, task patterns, separate Builder–Oracle runs, review result shape.
+- `framework/TASKS.md` — micro and tracked tasks, task files, task patterns, separate Builder–Oracle runs, review result shape.
 - `framework/SKILLS.md` — skill locations, routing indexes, precedence, collisions, optional resources/scripts.
 
 ## Escalation Flow

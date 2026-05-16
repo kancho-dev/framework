@@ -158,7 +158,7 @@ Use it when curated markdown files are not enough for a specific context questio
 - [`MIGRATIONS.md`](MIGRATIONS.md) — version-specific checks for updating existing framework-managed workspaces.
 - [`FRAMEWORK.md`](FRAMEWORK.md) — compact agent operating protocol.
 - [`WORKSPACE.md`](WORKSPACE.md) — workspace files, project structure, repository boundaries, and state placement.
-- [`TASKS.md`](TASKS.md) — micro/minimal/full tasks, task files, task patterns, and review loops.
+- [`TASKS.md`](TASKS.md) — micro and tracked tasks, task files, task patterns, and review loops.
 - [`SKILLS.md`](SKILLS.md) — skill resolution, local capability precedence, and skill format guidance.
 - [`SECURITY.md`](SECURITY.md) — command/setup safety rules.
 - [`ENGINEERING.md`](ENGINEERING.md) — implementation guidance for code and docs changes.

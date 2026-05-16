@@ -21,48 +21,21 @@ Durable trace:
 - append the daily brief when the work is meaningful;
 - update `ACTIVE-CONTEXT.md` when priorities, blockers, or direction change.
 
-If future task-browser tooling needs complete visibility, micro tasks can later be represented in a lightweight index without forcing every small action into a full task directory.
+Micro tasks are intentionally lightweight. If future task-browser tooling needs complete visibility for tiny work, add a lightweight index later rather than forcing every small action into a task directory now.
 
-### Minimal task
+### Tracked task
 
-Simple trackable work that benefits from a task directory but not the full handoff/context structure yet.
+Use a task directory when work needs durable task state, handoff, review evidence, or future visibility.
 
-Initial structure:
+Use for:
 
-```text
-projects/[name]/work/[task-slug]/
-  TASK.md
-  runs/
-```
+- multi-session work;
+- delegated work;
+- risky or review-loop work;
+- durable project work;
+- work that should appear in task/project tooling.
 
-Initialize from `framework/TEMPLATES/TASKS/MINIMAL-TASK.md` or use a compact `TASK.md` with:
-
-```markdown
-# [Task Name]
-
-Status: open | active | blocked | done
-Type: minimal
-
-## Goal
-
-[What should be accomplished.]
-
-## Next
-
-[Current next action.]
-
-## Result / Notes
-
-[Short durable notes or final result.]
-```
-
-Promote a minimal task to a full task when it becomes multi-session, delegated, blocked, risky, review-heavy, or rich in stable context.
-
-### Full task
-
-Use for multi-session, delegated, risky, review-loop, or durable project work.
-
-Full task structure:
+Task directory structure:
 
 ```text
 projects/[name]/work/[task-slug]/
@@ -72,14 +45,16 @@ projects/[name]/work/[task-slug]/
   runs/
 ```
 
-Initialize full task files from:
+Initialize task files from:
 
 - `framework/TEMPLATES/TASKS/TASK.md`
 - `framework/TEMPLATES/TASKS/HANDOFF.md`
 - `framework/TEMPLATES/TASKS/CONTEXT.md`
 - `framework/TEMPLATES/TASKS/RUN-LOG.md`
 
-## Full Task Files
+Keep `HANDOFF.md` and `CONTEXT.md` as short as possible, but not shorter than needed for safe continuation. Add detail only when it improves handoff, stable context, or review evidence.
+
+## Task Files
 
 ### `TASK.md`
 
@@ -89,9 +64,17 @@ Static instructions for the task: purpose, scope, desired outcome, constraints, 
 
 Current operational state. Update before ending a task session.
 
+Keep it focused on what the next run needs immediately:
+
+- current state;
+- next action;
+- blockers or watch-outs.
+
 ### `CONTEXT.md`
 
 Stable facts that should survive across sessions. Do not put temporary status here.
+
+Keep it concise. Add durable facts, decisions, constraints, references, or background only when they matter beyond the current run.
 
 ### `runs/`
 

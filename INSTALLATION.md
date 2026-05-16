@@ -115,18 +115,14 @@ Use templates under `framework/TEMPLATES/`.
 
 ### Task files
 
-For minimal trackable tasks:
-
-- compact `TASK.md` → `framework/TEMPLATES/TASKS/MINIMAL-TASK.md`
-
-For full tasks:
+For tracked tasks:
 
 - `TASK.md` → `framework/TEMPLATES/TASKS/TASK.md`
 - `HANDOFF.md` → `framework/TEMPLATES/TASKS/HANDOFF.md`
 - `CONTEXT.md` → `framework/TEMPLATES/TASKS/CONTEXT.md`
 - run log entry → `framework/TEMPLATES/TASKS/RUN-LOG.md`
 
-See `framework/TASKS.md` for when to use micro, minimal, or full task tracking.
+See `framework/TASKS.md` for when to use micro tasks or tracked task directories.
 
 ## Optional Native Commands
 
