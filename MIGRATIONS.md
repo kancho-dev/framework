@@ -14,7 +14,7 @@ This release reduces the always-read core and moves detailed guidance out of `FR
 - `TASKS.md` — micro tasks, tracked task directories, task files, review loops, and task closure.
 - `SKILLS.md` — skill discovery, precedence, index format, collisions, and optional resources.
 
-Existing full-task workspaces remain compatible. Minimal and micro task guidance is additive.
+Existing standard tracked-task workspaces remain compatible. Micro-task guidance is additive.
 
 ### Required checks
 
