@@ -54,13 +54,15 @@ async function discoverTasks() {
       const taskDir = join(workDir, taskEntry.name);
       const taskPath = join(taskDir, 'TASK.md');
       if (!(await exists(taskPath))) continue;
-      const [taskText, handoffText, contextText, runs] = await Promise.all([
+      const handoffPath = join(taskDir, 'HANDOFF.md');
+      const [taskText, handoffText, contextText, runs, handoffStat] = await Promise.all([
         readFile(taskPath, 'utf8').catch(() => ''),
-        readFile(join(taskDir, 'HANDOFF.md'), 'utf8').catch(() => ''),
+        readFile(handoffPath, 'utf8').catch(() => ''),
         readFile(join(taskDir, 'CONTEXT.md'), 'utf8').catch(() => ''),
         summarizeRuns(join(taskDir, 'runs')),
+        stat(handoffPath).catch(() => null),
       ]);
-      tasks.push(summarizeTask(projectEntry.name, taskEntry.name, taskDir, taskText, handoffText, contextText, runs));
+      tasks.push(summarizeTask(projectEntry.name, taskEntry.name, taskDir, taskText, handoffText, contextText, runs, handoffStat));
     }
   }
   return tasks.sort((a, b) => a.key.localeCompare(b.key));
@@ -70,9 +72,10 @@ async function safeReadDir(path) {
   try { return await readdir(path, { withFileTypes: true }); } catch { return []; }
 }
 
-function summarizeTask(project, slug, taskDir, taskText, handoffText, contextText, runs) {
+function summarizeTask(project, slug, taskDir, taskText, handoffText, contextText, runs, handoffStat) {
   const relPath = relativePath(taskDir);
   const title = firstHeading(taskText) || slug;
+  const latestRunAt = runTimestamp(runs[0]?.file) || handoffStat?.mtime?.toISOString() || null;
   return {
     key: `${project}/${slug}`,
     project,
@@ -81,8 +84,11 @@ function summarizeTask(project, slug, taskDir, taskText, handoffText, contextTex
     title,
     purpose: sectionText(taskText, 'Purpose'),
     success: sectionText(taskText, 'Success Criteria') || sectionText(taskText, 'Acceptance Criteria'),
+    nextSteps: sectionText(handoffText, 'Next Action') || sectionText(handoffText, 'Next Steps'),
     handoff: sectionText(handoffText, 'Current State') || excerpt(handoffText, 900),
     context: excerpt(contextText.replace(/^# .+$/m, '').trim(), 900),
+    latestRunAt,
+    hasRunLogs: runs.length > 0,
     runs,
     files: {
       task: `${relPath}/TASK.md`,
@@ -170,6 +176,7 @@ async function syncMetadata(discovered) {
       children: arrayOfStrings(existing.children),
       related: arrayOfStrings(existing.related),
       tags: arrayOfStrings(existing.tags),
+      order: Number.isFinite(existing.order) ? existing.order : null,
     };
   }
   for (const [key, task] of Object.entries(metadata.tasks)) {
@@ -197,6 +204,11 @@ function runTitle(fileName, heading) {
   return `${date} ${time.slice(0, 2)}:${time.slice(2)} — ${label}`;
 }
 
+function runTimestamp(fileName) {
+  const match = String(fileName || '').match(/^(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})-/);
+  return match ? `${match[1]}T${match[2]}:${match[3]}:00.000Z` : null;
+}
+
 function inferType(task) {
   const text = `${task.slug} ${task.title}`.toLowerCase();
   if (text.includes('review')) return 'review';
@@ -222,10 +234,45 @@ async function taskPayload() {
   return { workspaceRoot: WORKSPACE_ROOT, workspaceName: basename(WORKSPACE_ROOT), metadataPath: METADATA_PATH, statuses: STATUSES, priorities: PRIORITIES, tasks, missing };
 }
 
+async function updateTaskMetadata(key, patch) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw Object.assign(new Error('Invalid metadata patch'), { statusCode: 400 });
+  const discovered = await discoverTasks();
+  if (!discovered.some((task) => task.key === key)) throw Object.assign(new Error('Unknown task'), { statusCode: 404 });
+  const metadata = await syncMetadata(discovered);
+  const current = metadata.tasks[key] || {};
+  const next = { ...current };
+  if ('status' in patch) next.status = valid(patch.status, STATUSES, current.status || 'planned');
+  if ('priority' in patch) next.priority = valid(patch.priority, PRIORITIES, current.priority || 'normal');
+  if ('type' in patch) next.type = typeof patch.type === 'string' && patch.type.trim() ? patch.type.trim() : current.type;
+  if ('tags' in patch) next.tags = arrayOfStrings(patch.tags);
+  if ('order' in patch) next.order = patch.order === null || patch.order === '' ? null : Number(patch.order);
+  if (!Number.isFinite(next.order)) next.order = null;
+  metadata.tasks[key] = next;
+  await writeMetadata(metadata);
+  return next;
+}
+
+async function readJsonBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  if (chunks.reduce((total, chunk) => total + chunk.length, 0) > 64_000) throw Object.assign(new Error('Request too large'), { statusCode: 413 });
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+  } catch {
+    throw Object.assign(new Error('Invalid JSON'), { statusCode: 400 });
+  }
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname === '/api/tasks') return sendJson(res, 200, await taskPayload());
+    if (url.pathname === '/api/task-metadata' && req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return sendJson(res, 400, { error: 'Invalid request body' });
+      if (typeof body.key !== 'string' || !body.key) return sendJson(res, 400, { error: 'Missing task key' });
+      return sendJson(res, 200, { metadata: await updateTaskMetadata(body.key, body.metadata) });
+    }
     const filePath = url.pathname === '/' ? join(PUBLIC_DIR, 'index.html') : join(PUBLIC_DIR, decodeURIComponent(url.pathname));
     const resolved = resolve(filePath);
     if (!resolved.startsWith(`${PUBLIC_DIR}/`) && resolved !== join(PUBLIC_DIR, 'index.html')) return sendJson(res, 403, { error: 'Forbidden' });
@@ -233,7 +280,7 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': mime.get(extname(resolved)) || 'application/octet-stream' });
     createReadStream(resolved).pipe(res);
   } catch (error) {
-    sendJson(res, 500, { error: safeError(error) });
+    sendJson(res, error?.statusCode || 500, { error: safeError(error) });
   }
 });
 
