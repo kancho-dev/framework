@@ -1,0 +1,15 @@
+node_modules/
+.cache/
+.tmp/
+tmp/
+dist/
+build/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task Browser</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="browse-mode">
+  <main id="app">
+    <section class="tasks-pane">
+      <header>
+        <div class="brand">
+          <img class="brand-logo" src="/icon.svg" alt="" width="38" height="38">
+          <h1>Task Browser <span id="workspace-name" class="workspace-badge"></span></h1>
+        </div>
+        <div class="header-actions">
+          <label class="auto-refresh"><input id="auto-refresh" type="checkbox" checked> Auto 10s</label>
+          <button id="refresh">Refresh</button>
+        </div>
+      </header>
+      <div class="filters">
+        <input id="filter" placeholder="Search ID, title, project, tags…" autofocus>
+        <div class="quick-filters">
+          <select id="project-filter"><option value="all">All projects</option></select>
+          <select id="priority-filter"><option value="all">All priorities</option></select>
+          <button id="clear-filters">Clear</button>
+        </div>
+        <fieldset class="status-filters" id="status-filter"></fieldset>
+      </div>
+      <p id="status" class="status">Loading…</p>
+      <div id="board" class="board"></div>
+    </section>
+    <section class="detail-pane hidden" id="detail-pane">
+      <article id="detail" class="detail">
+        <div class="detail-header">
+          <button id="close-detail" class="close-detail" title="Close details">×</button>
+          <p class="eyebrow" id="detail-key"></p>
+          <h2 id="detail-title"></h2>
+          <div id="detail-meta" class="meta-row"></div>
+          <div class="detail-actions prompt-action"><button id="copy-resume">Copy task prompt</button><span id="prompt-preview" class="prompt-preview"></span></div>
+        </div>
+        <div class="detail-body">
+          <section><h3>Run timeline</h3><div id="detail-runs" class="run-timeline"></div></section>
+          <section><h3>Resume</h3><ul id="resume-files"></ul></section>
+          <section><h3>Current handoff</h3><p id="detail-handoff"></p></section>
+          <section><h3>Purpose</h3><p id="detail-purpose"></p></section>
+          <section><h3>Success / Acceptance</h3><p id="detail-success"></p></section>
+        </div>
+      </article>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
