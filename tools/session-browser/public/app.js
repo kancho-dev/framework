@@ -292,19 +292,24 @@ function renderOldNewDiff(oldText = '', newText = '') {
   return `${oldLines}${newLines}`;
 }
 
+function detailKeyAttr(key) {
+  return ` data-detail-key="${escapeHtml(key)}"`;
+}
+
 function renderToolExpandedContent(call, result, resultText) {
   const args = call.arguments || {};
+  const keyBase = `tool:${call.id || call.name}`;
   if (call.name === 'todowrite') {
     const todosHtml = renderTodos(call.result || args.input || args.todos || '');
-    if (todosHtml) return `<details><summary>todos</summary>${todosHtml}</details>`;
+    if (todosHtml) return `<details${detailKeyAttr(`${keyBase}:todos`)}><summary>todos</summary>${todosHtml}</details>`;
   }
   if (call.name === 'write' && typeof args.content === 'string') {
-    return `<details><summary>written content</summary><pre>${escapeHtml(args.content)}</pre>${resultText ? `<pre>${escapeHtml(resultText)}</pre>` : ''}</details>`;
+    return `<details${detailKeyAttr(`${keyBase}:write`)}><summary>written content</summary><pre>${escapeHtml(args.content)}</pre>${resultText ? `<pre>${escapeHtml(resultText)}</pre>` : ''}</details>`;
   }
   if (call.name === 'edit') {
     const diff = result?.details?.diff;
     if (typeof diff === 'string' && diff.trim()) {
-      return `<details><summary>diff</summary><div class="diff">${renderDiffText(diff)}</div>${resultText ? `<pre>${escapeHtml(resultText)}</pre>` : ''}</details>`;
+      return `<details${detailKeyAttr(`${keyBase}:diff`)}><summary>diff</summary><div class="diff">${renderDiffText(diff)}</div>${resultText ? `<pre>${escapeHtml(resultText)}</pre>` : ''}</details>`;
     }
     const oldText = typeof args.oldText === 'string' ? args.oldText : undefined;
     const newText = typeof args.newText === 'string' ? args.newText : undefined;
@@ -312,10 +317,10 @@ function renderToolExpandedContent(call, result, resultText) {
     const editHtml = edits.length
       ? edits.map((edit, index) => `<h4>edit ${index + 1}</h4><div class="diff">${renderOldNewDiff(edit.oldText || '', edit.newText || '')}</div>`).join('')
       : `<div class="diff">${renderOldNewDiff(oldText || '', newText || '')}</div>`;
-    return `<details><summary>edit content</summary>${editHtml}${resultText ? `<pre>${escapeHtml(resultText)}</pre>` : ''}</details>`;
+    return `<details${detailKeyAttr(`${keyBase}:edit`)}><summary>edit content</summary>${editHtml}${resultText ? `<pre>${escapeHtml(resultText)}</pre>` : ''}</details>`;
   }
-  const diffHtml = Array.isArray(call.diffs) && call.diffs.length ? renderDiffSummary(call.diffs) : '';
-  return `${resultText ? `<details><summary>result ${result?.isError ? '<span class="error">error</span>' : ''}</summary><pre>${escapeHtml(resultText)}</pre></details>` : ''}${diffHtml}`;
+  const diffHtml = Array.isArray(call.diffs) && call.diffs.length ? renderDiffSummary(call.diffs, `${keyBase}:diffs`) : '';
+  return `${resultText ? `<details${detailKeyAttr(`${keyBase}:result`)}><summary>result ${result?.isError ? '<span class="error">error</span>' : ''}</summary><pre>${escapeHtml(resultText)}</pre></details>` : ''}${diffHtml}`;
 }
 
 function parseMaybeJson(value) {
@@ -345,11 +350,11 @@ function renderTodos(value) {
   }).join('')}</ol>`;
 }
 
-function renderDiffSummary(diffs) {
+function renderDiffSummary(diffs, detailKey = 'diff-summary') {
   const additions = diffs.reduce((sum, diff) => sum + (diff.additions || 0), 0);
   const deletions = diffs.reduce((sum, diff) => sum + (diff.deletions || 0), 0);
   const fileCount = new Set(diffs.map((diff) => diff.file)).size;
-  return `<details class="patch-block"><summary>diff · ${fileCount} ${fileCount === 1 ? 'file' : 'files'} · +${additions}/-${deletions}</summary>${renderDiffBodies(diffs)}</details>`;
+  return `<details class="patch-block"${detailKeyAttr(detailKey)}><summary>diff · ${fileCount} ${fileCount === 1 ? 'file' : 'files'} · +${additions}/-${deletions}</summary>${renderDiffBodies(diffs)}</details>`;
 }
 
 function renderDiffBodies(diffs) {
@@ -381,7 +386,7 @@ function renderPatchBlock(block) {
   const body = diffs.length
     ? renderDiffBodies(diffs)
     : `<pre>${escapeHtml(files.join('\n') || 'Patch details unavailable')}</pre>`;
-  return `<details class="patch-block"><summary>patch · ${escapeHtml(title)}</summary>${body}</details>`;
+  return `<details class="patch-block"${detailKeyAttr(`patch:${block.id || files.join('|') || title}`)}><summary>patch · ${escapeHtml(title)}</summary>${body}</details>`;
 }
 
 function modeBadge(mode) {
@@ -398,7 +403,7 @@ function renderEntry(entry, allEntries) {
     const hasText = blocks.some((block) => block.type === 'text' && block.text?.trim());
     const html = blocks.map((block) => {
       if (block.type === 'text') return renderAssistantText(block.text || '');
-      if (block.type === 'thinking') return `<details class="thinking"><summary>thinking</summary><pre>${escapeHtml(block.thinking)}</pre></details>`;
+      if (block.type === 'thinking') return `<details class="thinking"${detailKeyAttr(`thinking:${entry.id}`)}><summary>thinking</summary><pre>${escapeHtml(block.thinking)}</pre></details>`;
       if (block.type === 'toolCall') return renderToolCall(block, allEntries);
       if (block.type === 'patch') return renderPatchBlock(block);
       return '';
@@ -456,8 +461,12 @@ function renderSelectedDetail() {
   els.topics.innerHTML = detail.topicAnchors.map((anchor) => `
     <li><a href="#entry-${escapeHtml(anchor.id)}">${anchor.depth === 'first-prompt' ? '★ ' : ''}${escapeHtml(anchor.title)}</a></li>
   `).join('');
+  const openDetails = new Set(Array.from(els.messages.querySelectorAll('details[data-detail-key][open]')).map((node) => node.dataset.detailKey));
   els.messages.classList.toggle('hide-tools', !els.showTools.checked);
   els.messages.innerHTML = detail.activeEntries.map((entry) => renderEntry(entry, detail.entries)).join('');
+  for (const node of els.messages.querySelectorAll('details[data-detail-key]')) {
+    if (openDetails.has(node.dataset.detailKey)) node.open = true;
+  }
 }
 
 function renderLabelEditor(detail) {
