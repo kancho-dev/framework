@@ -16,3 +16,4 @@ OPERATOR-NOTES.md
 # Tool-local workspace adapters and caches
 .pi/
 .opencode/
+.task-browser/

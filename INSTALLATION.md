@@ -140,6 +140,26 @@ Detailed Pi and OpenCode setup options are documented in `framework/COMMANDS.md`
 
 Native commands are convenience adapters only. The framework remains usable through normal prompts.
 
+## Optional Task Browser Tool
+
+The framework includes an optional local task browser under:
+
+```text
+framework/tools/task-browser/
+```
+
+It is a local web tool for browsing tracked task directories under `projects/*/work/*/`, viewing status/priority/type/tag metadata, and resuming task work from handoff and run-log context.
+
+It writes task-browser-owned workflow metadata to `.task-browser/tasks.json` by default. Keep that file private unless the workspace's task metadata is intended to be shared.
+
+Safety:
+
+- the tool is local-only;
+- it reads framework task markdown from the configured workspace;
+- it writes only the task-browser metadata JSON file;
+- task names, paths, tags, and handoff text can reveal private work details;
+- for full setup/use details, read `framework/tools/task-browser/README.md`.
+
 ## Optional Session Browser Tool
 
 The framework includes an optional local session browser under:
@@ -188,7 +208,7 @@ Safety:
 
 - if missing, create from the template
 - if present, merge the framework-related ignore rules into it rather than replacing unrelated local rules
-- by default, ignore the nested `framework/` repository, nested `projects/[name]/project/` repositories, `OPERATOR-NOTES.md`, and tool-local adapter/cache directories such as `.pi/` and `.opencode/`
+- by default, ignore the nested `framework/` repository, nested `projects/[name]/project/` repositories, `OPERATOR-NOTES.md`, and tool-local adapter/cache directories such as `.pi/`, `.opencode/`, and `.task-browser/`
 - do not ignore `projects/[name]/library/` or `projects/[name]/work/` in the default model; those belong to the workspace root repo
 - check this early in an existing-workspace adoption; it is one of the easiest places to make the workspace awkward by accident
 - if the workspace is in a mixed migration state, make sure the ignore rules still match the real nested-repo boundaries instead of assuming every project is already organized identically
@@ -214,6 +234,7 @@ OPERATOR-NOTES.md
 # Tool-local workspace adapters and caches
 .pi/
 .opencode/
+.task-browser/
 ```
 
 ### `README.md`

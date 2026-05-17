@@ -1,6 +1,6 @@
 # Portable Agent Framework
 
-![Version](https://img.shields.io/badge/version-0.8.0-blue)
+![Version](https://img.shields.io/badge/version-0.9.0-blue)
 
 A minimal, agent-agnostic framework for keeping AI-assisted software development coherent across sessions, tasks, projects, and tools.
 
@@ -48,7 +48,7 @@ The framework has three layers:
 
 1. **Core workflow** — markdown state, roles, task handoffs, security, and review.
 2. **Reference guidance** — installation, usage prompts, skills, task patterns, and workspace structure.
-3. **Optional extensions** — session browser, native command adapters, and memory service.
+3. **Optional extensions** — session browser, task browser, native command adapters, and memory service.
 
 You can start with only the core workflow. Add extensions only when they help your actual process.
 
@@ -140,6 +140,14 @@ http://localhost:8787
 
 Read [`tools/session-browser/README.md`](tools/session-browser/README.md) for setup, configuration, and safety details.
 
+### Task Browser
+
+[`tools/task-browser/`](tools/task-browser/) is an optional local tool for browsing tracked task directories across workspace projects.
+
+It reads framework task markdown, stores task-browser-owned workflow metadata in `.task-browser/tasks.json`, and provides a kanban-lite view, task detail drawer, run timeline, filters, and copyable task-pickup prompts.
+
+Read [`tools/task-browser/README.md`](tools/task-browser/README.md) for setup, metadata, configuration, and safety details.
+
 ### Native Commands
 
 [`prompts/`](prompts/) contains optional Pi/OpenCode-compatible command templates such as `/next-best-actions`, `/update-framework`, and `/workspace-maintenance`.
@@ -168,6 +176,7 @@ Use it when curated markdown files are not enough for a specific context questio
 - [`COMMANDS.md`](COMMANDS.md) — optional native command integration.
 - [`memory-service/`](memory-service/) — optional searchable memory CLI/service.
 - [`tools/session-browser/`](tools/session-browser/) — optional local session browser.
+- [`tools/task-browser/`](tools/task-browser/) — optional local task browser.
 
 ## Design Principles
 
