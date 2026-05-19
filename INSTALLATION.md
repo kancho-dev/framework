@@ -150,7 +150,7 @@ framework/tools/task-browser/
 
 It is a local web tool for browsing tracked task directories under `projects/*/work/*/`, viewing status/priority/type/tag metadata, and resuming task work from handoff and run-log context.
 
-It writes task-browser-owned workflow metadata to `.task-browser/tasks.json` by default. Keep that file private unless the workspace's task metadata is intended to be shared.
+It writes task-browser-owned workflow metadata to `.task-browser/tasks.json` by default. Keep that file private unless the workspace's task metadata is intended to be shared. If a workspace uses task-browser, agents should keep this metadata aligned with task state using the browser UI or `framework/tools/task-browser/metadata-cli.mjs`; do not create or require this metadata in workspaces that have not adopted task-browser.
 
 Safety:
 

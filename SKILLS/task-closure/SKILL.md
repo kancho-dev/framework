@@ -36,7 +36,8 @@ Close or pause a tracked task cleanly by making sure its final state is reflecte
 4. Move durable findings into project `library/` files or `FIXES.md` when needed.
 5. Check whether the task status or outcome should be reflected in `ACTIVE-CONTEXT.md`.
 6. Verify that meaningful runs and outcomes from the task have been recorded in the daily brief.
-7. Write a final or intermediate run log that makes the task state obvious to the next session.
+7. If the workspace uses task-browser metadata, align the task's metadata with the closure state using `framework/tools/task-browser/metadata-cli.mjs`: `done` for accepted closure, `paused` for deliberate deferral, `blocked` only for concrete blockers, and `review` when closure still awaits review.
+8. Write a final or intermediate run log that makes the task state obvious to the next session.
 
 ## Outputs
 
@@ -45,12 +46,14 @@ Close or pause a tracked task cleanly by making sure its final state is reflecte
 - stable task facts in `CONTEXT.md` when needed
 - durable knowledge moved into the right long-lived files
 - daily brief coverage for meaningful task work
+- task-browser metadata aligned when the workspace uses task-browser
 
 ## Stop Conditions
 
 - the next session can tell whether the task is complete, paused, blocked, or still active
 - no important task outcome is trapped only in chat or stale task text
 - meaningful work from the closure slice is reflected in the daily brief
+- task-browser metadata, when used, does not contradict the task files
 
 ## Pitfalls / Anti-Patterns
 
@@ -59,6 +62,7 @@ Close or pause a tracked task cleanly by making sure its final state is reflecte
 - putting temporary status in `CONTEXT.md`
 - leaving durable findings only in task files
 - forgetting to log meaningful task outcomes in the daily brief
+- closing or pausing a task while task-browser metadata still shows the old state
 
 ## Related Files / Tools
 
@@ -68,3 +72,4 @@ Close or pause a tracked task cleanly by making sure its final state is reflecte
 - `ACTIVE-CONTEXT.md`
 - `memory/daily-brief-YYYY-MM-DD.md`
 - `FIXES.md`
+- `framework/tools/task-browser/metadata-cli.mjs` when task-browser metadata is used

@@ -6,6 +6,22 @@ These notes are version-specific checks, not a permanent setup checklist. Apply 
 
 For the update procedure, use `framework/SKILLS/update-framework/SKILL.md`.
 
+## v0.9.1 — Task-browser Metadata CLI And Hygiene
+
+This release promotes the task-browser tool package to `1.0.0` and adds a metadata CLI plus conditional metadata-hygiene guidance.
+
+### Required checks
+
+1. If the workspace uses task-browser, keep `.task-browser/tasks.json` aligned with tracked-task state. Use `framework/tools/task-browser/metadata-cli.mjs` for non-interactive updates.
+2. Do not commit `.task-browser/tasks.json` unless sharing board metadata is an intentional workspace/team decision.
+3. Treat task markdown as source of truth. Metadata should not be the only record of blockers, review results, or closure.
+4. Store relationship metadata as canonical task keys. `blockedBy` should point only to existing task blockers; generic blockers belong in task markdown with metadata `status: blocked`.
+
+### Not required
+
+- No task-browser setup is required in workspaces that do not use it.
+- No migration is required for existing standard task directories.
+
 ## v0.8.0 — Reduced Core And Reference Split
 
 This release reduces the always-read core and moves detailed guidance out of `FRAMEWORK.md` into focused reference docs:

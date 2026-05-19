@@ -165,6 +165,23 @@ A good review result includes:
 
 For meaningful reviews, write a separate Oracle task run log, update `HANDOFF.md`, and append the daily brief. If a delegated/no-write reviewer cannot write files, the coordinating session should import the result.
 
+## Task-browser Metadata Hygiene
+
+This section applies only in workspaces that use the optional task-browser tool, for example when `.task-browser/tasks.json` exists, the Operator says the board is used, or the current task asks for task-browser metadata updates.
+
+Task markdown remains the source of truth. Task-browser metadata is local workflow metadata by default and must not be the only record of state, blockers, review results, or closure.
+
+When task-browser is used, agents should keep metadata aligned before ending meaningful tracked-task work:
+
+- creation: initialize `status`, `priority`, `type`, useful `tags`, and known relationships;
+- pickup: set `status: active` when the task becomes the current target;
+- review handoff: set `status: review`; set it back to `active` on bounce;
+- pause/block: use `paused` for deferral, `blocked` for concrete blockers, and put generic blocker details in task markdown;
+- relationships: store `parent`, `children`, `related`, and `blockedBy` as canonical task keys; `blockedBy` should point only at existing task blockers;
+- closure: set `status: done` only after task files record acceptance or closure.
+
+Use `tools/task-browser/metadata-cli.mjs` as the preferred non-interactive way to inspect or update metadata. It accepts display IDs such as `#32` and canonical keys such as `agent-framework/task-slug`, but stores relationships as canonical keys.
+
 ## End Of Task Session
 
 Before ending meaningful task work:
@@ -172,4 +189,5 @@ Before ending meaningful task work:
 1. update the relevant handoff or context files;
 2. write a run log when there is a task directory;
 3. append today's daily brief with the real current time;
-4. move durable knowledge to project `library/` or `FIXES.md` when relevant.
+4. if task-browser is used and task state changed, align task-browser metadata;
+5. move durable knowledge to project `library/` or `FIXES.md` when relevant.

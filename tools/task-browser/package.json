@@ -1,9 +1,10 @@
 {
   "name": "agent-task-browser",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "metadata": "node metadata-cli.mjs"
   }
 }

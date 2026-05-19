@@ -1,10 +1,11 @@
-const state = { sessions: [], selectedPath: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, labelFilter: 'all', sourceErrors: [], metadataError: null };
+const state = { sessions: [], selectedPath: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, labelFilter: 'all', sourceErrors: [], metadataError: null };
 
 const els = {
   refresh: document.querySelector('#refresh'),
   autoRefresh: document.querySelector('#auto-refresh'),
   filter: document.querySelector('#filter'),
   sourceFilter: document.querySelector('#source-filter'),
+  cwdFilter: document.querySelector('#cwd-filter'),
   sortMode: document.querySelector('#sort-mode'),
   bookmarkFilter: document.querySelector('#bookmark-filter'),
   labelFilter: document.querySelector('#label-filter'),
@@ -74,6 +75,7 @@ function isBookmarked(session) {
 
 function matches(session, query) {
   if (state.sourceFilter !== 'all' && session.source !== state.sourceFilter) return false;
+  if (state.cwdFilter !== 'all' && (session.cwd || '') !== state.cwdFilter) return false;
   if (state.bookmarkFilter && !isBookmarked(session)) return false;
   if (state.labelFilter !== 'all' && !sessionLabels(session).includes(state.labelFilter)) return false;
   if (!query.trim()) return true;
@@ -239,6 +241,15 @@ function renderSourceFilter() {
   els.sourceFilter.innerHTML = ['all', ...sources].map((source) => `<option value="${escapeHtml(source)}">${escapeHtml(source === 'all' ? 'All sources' : sourceLabel(source))}</option>`).join('');
   els.sourceFilter.value = sources.includes(current) ? current : 'all';
   state.sourceFilter = els.sourceFilter.value;
+}
+
+function renderCwdFilter() {
+  const cwds = Array.from(new Set(state.sessions.map((session) => session.cwd).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const current = state.cwdFilter;
+  els.cwdFilter.innerHTML = ['all', ...cwds].map((cwd) => `<option value="${escapeHtml(cwd)}">${escapeHtml(cwd === 'all' ? 'All work dirs' : shortPath(cwd, 88))}</option>`).join('');
+  els.cwdFilter.value = cwds.includes(current) ? current : 'all';
+  state.cwdFilter = els.cwdFilter.value;
+  els.cwdFilter.title = state.cwdFilter === 'all' ? 'All work dirs' : state.cwdFilter;
 }
 
 function roleLabel(entry) {
@@ -547,6 +558,7 @@ async function loadSessions({ reloadSelected = false } = {}) {
   state.metadataError = data.metadataError || null;
   state.metadataPath = data.metadataPath;
   renderSourceFilter();
+  renderCwdFilter();
   renderLabelFilter();
   renderSessions();
   if (reloadSelected && state.selectedPath) await reloadSelectedSession();
@@ -582,6 +594,11 @@ els.sourceFilter.addEventListener('change', () => {
   state.sourceFilter = els.sourceFilter.value;
   renderSessions();
 });
+els.cwdFilter.addEventListener('change', () => {
+  state.cwdFilter = els.cwdFilter.value;
+  els.cwdFilter.title = state.cwdFilter === 'all' ? 'All work dirs' : state.cwdFilter;
+  renderSessions();
+});
 els.sortMode.addEventListener('change', () => {
   state.sortMode = els.sortMode.value;
   renderSessions();
@@ -591,9 +608,12 @@ els.clearFilters.addEventListener('click', () => {
   els.bookmarkFilter.checked = false;
   state.bookmarkFilter = false;
   state.sourceFilter = 'all';
+  state.cwdFilter = 'all';
   state.labelFilter = 'all';
   state.sortMode = 'updated-desc';
   els.sourceFilter.value = 'all';
+  els.cwdFilter.value = 'all';
+  els.cwdFilter.title = 'All work dirs';
   els.labelFilter.value = 'all';
   els.sortMode.value = 'updated-desc';
   renderSessions();

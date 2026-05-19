@@ -56,6 +56,7 @@ No npm install is needed for the current dependency-free tool.
 | `SESSION_ROOT` | Backward-compatible alias for `PI_SESSION_ROOT`. |
 | `OPENCODE_DB` | Exact OpenCode SQLite database path. |
 | `OPENCODE_DATA_DIR` | OpenCode data directory. Default DB becomes `$OPENCODE_DATA_DIR/opencode.db`. Also used for diff sidecar files. |
+| `SESSION_BROWSER_OPENCODE_LIMIT` | Maximum OpenCode sessions to list after workspace filtering. Default: `500`. |
 | `SESSION_BROWSER_METADATA` | Local JSON sidecar file for bookmarks and labels. Default: `tools/session-browser/.cache/metadata.json`. |
 
 Default Pi session root:
@@ -90,7 +91,7 @@ The OpenCode adapter reads the local SQLite database through:
 sqlite3 -readonly
 ```
 
-It filters sessions to the configured `WORKSPACE_ROOT` using the OpenCode session directory.
+It filters sessions to the configured `WORKSPACE_ROOT` using the OpenCode session directory before applying `SESSION_BROWSER_OPENCODE_LIMIT`.
 
 Restore command copied by the UI:
 
@@ -105,8 +106,8 @@ OpenCode support is best-effort and fail-soft. If the DB, `sqlite3`, or expected
 - **Search**: filter by prompt, cwd, name, id, path, or label.
 - **Bookmarked filter**: show only sessions you marked with ★.
 - **Label filter**: show sessions with a selected manual label.
-- **More filters & sort**: expand only when needed for source filtering and sort order.
-- **Clear**: reset search, filters, source, and sort back to defaults.
+- **More filters & sort**: expand only when needed for source, work-dir (`cwd`), and sort controls.
+- **Clear**: reset search, filters, source, work-dir, and sort back to defaults.
 - **Session labels**: click a label pill on a card to filter by that label.
 - **Auto 10s**: enabled by default; refreshes session list and selected detail.
 - **Token pressure pill/bar**: visual heaviness signal from recorded token usage; not context-window percentage.
@@ -191,7 +192,7 @@ Instead, the UI shows **token pressure**: the largest observed non-cache-read to
 - No remote access, auth, cloud sync, upload, or sharing behavior is included.
 - Bookmark/label metadata is local-only and manual; no auto-labeling or sync is included.
 - No mutation of Pi or OpenCode session data is supported.
-- Large-session pagination is not implemented yet.
+- OpenCode listing is capped by `SESSION_BROWSER_OPENCODE_LIMIT` after workspace filtering; large-session pagination is not implemented yet.
 - Token pressure is a triage signal, not exact context percentage.
 - Cost is omitted unless a future adapter can provide trustworthy source-derived values.
 

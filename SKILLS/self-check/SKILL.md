@@ -35,12 +35,14 @@ Keep workspace-level coordination files healthy, current, and concise.
 3. Check whether the day’s meaningful work has been recorded in the daily brief.
 4. If a non-obvious bug, mistake, or durable workaround appeared, record it in `FIXES.md`.
 5. If root `SKILLS/` exists, check for workspace-custom skill name collisions with framework skills under `framework/SKILLS/`; if a collision exists, record it as a cleanup item and ask the Operator whether to rename the local skill or treat it as an explicit override.
-6. Check for uncommitted changes if session workflow expects clean repo state.
-7. Leave the workspace easier for the next run to recover.
+6. If the workspace uses task-browser metadata, spot-check that active/review/blocked/done task metadata does not contradict `ACTIVE-CONTEXT.md`, task handoffs, or today's meaningful outcomes; fix obvious drift with `framework/tools/task-browser/metadata-cli.mjs`.
+7. Check for uncommitted changes if session workflow expects clean repo state.
+8. Leave the workspace easier for the next run to recover.
 
 ## Outputs
 
 - current, concise workspace coordination files
+- task-browser metadata aligned with workspace state when the workspace uses task-browser
 - durable fixes captured when relevant
 
 ## Stop Conditions
@@ -53,6 +55,7 @@ Keep workspace-level coordination files healthy, current, and concise.
 - letting `ACTIVE-CONTEXT.md` become a historical dump
 - recording temporary details in durable files
 - ending a meaningful session without updating shared state
+- leaving task-browser metadata stale when the workspace uses the task-browser board
 - letting workspace-custom skills accidentally shadow framework skills without an explicit Operator decision
 
 ## Related Files / Tools
@@ -60,3 +63,4 @@ Keep workspace-level coordination files healthy, current, and concise.
 - `ACTIVE-CONTEXT.md`
 - `memory/daily-brief-YYYY-MM-DD.md`
 - `FIXES.md`
+- `framework/tools/task-browser/metadata-cli.mjs` when task-browser metadata is used
