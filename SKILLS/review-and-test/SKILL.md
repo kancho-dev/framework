@@ -35,13 +35,14 @@ Verify whether work actually satisfies the intended outcome and acceptance crite
 3. Run or inspect the most relevant checks first.
 4. Compare the observed result against the acceptance criteria or stated goal.
 5. Record any gaps, regressions, uncertainty, or missing evidence.
-6. Return a structured verdict:
+6. Check for harmful duplication across the work being reviewed: copied logic, validation rules, docs procedures, config, schemas, commands, task state, or project facts that should have one authoritative source. Distinguish this from deliberate local repetition that improves clarity, tests, migration safety, onboarding, or agent reliability.
+7. Return a structured verdict:
    - **Verdict:** approve / bounce / needs clarification
    - **Checked:** what was reviewed or run
    - **Findings:** issues, risks, or confirmation
    - **Required fixes:** only when not approved
    - **Confidence:** high / medium / low
-7. For meaningful Oracle task reviews, keep the review as a separate Oracle task run when possible. If write-capable, record a run log, update task state, append the daily brief, and align task-browser metadata when the workspace uses task-browser unless the review is explicitly read-only/no-write. Typical metadata outcomes are `done` after approval/closure, `active` after a bounce, and `review` when review is still pending.
+8. For meaningful Oracle task reviews, keep the review as a separate Oracle task run when possible. If write-capable, record a run log, update task state, append the daily brief, and align task-browser metadata when the workspace uses task-browser unless the review is explicitly read-only/no-write. Typical metadata outcomes are `done` after approval/closure, `active` after a bounce, and `review` when review is still pending.
 
 ## Outputs
 
@@ -62,6 +63,7 @@ Verify whether work actually satisfies the intended outcome and acceptance crite
 - vague feedback like "needs work"
 - silently expanding the task beyond its actual goal
 - claiming verification without actually checking
+- demanding abstraction for every repeated phrase instead of identifying harmful duplicate authority
 - mixing meaningful Oracle review evidence into the Builder implementation run instead of a separate Oracle run when one is practical
 - bouncing or approving work while task-browser metadata still suggests the opposite state
 

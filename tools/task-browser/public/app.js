@@ -1,4 +1,4 @@
-const state = { tasks: [], selectedKey: null, statuses: [], priorities: [], workspaceRoot: '', metadataPath: '', selectedStatuses: new Set() };
+const state = { tasks: [], selectedKey: null, statuses: [], priorities: [], workspaceRoot: '', metadataPath: '', selectedStatuses: new Set(), tagDrafts: {} };
 const priorityRank = { urgent: 0, high: 1, normal: 2, low: 3 };
 const projectColors = new Map();
 const els = {
@@ -82,12 +82,14 @@ function matches(task) {
 
 function render({ preserveScroll = null } = {}) {
   const boardScroll = preserveScroll === true ? captureBoardScroll() : preserveScroll;
+  const focus = captureDetailFocus();
   const visible = state.tasks.filter(matches);
   if (state.selectedKey && !visible.some((task) => task.key === state.selectedKey)) state.selectedKey = null;
   document.body.classList.toggle('detail-open', Boolean(state.selectedKey));
   els.status.textContent = `${visible.length} of ${state.tasks.length} tasks • metadata: ${state.metadataPath}`;
   els.board.innerHTML = state.statuses.filter((status) => state.selectedStatuses.has(status)).map((status) => renderColumn(status, sortTasks(status, visible.filter((task) => task.metadata?.status === status)))).join('');
   renderDetail(selectedTask());
+  restoreDetailFocus(focus);
   if (boardScroll) restoreBoardScroll(boardScroll);
 }
 
@@ -145,6 +147,21 @@ function renderCard(task) {
   return `<button class="task-card${active}" draggable="true" data-key="${escapeHtml(task.key)}"><div class="card-top"><span class="display-id">${escapeHtml(meta.displayId)}</span>${projectPill(task.project)}</div><strong>${escapeHtml(task.title)}</strong><p>${escapeHtml(task.nextSteps || task.handoff || task.purpose || 'No handoff summary.')}</p><div class="card-meta">${metaPill('priority', meta.priority, `priority ${meta.priority}`)}${metaPill('type', meta.type, 'type')}${tags}</div></button>`;
 }
 
+function captureDetailFocus() {
+  const active = document.activeElement;
+  const form = active?.closest?.('.inline-metadata-editor');
+  if (!form || active.name !== 'newTag') return null;
+  return { key: form.dataset.key, name: active.name, start: active.selectionStart, end: active.selectionEnd };
+}
+
+function restoreDetailFocus(focus) {
+  if (!focus || focus.key !== state.selectedKey) return;
+  const input = els.detailMeta.querySelector(`[name="${CSS.escape(focus.name)}"]`);
+  if (!input) return;
+  input.focus();
+  if (Number.isInteger(focus.start) && Number.isInteger(focus.end)) input.setSelectionRange(focus.start, focus.end);
+}
+
 function renderDetail(task) {
   els.detailPane.classList.toggle('hidden', !task);
   if (!task) return;
@@ -168,7 +185,8 @@ function typeOptions(current) {
 
 function renderTagEditor(tags) {
   const pills = tags.map((tag) => `<span class="label-pill tag-pill"><span aria-label="tag">⌁</span><strong>${escapeHtml(tag)}</strong><button class="remove-tag" type="button" data-tag="${escapeHtml(tag)}" title="Remove tag ${escapeHtml(tag)}">×</button></span>`).join('');
-  return `<div class="meta-line tags-line"><div class="tag-list">${pills || '<span class="muted compact">No tags</span>'}</div><div class="tag-controls"><div class="tag-add"><input name="newTag" placeholder="Add tag…"><button type="submit">Add</button></div></div></div>`;
+  const draft = state.selectedKey ? state.tagDrafts[state.selectedKey] || '' : '';
+  return `<div class="meta-line tags-line"><div class="tag-list">${pills || '<span class="muted compact">No tags</span>'}</div><div class="tag-controls"><div class="tag-add"><input name="newTag" placeholder="Add tag…" value="${escapeHtml(draft)}"><button type="submit">Add</button></div></div></div>`;
 }
 
 function renderRelationsAndAction(meta, task) {
@@ -283,6 +301,11 @@ function closeDetail() {
 }
 
 els.closeDetail.addEventListener('click', closeDetail);
+els.detailMeta.addEventListener('input', (event) => {
+  if (event.target.name !== 'newTag') return;
+  const form = event.target.closest('.inline-metadata-editor');
+  if (form) state.tagDrafts[form.dataset.key] = event.target.value;
+});
 els.detailMeta.addEventListener('change', (event) => {
   const form = event.target.closest('.inline-metadata-editor');
   if (!form || event.target.name === 'newTag') return;
@@ -313,6 +336,7 @@ els.detailMeta.addEventListener('submit', (event) => {
   const input = form.querySelector('input[name="newTag"]');
   const tag = input.value.trim();
   if (!tag) return;
+  state.tagDrafts[form.dataset.key] = '';
   saveMetadataPatch(form, { tags: [...new Set([...currentTags(form), tag])] }).catch((error) => { els.status.textContent = error.message; });
 });
 

@@ -29,6 +29,25 @@ If you break these limits, have a clear reason.
 3. Keep temporary files out of the project root.
 4. Use clear, consistent naming.
 
+## DRY In Practice
+
+Use DRY as a practical workspace principle, not as a demand to remove every repeated sentence. The goal is to avoid competing sources of truth during normal project work.
+
+### The Core Concept
+
+DRY applies broadly to the entire development lifecycle, including:
+- Business Logic: Centralizing validation so updates are made in a single function rather than multiple files.
+- Configuration & UI: Using centralized config files and reusable UI components instead of hardcoding identical settings or styles everywhere.
+- Database Schemas: Normalizing data to prevent data redundancy and anomalies.
+
+1. Before changing code, docs, config, tests, task state, or project knowledge, identify what should be authoritative for the behavior, decision, data, or procedure.
+2. Update the authoritative source first, then add only the references, summaries, examples, or local reminders needed for people and agents to work reliably.
+3. Treat duplicated business logic, validation rules, generated values, schemas, commands, config, status, current task state, and durable project facts as high-risk duplication.
+4. For docs-centric work, avoid maintaining the same procedure or decision in multiple places unless one place clearly points to the source of truth.
+5. For code-centric work, prefer shared functions, constants, schemas, fixtures, or tests when duplication would make future behavior changes easy to miss.
+6. Allow deliberate repetition when it improves clarity, locality, test coverage, onboarding, migration safety, or instruction-following reliability.
+7. If duplication remains, make the authoritative copy and the reason for duplication clear enough that future updates do not drift.
+
 ## Review Checklist
 
 Before considering a change complete, check:
