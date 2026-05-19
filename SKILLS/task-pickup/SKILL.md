@@ -39,14 +39,16 @@ Resume an existing tracked task cleanly by recovering current state, selecting t
 5. Identify the highest-priority unfinished in-scope action.
 6. Complete one bounded slice rather than partially touching multiple areas.
 7. Before ending, update `HANDOFF.md` with current state, what changed, and the next action.
-8. Move any newly discovered stable facts into `CONTEXT.md` or project library files as appropriate.
-9. Write a run log.
+8. If the workspace uses task-browser metadata, align the task's metadata with the real state using `framework/tools/task-browser/metadata-cli.mjs`; for example set the picked-up task to `active`, `blocked`, or `review` as appropriate.
+9. Move any newly discovered stable facts into `CONTEXT.md` or project library files as appropriate.
+10. Write a run log.
 
 ## Outputs
 
 - one completed bounded task slice or a clearly documented blocker
 - updated task handoff
 - updated stable task facts when needed
+- task-browser metadata aligned when the workspace uses task-browser
 - a run log entry
 
 ## Stop Conditions
@@ -60,6 +62,7 @@ Resume an existing tracked task cleanly by recovering current state, selecting t
 - letting `HANDOFF.md` become historical buildup instead of current operational state
 - putting temporary status in `CONTEXT.md`
 - changing scope without updating task state
+- leaving task-browser metadata stale in workspaces that use the task-browser board
 - leaving partial work without recording what remains
 - reading too much irrelevant project code before choosing a step
 
@@ -70,3 +73,4 @@ Resume an existing tracked task cleanly by recovering current state, selecting t
 - `projects/[name]/work/[task-slug]/HANDOFF.md`
 - `projects/[name]/work/[task-slug]/CONTEXT.md`
 - `projects/[name]/work/[task-slug]/runs/`
+- `framework/tools/task-browser/metadata-cli.mjs` when task-browser metadata is used

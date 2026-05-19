@@ -120,9 +120,40 @@ Dragging a card to another status column changes only that task's task-browser m
 
 When metadata includes `blockedBy`, `parent`, `children`, or `related`, the detail header shows compact relationship pills grouped by relation type. Known tasks are shown by display ID (for example `#32`) and open that task in the detail drawer. Relationship editing is deferred.
 
-## Guidance And Future Work
+## Metadata CLI
 
-Detailed rules for when agents should update task-browser metadata are tracked in child task `agent-framework/task-browser-metadata-guidance-rules`.
+Agents must use the dependency-free CLI for non-interactive metadata updates:
+
+```bash
+node tools/task-browser/metadata-cli.mjs list --status active
+node tools/task-browser/metadata-cli.mjs get '#32'
+node tools/task-browser/metadata-cli.mjs key '#32'
+node tools/task-browser/metadata-cli.mjs init agent-framework/task-browser-metadata-guidance-rules --status planned --priority high --type documentation
+node tools/task-browser/metadata-cli.mjs set '#32' --status review --priority high --tags task-browser,metadata-guidance
+node tools/task-browser/metadata-cli.mjs clear '#32' --order
+node tools/task-browser/metadata-cli.mjs add-related '#32' agent-framework/task-browser-prompt-copy-v2
+node tools/task-browser/metadata-cli.mjs add-blocker '#32' '#12'
+node tools/task-browser/metadata-cli.mjs set-parent '#32' agent-framework/task-browser-prompt-copy-v2
+```
+
+The CLI accepts display IDs and canonical task keys for task references. Relationship fields are stored as canonical task keys so browser relationship links remain reliable. `blockedBy` is for existing task blockers only; generic blockers should be explained in `HANDOFF.md`, `CONTEXT.md`, or run logs while metadata uses `status: blocked`.
+
+Supported CLI metadata fields are `status`, `priority`, `type`, `order`, `parent`, `tags`, `blockedBy`, `children`, and `related`. Identity fields such as `displayId`, `project`, `slug`, and `path` are preserved.
+
+## Metadata Hygiene Guidance
+
+Use task-browser metadata only when the workspace has adopted task-browser, such as when `.task-browser/tasks.json` exists or the Operator/current task says the board is used. Do not require this metadata in workspaces that are not using task-browser, and do not commit `.task-browser/tasks.json` unless sharing local board state is intentional.
+
+Scenario rules:
+
+- task creation: initialize metadata for the discovered task, usually `planned` unless work starts immediately;
+- pickup: set `status: active` for the current target;
+- review: set `status: review` for Oracle/Operator review, `active` after a bounce, and `done` only after task files record closure;
+- pause/block: use `paused` for deferral and `blocked` for a real blocker; use `blockedBy` only when another existing task is the blocker;
+- relationships: use `parent`, `children`, and `related` for task splits and peer follow-ups; document execution-relevant relationships in task markdown too;
+- closure: metadata may aid discovery, but task markdown and run logs remain the closure record.
+
+## Guidance And Future Work
 
 Deferred features and optimizations are tracked in `agent-framework/task-browser-deferred-features-and-optimizations`, including same-column DnD reordering, richer prompt-copy modes, richer relationship editing, performance improvements, and experimental shared/team metadata.
 

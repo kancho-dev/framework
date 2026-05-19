@@ -67,7 +67,7 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 .eyebrow { color: var(--accent); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; margin-bottom: 4px; }
 .filters { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 14px 18px; }
 .quick-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; }
-#filter, #source-filter, #sort-mode, #label-filter, #label-input { min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+#filter, #source-filter, #cwd-filter, #sort-mode, #label-filter, #label-input { min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
 .bookmark-filter { display: flex; align-items: center; gap: 6px; color: var(--muted); border: 1px solid var(--border); background: var(--bg); border-radius: 10px; padding: 8px 10px; white-space: nowrap; }
 .bookmark-filter input { margin: 0; }
 #clear-filters { padding: 8px 10px; color: var(--muted); }
@@ -75,7 +75,7 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 .filter-options summary { display: inline-flex; align-items: center; width: fit-content; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,.03); font-size: 11px; }
 .filter-options summary:hover { color: var(--text); border-color: var(--accent); }
 .filter-options[open] summary { color: var(--accent); }
-.filter-options div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 6px; }
+.filter-options div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; margin-top: 6px; }
 .status { color: var(--muted); padding: 0 18px 12px; }
 .sessions { list-style: none; padding: 0 10px 18px; margin: 0; overflow: auto; }
 .session-card {

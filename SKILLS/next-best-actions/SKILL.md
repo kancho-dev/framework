@@ -31,16 +31,17 @@ Identify the highest-value next actions from the current workspace or project st
 
 1. Read the smallest set of current-state files that can explain what is active.
 2. If useful for the run, scan `OPERATOR-NOTES.md` for human todos, ideas, or pending decisions that may affect prioritization.
-3. Identify what is already in progress, what is blocked, and what is effectively complete.
+3. Identify what is already in progress, what is blocked, and what is effectively complete. If the workspace uses task-browser metadata, use the task-browser board or `framework/tools/task-browser/metadata-cli.mjs list` as supporting triage evidence, but prefer task files when metadata conflicts.
 4. Prefer actions that remove ambiguity, unlock work, or finish an active slice before creating new work.
 5. If multiple paths are possible, choose the one with the best value-to-complexity ratio.
 6. State the next actions explicitly and in priority order.
-7. Update coordination files if the real priority changed.
+7. Update coordination files if the real priority changed. If task-browser metadata is used and priority/status decisions changed, align metadata with the chosen next actions.
 
 ## Outputs
 
 - a short prioritized next-step list
 - updated active state if priorities changed
+- task-browser metadata aligned with priority/status decisions when the workspace uses task-browser
 
 ## Stop Conditions
 
@@ -52,6 +53,7 @@ Identify the highest-value next actions from the current workspace or project st
 - reading too much history before choosing the next step
 - proposing speculative work while active work is unfinished
 - leaving decisions only in chat instead of files
+- treating task-browser metadata as authoritative when task files disagree
 
 ## Related Files / Tools
 
@@ -59,3 +61,4 @@ Identify the highest-value next actions from the current workspace or project st
 - `OPERATOR-NOTES.md`
 - `projects/[name]/library/plans.md`
 - `projects/[name]/work/[task-slug]/HANDOFF.md`
+- `framework/tools/task-browser/metadata-cli.mjs` when task-browser metadata is used

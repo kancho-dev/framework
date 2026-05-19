@@ -41,7 +41,7 @@ Verify whether work actually satisfies the intended outcome and acceptance crite
    - **Findings:** issues, risks, or confirmation
    - **Required fixes:** only when not approved
    - **Confidence:** high / medium / low
-7. For meaningful Oracle task reviews, keep the review as a separate Oracle task run when possible. If write-capable, record a run log, update task state, and append the daily brief unless the review is explicitly read-only/no-write.
+7. For meaningful Oracle task reviews, keep the review as a separate Oracle task run when possible. If write-capable, record a run log, update task state, append the daily brief, and align task-browser metadata when the workspace uses task-browser unless the review is explicitly read-only/no-write. Typical metadata outcomes are `done` after approval/closure, `active` after a bounce, and `review` when review is still pending.
 
 ## Outputs
 
@@ -49,6 +49,7 @@ Verify whether work actually satisfies the intended outcome and acceptance crite
 - evidence of what was checked
 - actionable fixes when bouncing work
 - durable review state for meaningful write-capable Oracle reviews
+- task-browser metadata aligned with the review verdict when the workspace uses task-browser
 
 ## Stop Conditions
 
@@ -62,6 +63,7 @@ Verify whether work actually satisfies the intended outcome and acceptance crite
 - silently expanding the task beyond its actual goal
 - claiming verification without actually checking
 - mixing meaningful Oracle review evidence into the Builder implementation run instead of a separate Oracle run when one is practical
+- bouncing or approving work while task-browser metadata still suggests the opposite state
 
 ## Related Files / Tools
 
@@ -70,3 +72,4 @@ Verify whether work actually satisfies the intended outcome and acceptance crite
 - `projects/[name]/work/[task-slug]/HANDOFF.md`
 - `projects/[name]/work/[task-slug]/runs/`
 - project tests/build commands
+- `framework/tools/task-browser/metadata-cli.mjs` when task-browser metadata is used

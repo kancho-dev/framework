@@ -20,6 +20,7 @@ const METADATA_PATH = resolve(process.env.SESSION_BROWSER_METADATA || join(TOOL_
 const execFileAsync = promisify(execFile);
 const SOURCE_TIMEOUT_MS = Number(process.env.SESSION_SOURCE_TIMEOUT_MS || '8000');
 const REQUEST_TIMEOUT_MS = Number(process.env.SESSION_REQUEST_TIMEOUT_MS || '10000');
+const OPENCODE_SESSION_LIMIT = parsePositiveInteger(process.env.SESSION_BROWSER_OPENCODE_LIMIT || '500', 'SESSION_BROWSER_OPENCODE_LIMIT');
 
 const mime = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -35,6 +36,14 @@ function parsePort(value) {
     throw new Error(`Invalid PORT: ${value}`);
   }
   return port;
+}
+
+function parsePositiveInteger(value, name) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1) {
+    throw new Error(`Invalid ${name}: ${value}`);
+  }
+  return number;
 }
 
 function sendJson(res, status, body) {
@@ -127,6 +136,10 @@ async function sqliteJson(dbPath, sql) {
 
 function sqlString(value) {
   return `'${String(value ?? '').replace(/'/g, "''")}'`;
+}
+
+function sqlLike(value) {
+  return String(value ?? '').replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
 function parseJsonl(content) {
@@ -619,13 +632,16 @@ function summarizeOpenCodeSession(session, messages, parts) {
 
 async function listOpenCodeSessions() {
   if (!await exists(OPENCODE_DB)) return [];
+  const workspaceRootSql = sqlString(WORKSPACE_ROOT);
+  const workspacePrefixSql = sqlString(`${sqlLike(WORKSPACE_ROOT)}/%`);
   const sessions = await sqliteJson(
     OPENCODE_DB,
     `select id, parent_id as parentId, directory, title, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
      from session
      where time_archived is null
+       and (directory = ${workspaceRootSql} or directory like ${workspacePrefixSql} escape '\\')
      order by time_updated desc
-     limit 200`
+     limit ${OPENCODE_SESSION_LIMIT}`
   );
   if (!sessions.length) return [];
   const sessionIds = sessions.map((session) => sqlString(session.id)).join(',');
