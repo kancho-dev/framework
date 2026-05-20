@@ -1,6 +1,6 @@
 # Portable Agent Framework
 
-![Version](https://img.shields.io/badge/version-0.9.2-blue)
+![Version](https://img.shields.io/badge/version-0.10.0-blue)
 
 A minimal, agent-agnostic framework for keeping AI-assisted software development coherent across sessions, tasks, projects, and tools.
 
@@ -144,7 +144,7 @@ Read [`tools/session-browser/README.md`](tools/session-browser/README.md) for se
 
 [`tools/task-browser/`](tools/task-browser/) is an optional local tool for browsing tracked task directories across workspace projects.
 
-It reads framework task markdown, stores task-browser-owned workflow metadata in `.task-browser/tasks.json`, and provides a kanban-lite view, task detail drawer, run timeline, filters, and copyable task-pickup prompts.
+It reads framework task markdown, stores task-browser-owned workflow metadata in `.task-browser/tasks.json`, stores local metadata-change history in `.task-browser/task-history.jsonl`, and provides a kanban-lite view, task detail drawer, run timeline, filters, and copyable task-pickup prompts.
 
 Read [`tools/task-browser/README.md`](tools/task-browser/README.md) for setup, metadata, configuration, and safety details.
 

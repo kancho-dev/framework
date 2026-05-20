@@ -6,6 +6,23 @@ These notes are version-specific checks, not a permanent setup checklist. Apply 
 
 For the update procedure, use `framework/SKILLS/update-framework/SKILL.md`.
 
+## v0.10.0 — Task-browser Action History
+
+This release promotes the task-browser tool package to `1.1.0` and adds local append-only action history for durable task-browser metadata changes.
+
+### Required checks
+
+1. If the workspace uses task-browser, keep `.task-browser/` private unless sharing local board state and provenance history is intentional. The new history file defaults to `.task-browser/task-history.jsonl` next to `.task-browser/tasks.json`.
+2. Treat task markdown and run logs as authoritative. Action history explains task-browser metadata changes; it is not authentication, compliance audit, or a replacement for handoff/run-log records.
+3. When agents update metadata through `framework/tools/task-browser/metadata-cli.mjs`, they may pass real provenance with `--role`, `--session-tool`, and `--session-id` when useful and available. Do not invent session IDs or role details.
+4. Older installed framework copies do not write action history. History starts after the workspace updates to this version and uses the updated task-browser CLI/server.
+
+### Not required
+
+- No conversion is required for existing `.task-browser/tasks.json` files.
+- No task-browser setup is required in workspaces that do not use it.
+- Existing task directories and run logs remain valid.
+
 ## v0.9.1 — Task-browser Metadata CLI And Hygiene
 
 This release promotes the task-browser tool package to `1.0.0` and adds a metadata CLI plus conditional metadata-hygiene guidance.

@@ -94,6 +94,7 @@ Do not ignore `projects/[name]/library/` or `projects/[name]/work/` in the defau
 - durable fixes and mistakes → `FIXES.md`
 - exact historical recall → optional memory service
 - task-browser workflow metadata → `.task-browser/tasks.json`
+- task-browser metadata-change history → `.task-browser/task-history.jsonl`
 
 ## Tool Agnosticism
 

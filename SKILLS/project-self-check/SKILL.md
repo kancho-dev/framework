@@ -34,7 +34,7 @@ Keep a project’s task state, library files, and key docs aligned with the actu
 3. Remove or summarize irrelevant task detail that no longer helps the next run.
 4. Check whether durable knowledge belongs in `library/` rather than in task files.
 5. Update project docs when they no longer match real project state.
-6. If the workspace uses task-browser metadata, compare active task files with task-browser metadata and fix obvious drift with `framework/tools/task-browser/metadata-cli.mjs`.
+6. If the workspace uses task-browser metadata, compare active task files with task-browser metadata and fix obvious drift with `framework/tools/task-browser/metadata-cli.mjs`. In framework versions with task-browser action history, pass real role/session provenance when useful and available; leave provenance unset rather than inventing it.
 7. Ensure any important completed work is reflected in the correct long-lived files.
 
 ## Outputs

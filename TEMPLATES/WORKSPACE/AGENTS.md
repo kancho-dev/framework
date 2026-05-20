@@ -29,7 +29,7 @@ When working inside a task directory, read the task files in the order defined b
 7. Treat `framework/` as read-only. Never edit files under `framework/` directly.
 8. For daily briefs and task run logs, use the real current system date/time from the live environment, not chat/session metadata. If needed, query it explicitly with `date '+%F %R %Z'`. Never use invented placeholder times such as `00:00`.
 9. When creating today's daily brief from a previous brief, add a short `Carry-forward from previous brief` section containing only important unfinished items that still appear actionable.
-10. If this workspace uses the optional task-browser tool, keep `.task-browser/tasks.json` aligned when task state changes, use `framework/tools/task-browser/metadata-cli.mjs` instead of ad-hoc inline scripts or other methods for updating `.task-browser/tasks.json`; do not treat task-browser metadata as more authoritative than task markdown.
+10. If this workspace uses the optional task-browser tool, keep task-browser metadata aligned when task state changes. Use `framework/tools/task-browser/metadata-cli.mjs` instead of ad-hoc inline scripts for metadata updates; in framework versions with action history, real metadata changes may append `.task-browser/task-history.jsonl`. Pass real provenance such as role/session tool/session ID when useful and available, but do not invent it. Do not treat task-browser metadata or history as more authoritative than task markdown and run logs.
 
 ## Workspace-Specific Instructions
 

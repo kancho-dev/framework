@@ -42,7 +42,7 @@ Verify whether work actually satisfies the intended outcome and acceptance crite
    - **Findings:** issues, risks, or confirmation
    - **Required fixes:** only when not approved
    - **Confidence:** high / medium / low
-8. For meaningful Oracle task reviews, keep the review as a separate Oracle task run when possible. If write-capable, record a run log, update task state, append the daily brief, and align task-browser metadata when the workspace uses task-browser unless the review is explicitly read-only/no-write. Typical metadata outcomes are `done` after approval/closure, `active` after a bounce, and `review` when review is still pending.
+8. For meaningful Oracle task reviews, keep the review as a separate Oracle task run when possible. If write-capable, record a run log, update task state, append the daily brief, and align task-browser metadata when the workspace uses task-browser unless the review is explicitly read-only/no-write. Typical metadata outcomes are `done` after approval/closure, `active` after a bounce, and `review` when review is still pending. In framework versions with task-browser action history, pass real provenance such as `--role Oracle` and actual session details when useful and available; leave provenance unset rather than inventing it.
 
 ## Outputs
 
