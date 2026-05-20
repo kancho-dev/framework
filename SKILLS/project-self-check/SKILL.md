@@ -35,7 +35,8 @@ Keep a project’s task state, library files, and key docs aligned with the actu
 4. Check whether durable knowledge belongs in `library/` rather than in task files.
 5. Update project docs when they no longer match real project state.
 6. If the workspace uses task-browser metadata, compare active task files with task-browser metadata and fix obvious drift with `framework/tools/task-browser/metadata-cli.mjs`. In framework versions with task-browser action history, pass real role/session provenance when useful and available; leave provenance unset rather than inventing it.
-7. Ensure any important completed work is reflected in the correct long-lived files.
+7. If the project check confirms that items carried forward in today's daily brief are completed or no longer actionable, mark those carry-forward items checked (`[x]`) in today's brief only; do not rewrite older daily briefs.
+8. Ensure any important completed work is reflected in the correct long-lived files.
 
 ## Outputs
 

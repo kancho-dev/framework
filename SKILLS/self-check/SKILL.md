@@ -33,11 +33,12 @@ Keep workspace-level coordination files healthy, current, and concise.
 1. Check whether `ACTIVE-CONTEXT.md` still reflects the current priority and active tasks.
 2. Summarize or remove stale detail instead of preserving old status verbatim.
 3. Check whether the day’s meaningful work has been recorded as timed entries appended to the end of today's daily brief.
-4. If a non-obvious bug, mistake, or durable workaround appeared, record it in `FIXES.md`.
-5. If root `SKILLS/` exists, check for workspace-custom skill name collisions with framework skills under `framework/SKILLS/`; if a collision exists, record it as a cleanup item and ask the Operator whether to rename the local skill or treat it as an explicit override.
-6. If the workspace uses task-browser metadata, spot-check that active/review/blocked/done task metadata does not contradict `ACTIVE-CONTEXT.md`, task handoffs, or today's meaningful outcomes; fix obvious drift with `framework/tools/task-browser/metadata-cli.mjs`. In framework versions with task-browser action history, pass real role/session provenance when useful and available; leave provenance unset rather than inventing it.
-7. Check for uncommitted changes if session workflow expects clean repo state.
-8. Leave the workspace easier for the next run to recover.
+4. Check today's carry-forward items and mark any clearly completed/no-longer-actionable items checked (`[x]`) only when confirmed by task state, closure, or explicit Operator direction.
+5. If a non-obvious bug, mistake, or durable workaround appeared, record it in `FIXES.md`.
+6. If root `SKILLS/` exists, check for workspace-custom skill name collisions with framework skills under `framework/SKILLS/`; if a collision exists, record it as a cleanup item and ask the Operator whether to rename the local skill or treat it as an explicit override.
+7. If the workspace uses task-browser metadata, spot-check that active/review/blocked/done task metadata does not contradict `ACTIVE-CONTEXT.md`, task handoffs, or today's meaningful outcomes; fix obvious drift with `framework/tools/task-browser/metadata-cli.mjs`. In framework versions with task-browser action history, pass real role/session provenance when useful and available; leave provenance unset rather than inventing it.
+8. Check for uncommitted changes if session workflow expects clean repo state.
+9. Leave the workspace easier for the next run to recover.
 
 ## Outputs
 
