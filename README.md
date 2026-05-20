@@ -114,7 +114,7 @@ Typical use looks like this:
    - **Builder** — implement a bounded slice.
    - **Oracle** — review and verify.
    - **Historian** — clean up docs and state.
-5. Append meaningful progress to `memory/daily-brief-YYYY-MM-DD.md`.
+5. Append meaningful progress to the end of today's `memory/daily-brief-YYYY-MM-DD.md`.
 6. Use optional skills and tools only when they fit the run.
 
 ## Optional Extensions

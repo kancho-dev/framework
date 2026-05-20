@@ -69,11 +69,11 @@ I think this task may be done. Use `task-closure` and check
 ```
 
 ```text
-If the task is done, update the handoff and daily brief appropriately
+If the task is done, update the handoff and append a suitable timed entry to the end of today's daily brief
 ```
 
 ```text
-Before we stop, update the relevant handoff/context files and the daily brief
+Before we stop, update the relevant handoff/context files and append a timed entry to the end of today's daily brief
 ```
 
 ## Workspace And Project Maintenance

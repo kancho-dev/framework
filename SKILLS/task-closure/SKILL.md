@@ -35,7 +35,7 @@ Close or pause a tracked task cleanly by making sure its final state is reflecte
 3. Update `CONTEXT.md` only if stable task facts changed.
 4. Move durable findings into project `library/` files or `FIXES.md` when needed.
 5. Check whether the task status or outcome should be reflected in `ACTIVE-CONTEXT.md`.
-6. Verify that meaningful runs and outcomes from the task have been recorded in the daily brief.
+6. Verify that meaningful runs and outcomes from the task have been recorded as timed entries appended to the end of today's daily brief.
 7. If the workspace uses task-browser metadata, align the task's metadata with the closure state using `framework/tools/task-browser/metadata-cli.mjs`: `done` for accepted closure, `paused` for deliberate deferral, `blocked` only for concrete blockers, and `review` when closure still awaits review. In framework versions with task-browser action history, pass real provenance such as the current role/session tool/session ID when useful and available; leave provenance unset rather than inventing it.
 8. Write a final or intermediate run log that makes the task state obvious to the next session.
 

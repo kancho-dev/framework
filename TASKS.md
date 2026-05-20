@@ -18,7 +18,7 @@ Use for:
 Durable trace:
 
 - no task directory required;
-- append the daily brief when the work is meaningful;
+- append a timed entry to the end of today's daily brief when the work is meaningful;
 - update `ACTIVE-CONTEXT.md` when priorities, blockers, or direction change.
 
 Micro tasks are intentionally lightweight. If future task-browser tooling needs complete visibility for tiny work, add a lightweight index later rather than forcing every small action into a task directory now.
@@ -163,7 +163,7 @@ A good review result includes:
 - required fixes when not approved;
 - confidence level when uncertainty remains.
 
-For meaningful reviews, write a separate Oracle task run log, update `HANDOFF.md`, and append the daily brief. If a delegated/no-write reviewer cannot write files, the coordinating session should import the result.
+For meaningful reviews, write a separate Oracle task run log, update `HANDOFF.md`, and append a timed entry to the end of today's daily brief. If a delegated/no-write reviewer cannot write files, the coordinating session should import the result.
 
 ## Task-browser Metadata Hygiene
 
@@ -188,6 +188,6 @@ Before ending meaningful task work:
 
 1. update the relevant handoff or context files;
 2. write a run log when there is a task directory;
-3. append today's daily brief with the real current time;
+3. append a timed entry to the end of today's daily brief with the real current time;
 4. if task-browser is used and task state changed, align task-browser metadata;
 5. move durable knowledge to project `library/` or `FIXES.md` when relevant.

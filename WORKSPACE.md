@@ -14,9 +14,11 @@ Optional Operator-maintained notes for human todos, ideas, questions, blockers, 
 
 ### `memory/daily-brief-YYYY-MM-DD.md`
 
-Shared daily log. Append a short factual entry after meaningful work. Use the real current system date/time from the live environment.
+Shared daily log. Append a short factual entry after meaningful work. Use the real current system date/time from the live environment and write to today's dated file, not a previous day's file.
 
-When creating today's brief from a previous brief, add a short `Carry-forward from previous brief` section with only important unfinished actionable items. Move durable multi-day state to `ACTIVE-CONTEXT.md`, task files, project `library/`, `OPERATOR-NOTES.md`, or `FIXES.md` instead of relying only on carry-forward.
+Daily brief structure is: optional `Carry-forward from previous brief` section first, then timed log entries ordered by their real log time. Add each new timed entry at the end of today's file; do not insert new timed entries above existing timed entries.
+
+When creating today's brief from a previous brief, add a short `Carry-forward from previous brief` section with only important unfinished actionable items before the timed entries. Move durable multi-day state to `ACTIVE-CONTEXT.md`, task files, project `library/`, `OPERATOR-NOTES.md`, or `FIXES.md` instead of relying only on carry-forward.
 
 ### `FIXES.md`
 

@@ -85,7 +85,7 @@ Review any script before running it and follow `framework/SECURITY.md`.
 7. Create or update `SKILLS/INDEX.md` so agents can discover the local skill.
 8. If the workspace `AGENTS.md` does not mention workspace-custom skills or the current skill-discovery trigger, add concise guidance: check relevant skill indexes before improvising when the prompt names a skill-like workflow, asks to "check skills", or describes a repeatable framework procedure; then load only the selected `SKILL.md`.
 9. If the skill captures durable project knowledge, also update the relevant project `library/` files.
-10. Record the change in the daily brief or task run log when meaningful.
+10. Record the change in the task run log or as a timed entry appended to the end of today's daily brief when meaningful.
 
 ## Outputs
 
