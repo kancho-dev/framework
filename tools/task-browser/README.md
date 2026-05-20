@@ -39,7 +39,7 @@ No npm install is needed for the current dependency-free tool.
 - auto-refresh every 10 seconds by default, plus manual Refresh;
 - search by display ID, project/slug/key, title, and tags;
 - project and priority filters;
-- task detail drawer with Purpose, Next steps, Run timeline, Current state, Success/Acceptance, Resume files, and Context; Next steps are read from `HANDOFF.md` `## Next Action` with `## Next Steps` fallback;
+- task detail drawer with Purpose, Next steps, Run timeline, Current state, Success/Acceptance, Resume files, Context, and Metadata history; Next steps are read from `HANDOFF.md` `## Next Action` with `## Next Steps` fallback;
 - editable status, priority, type, tags, and optional order metadata;
 - relationship metadata (`blockedBy`, `parent`, `children`, `related`) when present, with links to known tasks;
 - cross-column drag/drop to change task status;
@@ -104,6 +104,20 @@ Task Browser metadata owns UI/workflow fields: `displayId`, `status`, `priority`
 
 Framework task files remain the source of truth for purpose, scope, acceptance criteria, narrative handoff/current state, stable context, and run evidence.
 
+## Metadata History
+
+Task Browser writes an append-only local JSONL history for durable task-browser metadata changes by default:
+
+```text
+.task-browser/task-history.jsonl
+```
+
+Each event records the task key/display ID, timestamp, source, best-effort provenance, and before/after values for changed durable metadata fields: `status`, `priority`, `type`, `tags`, `order`, `parent`, `children`, `blockedBy`, and `related`. Identity/discovery refresh fields such as `displayId`, `project`, `slug`, `path`, and `missing` are not logged as action history.
+
+Browser edits and drag/drop writes default to `actor: "operator"`, `source: "browser"`, and null role/session fields. CLI writes default to `actor: "agent"`, `source: "metadata-cli"`, and null role/session fields unless explicitly provided. This is provenance for local handoff, not authentication or a compliance-grade audit trail.
+
+No-op writes where normalized before/after metadata values are identical do not append events. Safe deletion/retention is simple: stop the server/CLI if active, then delete or archive `.task-browser/task-history.jsonl`; current board state remains in `.task-browser/tasks.json`.
+
 ## Editing And Drag/Drop
 
 The detail drawer can edit common metadata fields directly:
@@ -130,6 +144,8 @@ node tools/task-browser/metadata-cli.mjs get '#32'
 node tools/task-browser/metadata-cli.mjs key '#32'
 node tools/task-browser/metadata-cli.mjs init agent-framework/task-browser-metadata-guidance-rules --status planned --priority high --type documentation
 node tools/task-browser/metadata-cli.mjs set '#32' --status review --priority high --tags task-browser,metadata-guidance
+node tools/task-browser/metadata-cli.mjs set '#32' --status review --role Builder --session-tool pi --session-id pi-session-id
+node tools/task-browser/metadata-cli.mjs history '#32' --limit 10
 node tools/task-browser/metadata-cli.mjs clear '#32' --order
 node tools/task-browser/metadata-cli.mjs add-related '#32' agent-framework/task-browser-prompt-copy-v2
 node tools/task-browser/metadata-cli.mjs add-blocker '#32' '#12'
@@ -138,7 +154,7 @@ node tools/task-browser/metadata-cli.mjs set-parent '#32' agent-framework/task-b
 
 The CLI accepts display IDs and canonical task keys for task references. Relationship fields are stored as canonical task keys so browser relationship links remain reliable. `blockedBy` is for existing task blockers only; generic blockers should be explained in `HANDOFF.md`, `CONTEXT.md`, or run logs while metadata uses `status: blocked`.
 
-Supported CLI metadata fields are `status`, `priority`, `type`, `order`, `parent`, `tags`, `blockedBy`, `children`, and `related`. Identity fields such as `displayId`, `project`, `slug`, and `path` are preserved.
+Supported CLI metadata fields are `status`, `priority`, `type`, `order`, `parent`, `tags`, `blockedBy`, `children`, and `related`. Identity fields such as `displayId`, `project`, `slug`, and `path` are preserved. Write commands accept optional provenance flags `--actor`, `--role`, `--session-tool`, `--session-id`, and `--note`; agents should pass real role/session details when useful and available rather than inventing them.
 
 ## Metadata Hygiene Guidance
 
@@ -166,7 +182,8 @@ Local ignored `.task-browser/tasks.json` remains the default. Shared/team metada
 | `PORT` | HTTP port. Default: `8788`. |
 | `WORKSPACE_ROOT` | Workspace to scan. Default: nearest parent containing `AGENTS.md`, otherwise current directory. |
 | `TASK_BROWSER_METADATA` | Metadata JSON path. Default: `$WORKSPACE_ROOT/.task-browser/tasks.json`. |
+| `TASK_BROWSER_HISTORY` | Metadata history JSONL path. Default: next to metadata as `.task-browser/task-history.jsonl`. |
 
 ## Safety And Privacy
 
-The tool is local-only and reads task markdown from the configured workspace. It writes only the task-browser metadata JSON file. Task names, paths, tags, relationships, and handoff text can reveal private work details; do not commit `.task-browser/tasks.json` unless that workspace state is intended to be shared.
+The tool is local-only and reads task markdown from the configured workspace. It writes only the task-browser metadata JSON file and metadata history JSONL file. Task names, paths, tags, relationships, timing, provenance, and handoff text can reveal private work details; do not commit `.task-browser/tasks.json` or `.task-browser/task-history.jsonl` unless that workspace state is intended to be shared.

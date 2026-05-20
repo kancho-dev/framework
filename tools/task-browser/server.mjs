@@ -1,16 +1,17 @@
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
-import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { appendHistoryEvent, applyBrowserPatch, buildHistoryEvent, exists, findWorkspaceRoot, historyPathFor, metadataPathFor, readHistory, readMetadata, STATUSES, syncMetadataTasks, writeMetadata } from './metadata-helpers.mjs';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
 const PORT = parsePort(process.env.PORT || '8788');
 const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
-const METADATA_PATH = resolve(process.env.TASK_BROWSER_METADATA || join(WORKSPACE_ROOT, '.task-browser', 'tasks.json'));
+const METADATA_PATH = metadataPathFor(WORKSPACE_ROOT);
+const HISTORY_PATH = historyPathFor(WORKSPACE_ROOT, METADATA_PATH);
 
-const STATUSES = ['planned', 'active', 'blocked', 'review', 'paused', 'done'];
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 const mime = new Map([['.html', 'text/html; charset=utf-8'], ['.css', 'text/css; charset=utf-8'], ['.js', 'text/javascript; charset=utf-8'], ['.json', 'application/json; charset=utf-8'], ['.svg', 'image/svg+xml; charset=utf-8']]);
 
@@ -18,20 +19,6 @@ function parsePort(value) {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid PORT: ${value}`);
   return port;
-}
-
-async function exists(path) {
-  try { await stat(path); return true; } catch { return false; }
-}
-
-async function findWorkspaceRoot(start) {
-  let current = resolve(start);
-  while (true) {
-    if (await exists(join(current, 'AGENTS.md'))) return current;
-    const parent = dirname(current);
-    if (parent === current) return resolve(start);
-    current = parent;
-  }
 }
 
 function sendJson(res, status, body) {
@@ -140,59 +127,10 @@ async function summarizeRuns(runsDir) {
   }));
 }
 
-async function readMetadata() {
-  try {
-    const parsed = JSON.parse(await readFile(METADATA_PATH, 'utf8'));
-    return normalizeMetadata(parsed);
-  } catch (error) {
-    if (error?.code === 'ENOENT') return { version: 1, nextDisplayNumber: 1, tasks: {} };
-    throw error;
-  }
-}
-
-function normalizeMetadata(metadata) {
-  return {
-    version: 1,
-    nextDisplayNumber: Number.isInteger(metadata?.nextDisplayNumber) ? metadata.nextDisplayNumber : 1,
-    tasks: metadata?.tasks && typeof metadata.tasks === 'object' ? metadata.tasks : {},
-  };
-}
-
 async function syncMetadata(discovered) {
-  const metadata = await readMetadata();
-  const nowKeys = new Set(discovered.map((task) => task.key));
-  for (const task of discovered) {
-    const existing = metadata.tasks[task.key] || {};
-    metadata.tasks[task.key] = {
-      displayId: existing.displayId || `#${metadata.nextDisplayNumber++}`,
-      project: task.project,
-      slug: task.slug,
-      path: task.path,
-      status: valid(existing.status, STATUSES, 'planned'),
-      priority: valid(existing.priority, PRIORITIES, 'normal'),
-      type: typeof existing.type === 'string' && existing.type ? existing.type : inferType(task),
-      blockedBy: arrayOfStrings(existing.blockedBy),
-      parent: typeof existing.parent === 'string' ? existing.parent : null,
-      children: arrayOfStrings(existing.children),
-      related: arrayOfStrings(existing.related),
-      tags: arrayOfStrings(existing.tags),
-      order: Number.isFinite(existing.order) ? existing.order : null,
-    };
-  }
-  for (const [key, task] of Object.entries(metadata.tasks)) {
-    if (!nowKeys.has(key)) task.missing = true;
-    else delete task.missing;
-  }
-  await writeMetadata(metadata);
+  const metadata = syncMetadataTasks(await readMetadata(METADATA_PATH, { allowMissing: true }), discovered, { inferType });
+  await writeMetadata(METADATA_PATH, metadata);
   return metadata;
-}
-
-function valid(value, allowed, fallback) {
-  return allowed.includes(value) ? value : fallback;
-}
-
-function arrayOfStrings(value) {
-  return Array.isArray(value) ? [...new Set(value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()))] : [];
 }
 
 function runTitle(fileName, heading) {
@@ -219,17 +157,16 @@ function inferType(task) {
   return 'implementation';
 }
 
-async function writeMetadata(metadata) {
-  await mkdir(dirname(METADATA_PATH), { recursive: true });
-  const temp = `${METADATA_PATH}.tmp`;
-  await writeFile(temp, `${JSON.stringify(metadata, null, 2)}\n`);
-  await rename(temp, METADATA_PATH);
-}
-
 async function taskPayload() {
   const discovered = await discoverTasks();
   const metadata = await syncMetadata(discovered);
-  const tasks = discovered.map((task) => ({ ...task, metadata: metadata.tasks[task.key] }));
+  const history = await readHistory(HISTORY_PATH, { limit: 1000 });
+  const historyByTask = new Map();
+  for (const event of history) {
+    if (!historyByTask.has(event.taskKey)) historyByTask.set(event.taskKey, []);
+    if (historyByTask.get(event.taskKey).length < 8) historyByTask.get(event.taskKey).push(event);
+  }
+  const tasks = discovered.map((task) => ({ ...task, metadata: metadata.tasks[task.key], metadataHistory: historyByTask.get(task.key) || [] }));
   const missing = Object.entries(metadata.tasks).filter(([, value]) => value.missing).map(([key, value]) => ({ key, metadata: value }));
   return { workspaceRoot: WORKSPACE_ROOT, workspaceName: basename(WORKSPACE_ROOT), metadataPath: METADATA_PATH, statuses: STATUSES, priorities: PRIORITIES, tasks, missing };
 }
@@ -240,15 +177,11 @@ async function updateTaskMetadata(key, patch) {
   if (!discovered.some((task) => task.key === key)) throw Object.assign(new Error('Unknown task'), { statusCode: 404 });
   const metadata = await syncMetadata(discovered);
   const current = metadata.tasks[key] || {};
-  const next = { ...current };
-  if ('status' in patch) next.status = valid(patch.status, STATUSES, current.status || 'planned');
-  if ('priority' in patch) next.priority = valid(patch.priority, PRIORITIES, current.priority || 'normal');
-  if ('type' in patch) next.type = typeof patch.type === 'string' && patch.type.trim() ? patch.type.trim() : current.type;
-  if ('tags' in patch) next.tags = arrayOfStrings(patch.tags);
-  if ('order' in patch) next.order = patch.order === null || patch.order === '' ? null : Number(patch.order);
-  if (!Number.isFinite(next.order)) next.order = null;
+  const next = applyBrowserPatch(current, patch);
   metadata.tasks[key] = next;
-  await writeMetadata(metadata);
+  const event = buildHistoryEvent({ key, task: next, before: current, after: next, actor: 'operator', source: 'browser', action: 'metadata.patch' });
+  await writeMetadata(METADATA_PATH, metadata);
+  if (event) await appendHistoryEvent(HISTORY_PATH, event);
   return next;
 }
 

@@ -2,7 +2,7 @@ const state = { tasks: [], selectedKey: null, statuses: [], priorities: [], work
 const priorityRank = { urgent: 0, high: 1, normal: 2, low: 3 };
 const projectColors = new Map();
 const els = {
-  refresh: document.querySelector('#refresh'), autoRefresh: document.querySelector('#auto-refresh'), filter: document.querySelector('#filter'), statusFilter: document.querySelector('#status-filter'), projectFilter: document.querySelector('#project-filter'), priorityFilter: document.querySelector('#priority-filter'), clear: document.querySelector('#clear-filters'), status: document.querySelector('#status'), board: document.querySelector('#board'), workspaceName: document.querySelector('#workspace-name'), detailPane: document.querySelector('#detail-pane'), closeDetail: document.querySelector('#close-detail'), detail: document.querySelector('#detail'), detailKey: document.querySelector('#detail-key'), detailTitle: document.querySelector('#detail-title'), detailMeta: document.querySelector('#detail-meta'), resumeFiles: document.querySelector('#resume-files'), detailHandoff: document.querySelector('#detail-handoff'), detailPurpose: document.querySelector('#detail-purpose'), detailNextSteps: document.querySelector('#detail-next-steps'), detailSuccess: document.querySelector('#detail-success'), detailContext: document.querySelector('#detail-context'), detailRuns: document.querySelector('#detail-runs')
+  refresh: document.querySelector('#refresh'), autoRefresh: document.querySelector('#auto-refresh'), filter: document.querySelector('#filter'), statusFilter: document.querySelector('#status-filter'), projectFilter: document.querySelector('#project-filter'), priorityFilter: document.querySelector('#priority-filter'), clear: document.querySelector('#clear-filters'), status: document.querySelector('#status'), board: document.querySelector('#board'), workspaceName: document.querySelector('#workspace-name'), detailPane: document.querySelector('#detail-pane'), closeDetail: document.querySelector('#close-detail'), detail: document.querySelector('#detail'), detailKey: document.querySelector('#detail-key'), detailTitle: document.querySelector('#detail-title'), detailMeta: document.querySelector('#detail-meta'), resumeFiles: document.querySelector('#resume-files'), detailHandoff: document.querySelector('#detail-handoff'), detailPurpose: document.querySelector('#detail-purpose'), detailNextSteps: document.querySelector('#detail-next-steps'), detailSuccess: document.querySelector('#detail-success'), detailContext: document.querySelector('#detail-context'), detailRuns: document.querySelector('#detail-runs'), detailHistory: document.querySelector('#detail-history')
 };
 
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c])); }
@@ -177,6 +177,7 @@ function renderDetail(task) {
   els.detailSuccess.textContent = task.success || 'No success/acceptance section found.';
   els.detailContext.textContent = task.context || 'No context excerpt found.';
   els.detailRuns.innerHTML = renderRuns(task.runs || []);
+  els.detailHistory.innerHTML = renderHistory(task.metadataHistory || []);
 }
 
 function typeOptions(current) {
@@ -214,6 +215,24 @@ function renderRuns(runs) {
   if (runs.length === 0) return '<p class="muted">No run logs found.</p>';
   return runs.map((run) => `<article class="timeline-item"><div class="timeline-dot"></div><div class="timeline-card"><strong>${escapeHtml(run.title)}</strong><p>${escapeHtml(run.goal || 'No goal section found.')}</p><span class="run-path" title="${escapeHtml(run.path)}">${escapeHtml(run.file)}</span></div></article>`).join('');
 }
+
+function renderHistory(events) {
+  if (events.length === 0) return '<p class="muted">No metadata history yet.</p>';
+  return events.map((event) => {
+    const fields = Object.keys(event.changes || {});
+    const title = formatHistoryTitle(event, fields);
+    const details = fields.map((field) => `<span class="history-change ${field === 'status' ? 'status-change' : ''}">${escapeHtml(field)}: <strong>${escapeHtml(formatHistoryValue(event.changes[field]?.before))}</strong> → <strong>${escapeHtml(formatHistoryValue(event.changes[field]?.after))}</strong></span>`).join('');
+    return `<article class="history-item ${fields.includes('status') ? 'has-status' : ''}"><div><strong>${title}</strong><p>${details}</p><span>${escapeHtml(historyMeta(event))}</span></div></article>`;
+  }).join('');
+}
+
+function formatHistoryTitle(event, fields) {
+  const when = event.timestamp ? new Date(event.timestamp).toLocaleString() : 'unknown time';
+  if (event.changes?.status) return `Status ${event.changes.status.before || 'unset'} → ${event.changes.status.after || 'unset'} • ${when}`;
+  return `${fields.join(', ') || 'metadata'} changed • ${when}`;
+}
+function formatHistoryValue(value) { return Array.isArray(value) ? value.join(', ') || '[]' : value ?? 'null'; }
+function historyMeta(event) { return [event.actor, event.role, event.sessionTool, event.sessionId, event.source].filter(Boolean).join(' • ') || 'unknown source'; }
 
 function continuePrompt(task) {
   return `Use task-pickup skill for task ${task.key}`;
