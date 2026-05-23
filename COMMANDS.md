@@ -22,6 +22,7 @@ Prefer prompts that tell the agent to follow `framework/FRAMEWORK.md` and `frame
 The first portable commands are intentionally small:
 
 - `next-best-actions` — high-value because it is the common entry point for resuming or prioritizing work.
+- `slc` — shape product concepts, design/architecture specs, and implementation slices as Simple, Lovable, and Complete before execution.
 - `update-framework` — high-value because framework-managed workspaces need a repeatable update/alignment flow with merge safety.
 - `workspace-maintenance` — high-value because it captures recurring Historian cleanup without implying project-code changes.
 
@@ -34,6 +35,7 @@ Pi supports native prompt templates loaded from `~/.pi/agent/prompts/*.md`, work
 This repository ships Pi-compatible templates in [`prompts/`](prompts/):
 
 - [`prompts/next-best-actions.md`](prompts/next-best-actions.md) -> `/next-best-actions`
+- [`prompts/slc.md`](prompts/slc.md) -> `/slc`
 - [`prompts/update-framework.md`](prompts/update-framework.md) -> `/update-framework`
 - [`prompts/workspace-maintenance.md`](prompts/workspace-maintenance.md) -> `/workspace-maintenance`
 
@@ -44,6 +46,7 @@ Recommended Linux/macOS symlink setup from the workspace root:
 ```bash
 mkdir -p .pi/prompts
 ln -s ../../framework/prompts/next-best-actions.md .pi/prompts/next-best-actions.md
+ln -s ../../framework/prompts/slc.md .pi/prompts/slc.md
 ln -s ../../framework/prompts/update-framework.md .pi/prompts/update-framework.md
 ln -s ../../framework/prompts/workspace-maintenance.md .pi/prompts/workspace-maintenance.md
 ```
@@ -68,6 +71,7 @@ Use the same canonical templates from [`prompts/`](prompts/) for OpenCode unless
 ```bash
 mkdir -p .opencode/commands
 ln -s ../../framework/prompts/next-best-actions.md .opencode/commands/next-best-actions.md
+ln -s ../../framework/prompts/slc.md .opencode/commands/slc.md
 ln -s ../../framework/prompts/update-framework.md .opencode/commands/update-framework.md
 ln -s ../../framework/prompts/workspace-maintenance.md .opencode/commands/workspace-maintenance.md
 ```

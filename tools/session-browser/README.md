@@ -30,7 +30,7 @@ PORT=8790 npm start
 
 The tool helps you:
 
-- browse sessions by prompt, cwd, source, recency, token pressure, bookmarks, and labels;
+- browse sessions by prompt, cwd, origin, source, recency, token pressure, bookmarks, and labels;
 - bookmark important sessions and add simple manual labels that persist locally;
 - skim conversations, topic anchors, assistant answers, and tool actions;
 - copy restore commands back into Pi or OpenCode;
@@ -108,6 +108,7 @@ OpenCode support is best-effort and fail-soft. If the DB, `sqlite3`, or expected
 - **Label filter**: show sessions with a selected manual label.
 - **More filters & sort**: expand only when needed for source, work-dir (`cwd`), and sort controls.
 - **Clear**: reset search, filters, source, work-dir, and sort back to defaults.
+- **Origin pills**: cards for subdirectory sessions show a compact workspace-relative cwd label; hover for the full cwd. Workspace-root sessions omit the pill to reduce clutter.
 - **Session labels**: click a label pill on a card to filter by that label.
 - **Auto 10s**: enabled by default; refreshes session list and selected detail.
 - **Token pressure pill/bar**: visual heaviness signal from recorded token usage; not context-window percentage.

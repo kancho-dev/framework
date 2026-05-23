@@ -1,6 +1,6 @@
 # Portable Agent Framework
 
-![Version](https://img.shields.io/badge/version-0.11.0-blue)
+![Version](https://img.shields.io/badge/version-0.12.0-blue)
 
 A minimal, agent-agnostic framework for keeping AI-assisted software development coherent across sessions, tasks, projects, and tools.
 
@@ -20,6 +20,10 @@ After setup, ask for the outcome you want, for example:
 
 ```text
 Use the `next-best-actions` skill and tell me what we should do next.
+```
+
+```text
+Use the `slc-product-concept` skill to shape this idea before implementation: ...
 ```
 
 ```text
@@ -171,7 +175,7 @@ Read [`tools/task-browser/README.md`](tools/task-browser/README.md) for setup, m
 
 ### Native Commands
 
-[`prompts/`](prompts/) contains optional Pi/OpenCode-compatible command templates such as `/next-best-actions`, `/update-framework`, and `/workspace-maintenance`.
+[`prompts/`](prompts/) contains optional Pi/OpenCode-compatible command templates such as `/next-best-actions`, `/slc`, `/update-framework`, and `/workspace-maintenance`.
 
 Use [`COMMANDS.md`](COMMANDS.md) if you want native slash-command integration. The framework remains usable through normal prompts without these adapters.
 

@@ -171,7 +171,7 @@ function renderDetail(task) {
   els.detailKey.innerHTML = `<span class="display-id">${escapeHtml(meta.displayId)}</span>${projectPill(task.project)}<span>${escapeHtml(task.slug)}</span>`;
   els.detailTitle.textContent = task.title;
   const primaryMeta = [editableMetaPill('status', meta.status, state.statuses, `status ${meta.status}`), editableMetaPill('priority', meta.priority, state.priorities, `priority ${meta.priority}`), editableMetaPill('type', meta.type, typeOptions(meta.type), 'type')].join('');
-  els.detailMeta.innerHTML = `<form class="inline-metadata-editor" data-key="${escapeHtml(task.key)}"><div class="meta-line primary-meta-line"><div>${primaryMeta}</div><label class="order-editor">Order <input name="order" type="number" step="1" value="${escapeHtml(meta.order ?? '')}"></label></div>${renderTagEditor(meta.tags || [])}${renderRelationsAndAction(meta, task)}</form>`;
+  els.detailMeta.innerHTML = `<form class="inline-metadata-editor" data-key="${escapeHtml(task.key)}"><div class="meta-line primary-meta-line"><div>${primaryMeta}</div><label class="order-editor">Order <input name="order" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(meta.order ?? '')}"></label></div>${renderTagEditor(meta.tags || [])}${renderRelationsAndAction(meta, task)}</form>`;
   els.resumeFiles.innerHTML = Object.entries(task.files).map(([label, path]) => `<li><strong>${escapeHtml(label)}</strong>: <code>${escapeHtml(path)}</code></li>`).join('');
   els.detailHandoff.textContent = task.handoff || 'No current-state summary found.';
   els.detailPurpose.textContent = task.purpose || 'No purpose section found.';
@@ -330,6 +330,10 @@ els.detailMeta.addEventListener('input', (event) => {
 els.detailMeta.addEventListener('change', (event) => {
   const form = event.target.closest('.inline-metadata-editor');
   if (!form || event.target.name === 'newTag') return;
+  if (event.target.name === 'order' && !event.target.validity.valid) {
+    els.status.textContent = 'Order must be a positive whole number.';
+    return;
+  }
   const value = event.target.name === 'order' ? event.target.value || null : event.target.value;
   saveMetadataPatch(form, { [event.target.name]: value }).catch((error) => { els.status.textContent = error.message; });
 });

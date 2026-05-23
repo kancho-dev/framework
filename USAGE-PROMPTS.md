@@ -101,6 +101,18 @@ Pull the latest changes in the framework repo and use `update-framework` skill t
 ## Planning And Prioritization
 
 ```text
+Use the `slc-product-concept` skill to shape this product idea before implementation: ...
+```
+
+```text
+Use `/slc design` to shape this architecture idea into a small, lovable, complete design slice: ...
+```
+
+```text
+Use `/slc slice` to scope the smallest complete implementation slice for: ...
+```
+
+```text
 Use the framework as Overseer and make a short plan for project X
 ```
 

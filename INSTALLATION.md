@@ -132,7 +132,7 @@ The framework includes optional Markdown command templates under:
 framework/prompts/
 ```
 
-These templates expose slash commands such as `/next-best-actions`, `/update-framework`, and `/workspace-maintenance` in Pi when symlinked or copied into workspace `.pi/prompts/`, and in OpenCode when symlinked or copied into workspace `.opencode/commands/`.
+These templates expose slash commands such as `/next-best-actions`, `/slc`, `/update-framework`, and `/workspace-maintenance` in Pi when symlinked or copied into workspace `.pi/prompts/`, and in OpenCode when symlinked or copied into workspace `.opencode/commands/`.
 
 Recommended Linux/macOS setup is symlinking tool-local command files to `framework/prompts/*.md`, so prompt changes arrive with normal framework updates. Copying the files is the simpler fallback, especially on Windows or filesystems where symlinks are inconvenient. In either case, inspect existing command files first and ask before replacing same-name local prompts/commands.
 

@@ -61,6 +61,37 @@ function workspaceDisplayName() {
   return state.workspaceName || window.FrameworkWorkspaceBadge?.workspaceNameFromPath(state.workspaceRoot, 'workspace') || 'workspace';
 }
 
+function pathParts(value) {
+  return String(value || '').split('/').filter(Boolean);
+}
+
+function pathBasename(value) {
+  return pathParts(value).at(-1) || '';
+}
+
+function relativePath(candidate, root) {
+  const current = String(candidate || '').replace(/\/+$/, '');
+  const base = String(root || '').replace(/\/+$/, '');
+  if (!current || !base) return '';
+  if (current === base) return '.';
+  return current.startsWith(`${base}/`) ? current.slice(base.length + 1) : '';
+}
+
+function originPill(session) {
+  if (!session?.cwd) return '';
+  const workspaceName = workspaceDisplayName();
+  const relative = relativePath(session.cwd, state.workspaceRoot);
+  if (relative === '.') return '';
+  const label = relative ? `${workspaceName}/${relative}` : pathBasename(session.cwd);
+  if (!label) return '';
+  return `<span class="origin-pill" title="${escapeHtml(session.cwd)}">${escapeHtml(label)}</span>`;
+}
+
+function originRow(session) {
+  const pill = originPill(session);
+  return pill ? `<span class="origin-row">${pill}</span>` : '';
+}
+
 window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
 
 function updateDocumentTitle() {
@@ -198,6 +229,7 @@ function renderSessions() {
     <li>
       <button class="session-card ${session.path === state.selectedPath ? 'active' : ''} ${isBookmarked(session) ? 'bookmarked' : ''}" data-path="${escapeHtml(session.path)}">
         <div class="card-top"><span class="card-badges">${isBookmarked(session) ? '<span class="bookmark-mark on">★</span>' : ''}<span class="badge">${escapeHtml(sourceLabel(session.source))}</span> ${tokenPressurePill(session)}</span><span class="card-times"><span>Updated: ${escapeHtml(formatDate(session.updatedAt))}</span><span>Created: ${escapeHtml(formatDate(session.createdAt))}</span></span></div>
+        ${originRow(session)}
         <div class="prompt">${escapeHtml(session.name || session.firstPrompt || '(no user prompt found)')}</div>
         ${session.parentId ? '<div class="relation-line"><span class="relation-badge">child session</span></div>' : ''}
         ${renderLabelPills(sessionLabels(session))}

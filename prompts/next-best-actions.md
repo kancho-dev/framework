@@ -9,7 +9,7 @@ Invoke the `next-best-actions` skill. Read only the framework-required base file
 Focus, if provided: $ARGUMENTS
 
 Return:
-- the top 3 next actions in priority order;
+- the top 5 next actions in priority order, considering task-browser `order` metadata as an Operator-assigned prioritization signal when present;
 - why the first action is best now;
 - any question that blocks safe execution.
 

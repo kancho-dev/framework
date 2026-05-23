@@ -88,6 +88,8 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 .card-badges .token-pill { margin-left: 0; }
 .card-times { flex: 0 0 auto; display: flex; flex-direction: column; gap: 1px; text-align: right; line-height: 1.25; }
 .badge { color: var(--bg); background: var(--accent); border-radius: 999px; padding: 1px 7px; font-weight: 700; }
+.origin-row { display: block; width: 100%; min-width: 0; margin: -3px 0 8px; }
+.origin-pill { display: inline-block; box-sizing: border-box; width: auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; direction: rtl; unicode-bidi: plaintext; white-space: nowrap; color: var(--muted); background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; font-size: 10px; line-height: 1.5; text-align: left; vertical-align: top; }
 .bookmark-mark { color: var(--dim); font-size: 13px; line-height: 1; }
 .bookmark-mark.on { color: var(--warning); }
 .label-row { display: flex; flex-wrap: wrap; gap: 5px; margin: -2px 0 7px; }

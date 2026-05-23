@@ -183,15 +183,14 @@ export function applyBrowserPatch(current, patch) {
   if ('priority' in patch) next.priority = valid(patch.priority, PRIORITIES, current.priority || 'normal');
   if ('type' in patch) next.type = typeof patch.type === 'string' && patch.type.trim() ? patch.type.trim() : current.type;
   if ('tags' in patch) next.tags = cleanArray(patch.tags);
-  if ('order' in patch) next.order = patch.order === null || patch.order === '' ? null : Number(patch.order);
-  if (!Number.isFinite(next.order)) next.order = null;
+  if ('order' in patch) next.order = parseOrder(patch.order);
   return next;
 }
 
 export function fieldName(name) { return name.replace(/-([a-z])/g, (_, c) => c.toUpperCase()); }
 export function split(value) { return cleanArray(String(value).split(',')); }
 export function cleanArray(value) { return Array.isArray(value) ? [...new Set(value.map((v) => String(v).trim()).filter(Boolean))] : []; }
-export function parseOrder(value) { if (value === null || value === '') return null; const n = Number(value); if (!Number.isInteger(n)) throw new Error('order must be an integer'); return n; }
+export function parseOrder(value) { if (value === null || value === '') return null; const n = Number(value); if (!Number.isInteger(n) || n <= 0) throw new Error('order must be a positive integer'); return n; }
 export function valid(value, allowed, fallback) { return allowed.includes(value) ? value : fallback; }
 export function requireOne(value, allowed, name) { if (!allowed.includes(value)) throw new Error(`${name} must be one of: ${allowed.join(', ')}`); return value; }
 export function required(value, name) { if (!value) throw new Error(`Missing ${name}`); return value; }

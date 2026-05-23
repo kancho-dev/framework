@@ -31,7 +31,7 @@ Identify the highest-value next actions from the current workspace or project st
 
 1. Read the smallest set of current-state files that can explain what is active.
 2. If useful for the run, scan `OPERATOR-NOTES.md` for human todos, ideas, or pending decisions that may affect prioritization.
-3. Identify what is already in progress, what is blocked, and what is effectively complete. If the workspace uses task-browser metadata, use the task-browser board or `framework/tools/task-browser/metadata-cli.mjs list` as supporting triage evidence, but prefer task files when metadata conflicts.
+3. Identify what is already in progress, what is blocked, and what is effectively complete. If the workspace uses task-browser metadata, use the task-browser board or `framework/tools/task-browser/metadata-cli.mjs list` as supporting triage evidence, including any numeric `order` values as Operator-assigned prioritization signals; lower `order` values should generally be considered before higher or blank values within the same status/priority band. Prefer task files when metadata conflicts.
 4. Prefer actions that remove ambiguity, unlock work, or finish an active slice before creating new work.
 5. If multiple paths are possible, choose the one with the best value-to-complexity ratio.
 6. State the next actions explicitly and in priority order.
@@ -41,7 +41,7 @@ Identify the highest-value next actions from the current workspace or project st
 
 - a short prioritized next-step list
 - updated active state if priorities changed
-- task-browser metadata aligned with priority/status decisions when the workspace uses task-browser
+- task-browser metadata aligned with priority/status/order decisions when the workspace uses task-browser
 
 ## Stop Conditions
 
@@ -53,6 +53,7 @@ Identify the highest-value next actions from the current workspace or project st
 - reading too much history before choosing the next step
 - proposing speculative work while active work is unfinished
 - leaving decisions only in chat instead of files
+- ignoring Operator-assigned task-browser `order` values when comparing otherwise similar tasks
 - treating task-browser metadata as authoritative when task files disagree
 
 ## Related Files / Tools

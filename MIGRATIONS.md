@@ -6,6 +6,22 @@ These notes are version-specific checks, not a permanent setup checklist. Apply 
 
 For the update procedure, use `framework/SKILLS/update-framework/SKILL.md`.
 
+## v0.12.0 — First-class SLC Skill And `/slc` Command
+
+This release adds the reusable `slc-product-concept` framework skill and an optional `/slc` native command template for shaping product concepts, design/architecture specs, and implementation slices as Simple, Lovable, and Complete before execution.
+
+### Required checks
+
+1. If the workspace has a local `slc-product-concept` skill, decide whether to keep it as an intentional local override or remove/rename it so the framework skill is used.
+2. If optional native command prompts were copied instead of symlinked, re-copy `framework/prompts/slc.md` only when the Operator wants the new `/slc` command available locally.
+3. If prompts are symlinked selectively, add a symlink for `framework/prompts/slc.md` when desired.
+
+### Not required
+
+- No core workflow migration is required.
+- No bundled SLC resource/PDF is required; the skill is self-contained and links to the public article for background.
+- Existing workspaces can keep using normal prompts instead of `/slc`.
+
 ## v0.11.0 — Framework Cockpit And Daily-brief Safety
 
 This release adds the optional Framework Cockpit tool (`agent-tool-orchestrator` `1.0.0`), promotes Task Browser to `1.2.0`, promotes Session Browser to `1.2.0`, and strengthens daily-brief overwrite safety guidance.

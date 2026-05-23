@@ -40,7 +40,7 @@ No npm install is needed for the current dependency-free tool.
 - search by display ID, project/slug/key, title, and tags;
 - project and priority filters;
 - task detail drawer with Purpose, Next steps, Run timeline, Current state, Success/Acceptance, Resume files, Context, and Metadata history; Next steps are read from `HANDOFF.md` `## Next Action` with `## Next Steps` fallback;
-- editable status, priority, type, tags, and optional order metadata;
+- editable status, priority, type, tags, and optional positive-integer order metadata;
 - relationship metadata (`blockedBy`, `parent`, `children`, `related`) when present, with links to known tasks;
 - cross-column drag/drop to change task status;
 - a copyable generic task-pickup prompt with subtle hover/focus preview.
@@ -51,7 +51,7 @@ Task Browser sorts cards deterministically in the frontend.
 
 For non-`done` columns:
 
-1. optional numeric `order` metadata, ascending;
+1. optional positive-integer `order` metadata, ascending;
 2. priority: `urgent`, `high`, `normal`, `low`;
 3. latest run timestamp, newest first, with `HANDOFF.md` mtime fallback when no runs exist;
 4. display ID number, descending;
@@ -100,7 +100,7 @@ Example shape:
 }
 ```
 
-Task Browser metadata owns UI/workflow fields: `displayId`, `status`, `priority`, `type`, `blockedBy`, `parent`, `children`, `related`, `tags`, and optional `order`.
+Task Browser metadata owns UI/workflow fields: `displayId`, `status`, `priority`, `type`, `blockedBy`, `parent`, `children`, `related`, `tags`, and optional positive-integer `order`.
 
 Framework task files remain the source of truth for purpose, scope, acceptance criteria, narrative handoff/current state, stable context, and run evidence.
 
