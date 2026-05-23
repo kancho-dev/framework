@@ -4,16 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Task Browser</title>
-  <link rel="icon" href="/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/shared/workspace-badge.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/shared/cockpit-nav.css">
 </head>
 <body class="browse-mode">
   <main id="app">
     <section class="tasks-pane">
+      <div id="cockpit-nav"></div>
       <header>
         <div class="brand">
-          <img class="brand-logo" src="/icon.svg" alt="" width="38" height="38">
-          <h1>Task Browser <span id="workspace-name" class="workspace-badge"></span></h1>
+          <img class="brand-logo" src="icon.svg" alt="" width="38" height="38">
+          <h1>Task Browser <span id="workspace-name" class="workspace-badge wide"></span></h1>
         </div>
         <div class="header-actions">
           <label class="auto-refresh"><input id="auto-refresh" type="checkbox" checked> Auto 10s</label>
@@ -53,6 +56,9 @@
       </article>
     </section>
   </main>
-  <script src="/app.js"></script>
+  <!-- __FRAMEWORK_COCKPIT_CONFIG__ -->
+  <script src="/shared/cockpit-nav.js"></script>
+  <script src="/shared/workspace-badge.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

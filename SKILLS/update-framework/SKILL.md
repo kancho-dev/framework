@@ -51,7 +51,7 @@ Bring an already framework-managed workspace into alignment with newer framework
    - `projects/[name]/SKILLS/INDEX.md` and `projects/[name]/SKILLS/*/SKILL.md`;
    - tool-native project skills or commands when they are relevant and supported by the current agent/tool.
 13. Add newly required files or directories when they are missing and templates clearly apply.
-14. If the newer framework includes optional tools such as `framework/tools/session-browser/`, do not force workspace changes; tell the Operator the tool is available after updating `framework/`, and point them to the tool README for optional setup/use.
+14. If the newer framework includes optional tools such as `framework/tools/tool-orchestrator/`, `framework/tools/session-browser/`, or `framework/tools/task-browser/`, do not force workspace changes; tell the Operator the tools are available after updating `framework/`, and point them to the relevant tool READMEs for optional setup/use.
 15. If the newer framework includes optional native command templates under `framework/prompts/`, do not force setup; tell the Operator they are available and point them to `framework/COMMANDS.md` for Pi symlink/copy setup and OpenCode guidance.
 16. Update or merge existing workspace files only when needed to support new framework behavior or guidance.
 17. Do not overwrite local workspace-specific instructions blindly.
@@ -61,27 +61,32 @@ Bring an already framework-managed workspace into alignment with newer framework
 21. After the workspace has been updated, set `framework/CURRENT_VERSION` to match `framework/VERSION`.
 22. Summarize the old version, new version, what changed, what was added, updated, left unchanged, or escalated.
 
-## Optional Session Browser Check
+## Optional Framework Tool Check
 
-If the updated framework includes `framework/tools/session-browser/`:
+If the updated framework includes optional browser tools:
 
-1. Mention it to the Operator as an optional local, read-only browser for Pi and OpenCode coding-agent sessions.
-2. Do not force setup; the core framework workflow does not require it.
-3. If the Operator wants to use it, verify basic prerequisites:
+1. Mention Framework Cockpit (`framework/tools/tool-orchestrator/`) to the Operator as an optional local shell for opening small framework browser tools from one place.
+2. Mention Session Browser (`framework/tools/session-browser/`) as an optional local, read-only browser for Pi and OpenCode coding-agent sessions.
+3. Mention Task Browser (`framework/tools/task-browser/`) as an optional local browser for tracked task directories and task-browser-owned metadata.
+4. Do not force setup; the core framework workflow does not require these tools.
+5. If the Operator wants to use Framework Cockpit, verify `node --version` and point to:
+   - `cd framework/tools/tool-orchestrator && npm start`
+   - open `http://localhost:8789`
+6. If the Operator wants to use Session Browser directly, verify basic prerequisites:
    - `node --version`
    - optional for OpenCode: `sqlite3 --version`
-4. Point to the quick start:
+7. Point to the Session Browser quick start:
    - `cd framework/tools/session-browser && npm start`
    - open `http://localhost:8787`
-5. For workspace-specific setup, suggest only the env vars that matter:
+8. For workspace-specific setup, suggest only the env vars that matter:
    - `WORKSPACE_ROOT=/path/to/workspace`
    - `SESSION_SOURCES=pi`, `SESSION_SOURCES=opencode`, or `SESSION_SOURCES=pi,opencode`
    - `PORT=8790` when the default port is busy
    - `PI_SESSION_ROOT` / `SESSION_ROOT` when Pi sessions are not in the default location
    - `OPENCODE_DB` / `OPENCODE_DATA_DIR` when OpenCode data is not in the default location
-6. Remind the Operator that session transcripts, cwd paths, tool outputs, copied databases, exports, logs, and env files can be sensitive.
-7. Do not copy session files, OpenCode databases, exports, logs, or local `.env` files into the framework repo.
-8. For full details, refer to `framework/tools/session-browser/README.md`.
+9. Remind the Operator that task metadata, session transcripts, cwd paths, tool outputs, copied databases, exports, logs, and env files can be sensitive.
+10. Do not copy session files, OpenCode databases, exports, logs, local `.env` files, or local `.task-browser/` metadata into the framework repo.
+11. For full details, refer to the relevant tool README under `framework/tools/`.
 
 ## Outputs
 

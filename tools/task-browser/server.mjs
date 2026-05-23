@@ -1,33 +1,23 @@
 import { createServer } from 'node:http';
-import { createReadStream } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { basename, dirname, extname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appendHistoryEvent, applyBrowserPatch, buildHistoryEvent, exists, findWorkspaceRoot, historyPathFor, metadataPathFor, readHistory, readMetadata, STATUSES, syncMetadataTasks, writeMetadata } from './metadata-helpers.mjs';
+import { appendHistoryEvent, applyBrowserPatch, buildHistoryEvent, findWorkspaceRoot, historyPathFor, metadataPathFor, readHistory, readMetadata, STATUSES, syncMetadataTasks, writeMetadata } from './metadata-helpers.mjs';
+import { exists, normalizeBasePath, readStaticText, safeError, sendHtml, sendJson, serveStaticPath, stripBasePath } from '../shared-web/http.mjs';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
+const SHARED_WEB_DIR = join(TOOL_DIR, '..', 'shared-web');
 const PORT = parsePort(process.env.PORT || '8788');
 const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
 const METADATA_PATH = metadataPathFor(WORKSPACE_ROOT);
 const HISTORY_PATH = historyPathFor(WORKSPACE_ROOT, METADATA_PATH);
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
-const mime = new Map([['.html', 'text/html; charset=utf-8'], ['.css', 'text/css; charset=utf-8'], ['.js', 'text/javascript; charset=utf-8'], ['.json', 'application/json; charset=utf-8'], ['.svg', 'image/svg+xml; charset=utf-8']]);
-
 function parsePort(value) {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid PORT: ${value}`);
   return port;
-}
-
-function sendJson(res, status, body) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-  res.end(JSON.stringify(body, null, 2));
-}
-
-function safeError(error) {
-  return error instanceof Error ? error.message : 'Unknown error';
 }
 
 async function discoverTasks() {
@@ -196,29 +186,55 @@ async function readJsonBody(req) {
   }
 }
 
-const server = createServer(async (req, res) => {
-  try {
-    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-    if (url.pathname === '/api/tasks') return sendJson(res, 200, await taskPayload());
-    if (url.pathname === '/api/task-metadata' && req.method === 'PATCH') {
-      const body = await readJsonBody(req);
-      if (!body || typeof body !== 'object' || Array.isArray(body)) return sendJson(res, 400, { error: 'Invalid request body' });
-      if (typeof body.key !== 'string' || !body.key) return sendJson(res, 400, { error: 'Missing task key' });
-      return sendJson(res, 200, { metadata: await updateTaskMetadata(body.key, body.metadata) });
+export function createTaskBrowserHandler({ basePath = '/', cockpit = null } = {}) {
+  const normalizedBase = normalizeBasePath(basePath);
+  return async function taskBrowserHandler(req, res) {
+    try {
+      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+      const pathname = stripBasePath(url.pathname, normalizedBase);
+      if (pathname === null) return false;
+      if (pathname === '/api/tasks') {
+        sendJson(res, 200, await taskPayload());
+        return true;
+      }
+      if (pathname === '/api/task-metadata' && req.method === 'PATCH') {
+        const body = await readJsonBody(req);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+          sendJson(res, 400, { error: 'Invalid request body' });
+          return true;
+        }
+        if (typeof body.key !== 'string' || !body.key) {
+          sendJson(res, 400, { error: 'Missing task key' });
+          return true;
+        }
+        sendJson(res, 200, { metadata: await updateTaskMetadata(body.key, body.metadata) });
+        return true;
+      }
+      if (pathname.startsWith('/shared/')) {
+        await serveStaticPath(res, SHARED_WEB_DIR, pathname.replace('/shared', '') || '/');
+        return true;
+      }
+      if (pathname === '/') {
+        let html = await readStaticText(PUBLIC_DIR, '/index.html');
+        html = html.replaceAll('/shared/', `${normalizedBase}/shared/`);
+        html = html.replace('<!-- __FRAMEWORK_COCKPIT_CONFIG__ -->', cockpit ? `<script>window.__FRAMEWORK_COCKPIT__ = ${JSON.stringify(cockpit)};</script>` : '');
+        await sendHtml(res, html);
+        return true;
+      }
+      await serveStaticPath(res, PUBLIC_DIR, pathname);
+      return true;
+    } catch (error) {
+      sendJson(res, error?.statusCode || 500, { error: safeError(error) });
+      return true;
     }
-    const filePath = url.pathname === '/' ? join(PUBLIC_DIR, 'index.html') : join(PUBLIC_DIR, decodeURIComponent(url.pathname));
-    const resolved = resolve(filePath);
-    if (!resolved.startsWith(`${PUBLIC_DIR}/`) && resolved !== join(PUBLIC_DIR, 'index.html')) return sendJson(res, 403, { error: 'Forbidden' });
-    if (!(await exists(resolved))) return sendJson(res, 404, { error: 'Not found' });
-    res.writeHead(200, { 'content-type': mime.get(extname(resolved)) || 'application/octet-stream' });
-    createReadStream(resolved).pipe(res);
-  } catch (error) {
-    sendJson(res, error?.statusCode || 500, { error: safeError(error) });
-  }
-});
+  };
+}
 
-server.listen(PORT, () => {
-  console.log(`Task Browser listening at http://localhost:${PORT}`);
-  console.log(`Workspace: ${WORKSPACE_ROOT}`);
-  console.log(`Metadata: ${METADATA_PATH}`);
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const server = createServer(createTaskBrowserHandler());
+  server.listen(PORT, () => {
+    console.log(`Task Browser listening at http://localhost:${PORT}`);
+    console.log(`Workspace: ${WORKSPACE_ROOT}`);
+    console.log(`Metadata: ${METADATA_PATH}`);
+  });
+}

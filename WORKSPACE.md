@@ -16,7 +16,7 @@ Optional Operator-maintained notes for human todos, ideas, questions, blockers, 
 
 Shared daily log. Append a short factual entry after meaningful work. Use the real current system date/time from the live environment and write to today's dated file, not a previous day's file.
 
-Daily brief structure is: optional `Carry-forward from previous brief` section first, then timed log entries ordered by their real log time. Add each new timed entry at the end of today's file; do not insert new timed entries above existing timed entries.
+Daily brief structure is: optional `Carry-forward from previous brief` section first, then timed log entries ordered by their real log time. Add each new timed entry at the end of today's file; do not insert new timed entries above existing timed entries. Before creating or writing a daily-brief file, check whether that dated file already exists. Never use an overwrite/write-file operation on an existing daily brief; use append or targeted edit only, preserving all existing entries.
 
 When creating today's brief from a previous brief, add a short `Carry-forward from previous brief` section with only important unfinished actionable items before the timed entries. When a carry-forward item in today's brief is clearly completed or no longer actionable, mark it checked (`[x]`) in today's brief; do this only when confirmed by task state, closure, or explicit Operator direction, and do not rewrite older daily briefs. Move durable multi-day state to `ACTIVE-CONTEXT.md`, task files, project `library/`, `OPERATOR-NOTES.md`, or `FIXES.md` instead of relying only on carry-forward.
 

@@ -6,6 +6,23 @@ These notes are version-specific checks, not a permanent setup checklist. Apply 
 
 For the update procedure, use `framework/SKILLS/update-framework/SKILL.md`.
 
+## v0.11.0 — Framework Cockpit And Daily-brief Safety
+
+This release adds the optional Framework Cockpit tool (`agent-tool-orchestrator` `1.0.0`), promotes Task Browser to `1.2.0`, promotes Session Browser to `1.2.0`, and strengthens daily-brief overwrite safety guidance.
+
+### Required checks
+
+1. Merge the updated daily-brief guidance into workspace instructions where relevant: check whether `memory/daily-brief-YYYY-MM-DD.md` exists before writing, never overwrite an existing daily brief, and append or targeted-edit only.
+2. If the workspace uses Task Browser or Session Browser, verify the standalone commands still work after updating. Both tools now support route-base-aware mounted mode for Framework Cockpit while preserving standalone mode.
+3. If the workspace uses optional tool documentation or local command notes, mention that Framework Cockpit is available under `framework/tools/tool-orchestrator/`.
+
+### Not required
+
+- No workspace migration is required to use the core framework workflow.
+- No Framework Cockpit setup is required in workspaces that do not want the optional shell.
+- No `.task-browser/` metadata conversion is required.
+- Existing standalone Task Browser and Session Browser usage remains valid.
+
 ## v0.10.0 — Task-browser Action History
 
 This release promotes the task-browser tool package to `1.1.0` and adds local append-only action history for durable task-browser metadata changes.

@@ -58,8 +58,10 @@ function shortPath(value, max = 72) {
 }
 
 function workspaceDisplayName() {
-  return state.workspaceName || String(state.workspaceRoot || '').split('/').filter(Boolean).at(-1) || 'workspace';
+  return state.workspaceName || window.FrameworkWorkspaceBadge?.workspaceNameFromPath(state.workspaceRoot, 'workspace') || 'workspace';
 }
+
+window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
 
 function updateDocumentTitle() {
   if (state.workspaceName) document.title = `${state.workspaceName} - Sessions`;
@@ -190,8 +192,7 @@ function renderSessions() {
     ...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`),
     state.metadataError || '',
   ].filter(Boolean).length ? ` · ${[...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`), state.metadataError || ''].filter(Boolean).join(', ')}` : '';
-  els.workspaceName.textContent = workspaceDisplayName();
-  els.workspaceName.title = state.workspaceRoot ? `Workspace: ${state.workspaceRoot}` : 'Workspace';
+  window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: state.workspaceName, root: state.workspaceRoot, tooltipPrefix: 'Workspace' });
   els.status.textContent = `${sessions.length} of ${state.sessions.length} sessions · ${workspaceDisplayName()}${errorText}`;
   els.sessions.innerHTML = sessions.map((session) => `
     <li>
@@ -497,7 +498,7 @@ function syncMetadata(path, metadata) {
 }
 
 async function saveMetadata(path, patch) {
-  const res = await fetch('/api/metadata', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, ...patch }) });
+  const res = await fetch('api/metadata', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, ...patch }) });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to save metadata');
   syncMetadata(path, data.metadata);
@@ -525,7 +526,7 @@ async function selectSession(path) {
   els.messages.innerHTML = '';
   els.topics.innerHTML = '';
 
-  const res = await fetch(`/api/session?path=${encodeURIComponent(path)}`);
+  const res = await fetch(`api/session?path=${encodeURIComponent(path)}`);
   const detail = await res.json();
   if (!res.ok) throw new Error(detail.error || 'Failed to load session');
   state.selectedDetail = detail;
@@ -536,7 +537,7 @@ async function selectSession(path) {
 
 async function reloadSelectedSession() {
   if (!state.selectedPath) return;
-  const res = await fetch(`/api/session?path=${encodeURIComponent(state.selectedPath)}`);
+  const res = await fetch(`api/session?path=${encodeURIComponent(state.selectedPath)}`);
   const detail = await res.json();
   if (!res.ok) throw new Error(detail.error || 'Failed to reload selected session');
   state.selectedDetail = detail;
@@ -546,7 +547,7 @@ async function reloadSelectedSession() {
 
 async function loadSessions({ reloadSelected = false } = {}) {
   els.status.textContent = 'Loading sessions…';
-  const res = await fetch('/api/sessions');
+  const res = await fetch('api/sessions');
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to load sessions');
   state.sessions = data.sessions;

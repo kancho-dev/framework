@@ -1,11 +1,11 @@
 import { createServer } from 'node:http';
-import { createReadStream } from 'node:fs';
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, extname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { exists, normalizeBasePath, readStaticText, safeError, sendHtml, sendJson, serveStaticPath, stripBasePath } from '../shared-web/http.mjs';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = parsePort(process.env.PORT || '8787');
@@ -14,6 +14,7 @@ const OPENCODE_DATA_DIR = resolve(process.env.OPENCODE_DATA_DIR || join(homedir(
 const OPENCODE_DB = resolve(process.env.OPENCODE_DB || join(OPENCODE_DATA_DIR, 'opencode.db'));
 const ENABLED_SOURCES = new Set(String(process.env.SESSION_SOURCES || 'pi,opencode').split(',').map((source) => source.trim().toLowerCase()).filter(Boolean));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
+const SHARED_WEB_DIR = join(TOOL_DIR, '..', 'shared-web');
 const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
 const WORKSPACE_NAME = basename(WORKSPACE_ROOT) || WORKSPACE_ROOT;
 const METADATA_PATH = resolve(process.env.SESSION_BROWSER_METADATA || join(TOOL_DIR, '.cache', 'metadata.json'));
@@ -21,14 +22,6 @@ const execFileAsync = promisify(execFile);
 const SOURCE_TIMEOUT_MS = Number(process.env.SESSION_SOURCE_TIMEOUT_MS || '8000');
 const REQUEST_TIMEOUT_MS = Number(process.env.SESSION_REQUEST_TIMEOUT_MS || '10000');
 const OPENCODE_SESSION_LIMIT = parsePositiveInteger(process.env.SESSION_BROWSER_OPENCODE_LIMIT || '500', 'SESSION_BROWSER_OPENCODE_LIMIT');
-
-const mime = new Map([
-  ['.html', 'text/html; charset=utf-8'],
-  ['.css', 'text/css; charset=utf-8'],
-  ['.js', 'text/javascript; charset=utf-8'],
-  ['.json', 'application/json; charset=utf-8'],
-  ['.svg', 'image/svg+xml; charset=utf-8'],
-]);
 
 function parsePort(value) {
   const port = Number(value);
@@ -46,29 +39,11 @@ function parsePositiveInteger(value, name) {
   return number;
 }
 
-function sendJson(res, status, body) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-  res.end(JSON.stringify(body));
-}
-
-function safeError(error) {
-  return error instanceof Error ? error.message : 'Unknown error';
-}
-
 function safeSourceError(error) {
   const message = safeError(error);
   if (message.includes('ENOENT') || message.includes('sqlite3')) return 'sqlite3 unavailable or OpenCode database cannot be read';
   if (message.includes('no such table')) return 'unexpected OpenCode database schema';
   return message.split('\n')[0].slice(0, 220);
-}
-
-async function exists(path) {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function sourceEnabled(source) {
@@ -782,71 +757,79 @@ function isAllowedSessionPath(candidate) {
   return isUnderRoot(resolved, PI_SESSION_ROOT);
 }
 
-async function serveStatic(req, res) {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const pathname = url.pathname === '/' ? '/index.html' : url.pathname;
-  const filePath = resolve(PUBLIC_DIR, `.${pathname}`);
-  if (!filePath.startsWith(`${PUBLIC_DIR}/`) && filePath !== PUBLIC_DIR) {
-    res.writeHead(403).end('Forbidden');
-    return;
-  }
-  createReadStream(filePath)
-    .on('error', () => res.writeHead(404).end('Not found'))
-    .on('open', () => res.writeHead(200, { 'content-type': mime.get(extname(filePath)) || 'application/octet-stream', 'cache-control': 'no-store' }))
-    .pipe(res);
+export function createSessionBrowserHandler({ basePath = '/', cockpit = null } = {}) {
+  const normalizedBase = normalizeBasePath(basePath);
+  return async function sessionBrowserHandler(req, res) {
+    try {
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const pathname = stripBasePath(url.pathname, normalizedBase);
+      if (pathname === null) return false;
+      if (pathname === '/api/sessions') {
+        const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(), '/api/sessions', REQUEST_TIMEOUT_MS)
+          .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: METADATA_PATH }));
+        sendJson(res, 200, { workspaceRoot: WORKSPACE_ROOT, workspaceName: WORKSPACE_NAME, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
+        return true;
+      }
+      if (pathname === '/api/session') {
+        const path = url.searchParams.get('path') || url.searchParams.get('ref');
+        if (!path || !isAllowedSessionPath(path)) {
+          sendJson(res, 400, { error: 'Invalid session path' });
+          return true;
+        }
+        const session = isOpenCodeRef(path) ? await loadOpenCodeSession(path) : await loadSessionFile(path);
+        if (!isUnderRoot(session.cwd, WORKSPACE_ROOT)) {
+          sendJson(res, 404, { error: 'Session is outside the current workspace root' });
+          return true;
+        }
+        const { metadata, error: metadataError } = await readMetadata();
+        sendJson(res, 200, { ...attachMetadata(session, metadata), metadataError });
+        return true;
+      }
+      if (pathname === '/api/metadata' && req.method === 'PUT') {
+        let body = '';
+        req.on('data', (chunk) => { body += chunk; if (body.length > 64 * 1024) req.destroy(); });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}');
+            const path = payload.path || payload.ref;
+            if (!path || !isAllowedSessionPath(path)) {
+              sendJson(res, 400, { error: 'Invalid session path' });
+              return;
+            }
+            const updated = await updateSessionMetadata(path, payload);
+            sendJson(res, 200, { metadataPath: METADATA_PATH, metadata: updated });
+          } catch (error) {
+            sendJson(res, 500, { error: safeError(error), metadataPath: METADATA_PATH });
+          }
+        });
+        return true;
+      }
+      if (pathname.startsWith('/shared/')) {
+        await serveStaticPath(res, SHARED_WEB_DIR, pathname.replace('/shared', '') || '/');
+        return true;
+      }
+      if (pathname === '/') {
+        let html = await readStaticText(PUBLIC_DIR, '/index.html');
+        html = html.replaceAll('/shared/', `${normalizedBase}/shared/`);
+        html = html.replace('<!-- __FRAMEWORK_COCKPIT_CONFIG__ -->', cockpit ? `<script>window.__FRAMEWORK_COCKPIT__ = ${JSON.stringify(cockpit)};</script>` : '');
+        await sendHtml(res, html);
+        return true;
+      }
+      await serveStaticPath(res, PUBLIC_DIR, pathname);
+      return true;
+    } catch (error) {
+      sendJson(res, 500, { error: safeError(error), workspaceRoot: WORKSPACE_ROOT, workspaceName: WORKSPACE_NAME, sessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB });
+      return true;
+    }
+  };
 }
 
-createServer(async (req, res) => {
-  try {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    if (url.pathname === '/api/sessions') {
-      const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(), '/api/sessions', REQUEST_TIMEOUT_MS)
-        .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: METADATA_PATH }));
-      sendJson(res, 200, { workspaceRoot: WORKSPACE_ROOT, workspaceName: WORKSPACE_NAME, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
-      return;
-    }
-    if (url.pathname === '/api/session') {
-      const path = url.searchParams.get('path') || url.searchParams.get('ref');
-      if (!path || !isAllowedSessionPath(path)) {
-        sendJson(res, 400, { error: 'Invalid session path' });
-        return;
-      }
-      const session = isOpenCodeRef(path) ? await loadOpenCodeSession(path) : await loadSessionFile(path);
-      if (!isUnderRoot(session.cwd, WORKSPACE_ROOT)) {
-        sendJson(res, 404, { error: 'Session is outside the current workspace root' });
-        return;
-      }
-      const { metadata, error: metadataError } = await readMetadata();
-      sendJson(res, 200, { ...attachMetadata(session, metadata), metadataError });
-      return;
-    }
-    if (url.pathname === '/api/metadata' && req.method === 'PUT') {
-      let body = '';
-      req.on('data', (chunk) => { body += chunk; if (body.length > 64 * 1024) req.destroy(); });
-      req.on('end', async () => {
-        try {
-          const payload = JSON.parse(body || '{}');
-          const path = payload.path || payload.ref;
-          if (!path || !isAllowedSessionPath(path)) {
-            sendJson(res, 400, { error: 'Invalid session path' });
-            return;
-          }
-          const updated = await updateSessionMetadata(path, payload);
-          sendJson(res, 200, { metadataPath: METADATA_PATH, metadata: updated });
-        } catch (error) {
-          sendJson(res, 500, { error: safeError(error), metadataPath: METADATA_PATH });
-        }
-      });
-      return;
-    }
-    await serveStatic(req, res);
-  } catch (error) {
-    sendJson(res, 500, { error: safeError(error), workspaceRoot: WORKSPACE_ROOT, workspaceName: WORKSPACE_NAME, sessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB });
-  }
-}).listen(PORT, () => {
-  console.log(`Session Browser: http://localhost:${PORT}`);
-  console.log(`Workspace root: ${WORKSPACE_ROOT}`);
-  console.log(`Pi session root: ${PI_SESSION_ROOT}`);
-  console.log(`OpenCode DB: ${OPENCODE_DB}`);
-  console.log(`Metadata: ${METADATA_PATH}`);
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  createServer(createSessionBrowserHandler()).listen(PORT, () => {
+    console.log(`Session Browser: http://localhost:${PORT}`);
+    console.log(`Workspace root: ${WORKSPACE_ROOT}`);
+    console.log(`Pi session root: ${PI_SESSION_ROOT}`);
+    console.log(`OpenCode DB: ${OPENCODE_DB}`);
+    console.log(`Metadata: ${METADATA_PATH}`);
+  });
+}

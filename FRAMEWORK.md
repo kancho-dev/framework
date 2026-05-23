@@ -122,7 +122,7 @@ Rules:
 Before ending meaningful work:
 
 1. update the relevant handoff, context, or active state files;
-2. append a timed entry to the end of today's daily brief using the real current system date/time;
+2. append a timed entry to the end of today's daily brief using the real current system date/time; before creating or writing a daily brief, check whether the dated file exists and never overwrite an existing daily brief;
 3. record durable fixes in `FIXES.md` when relevant;
 4. move lasting project knowledge into `projects/[name]/library/` when relevant.
 

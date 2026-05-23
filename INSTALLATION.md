@@ -140,6 +140,43 @@ Detailed Pi and OpenCode setup options are documented in `framework/COMMANDS.md`
 
 Native commands are convenience adapters only. The framework remains usable through normal prompts.
 
+## Optional Framework Cockpit Tool
+
+The framework includes an optional local tool shell under:
+
+```text
+framework/tools/tool-orchestrator/
+```
+
+It is a local-only web shell for opening small framework browser tools from one place. It currently mounts Task Browser and Session Browser behind a shared **Framework Cockpit** home page with tool status and compact navigation.
+
+Quick start after the framework is present in a workspace:
+
+```bash
+cd framework/tools/tool-orchestrator
+npm start
+```
+
+Then open:
+
+```text
+http://localhost:8789
+```
+
+Useful configuration:
+
+- `WORKSPACE_ROOT` — framework workspace root.
+- `TOOL_ORCHESTRATOR_PORT` / `PORT` — local HTTP port, default `8789`.
+- Task Browser and Session Browser environment variables still apply because Cockpit mounts those tools in-process.
+
+Safety:
+
+- the tool is local-only;
+- it is additive and does not replace standalone Task Browser or Session Browser commands;
+- it does not add remote hosting, authentication, sync, daemon behavior, or shared metadata defaults;
+- using Cockpit does not require adopting task-browser metadata unless the workspace uses Task Browser features;
+- for full setup/use details, read `framework/tools/tool-orchestrator/README.md`.
+
 ## Optional Task Browser Tool
 
 The framework includes an optional local task browser under:

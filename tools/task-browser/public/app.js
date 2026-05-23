@@ -5,6 +5,8 @@ const els = {
   refresh: document.querySelector('#refresh'), autoRefresh: document.querySelector('#auto-refresh'), filter: document.querySelector('#filter'), statusFilter: document.querySelector('#status-filter'), projectFilter: document.querySelector('#project-filter'), priorityFilter: document.querySelector('#priority-filter'), clear: document.querySelector('#clear-filters'), status: document.querySelector('#status'), board: document.querySelector('#board'), workspaceName: document.querySelector('#workspace-name'), detailPane: document.querySelector('#detail-pane'), closeDetail: document.querySelector('#close-detail'), detail: document.querySelector('#detail'), detailKey: document.querySelector('#detail-key'), detailTitle: document.querySelector('#detail-title'), detailMeta: document.querySelector('#detail-meta'), resumeFiles: document.querySelector('#resume-files'), detailHandoff: document.querySelector('#detail-handoff'), detailPurpose: document.querySelector('#detail-purpose'), detailNextSteps: document.querySelector('#detail-next-steps'), detailSuccess: document.querySelector('#detail-success'), detailContext: document.querySelector('#detail-context'), detailRuns: document.querySelector('#detail-runs'), detailHistory: document.querySelector('#detail-history')
 };
 
+window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
+
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c])); }
 function metaIcon(label) {
   const icons = { status: '◉', priority: '◆', type: '▣' };
@@ -46,13 +48,13 @@ async function load() {
 
 async function loadTasks({ preserveScroll = false } = {}) {
   const boardScroll = preserveScroll ? captureBoardScroll() : null;
-  const res = await fetch('/api/tasks');
+  const res = await fetch('api/tasks');
   if (!res.ok) throw new Error(`Load failed: ${res.status}`);
   const data = await res.json();
   Object.assign(state, data);
   if (state.selectedStatuses.size === 0) state.selectedStatuses = new Set(data.statuses.filter((status) => !['done', 'paused'].includes(status)));
   document.title = `${data.workspaceName} - Tasks`;
-  els.workspaceName.textContent = data.workspaceName;
+  window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: data.workspaceName, root: data.workspaceRoot, tooltipPrefix: 'Workspace' });
   renderStatusFilters();
   fillSelect(els.projectFilter, unique(data.tasks.map((task) => task.project)), 'All projects');
   fillSelect(els.priorityFilter, data.priorities, 'All priorities');
@@ -244,7 +246,7 @@ async function copyText(text) {
 }
 
 async function saveMetadata(key, patch) {
-  const res = await fetch('/api/task-metadata', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, metadata: patch }) });
+  const res = await fetch('api/task-metadata', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, metadata: patch }) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Metadata save failed: ${res.status}`);
   const task = state.tasks.find((item) => item.key === key);

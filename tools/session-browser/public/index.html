@@ -4,19 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Session Browser</title>
-  <link rel="icon" href="/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/shared/workspace-badge.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/shared/cockpit-nav.css">
 </head>
 <body>
   <div id="app">
     <aside class="sessions-pane">
+      <div id="cockpit-nav"></div>
       <header>
         <div class="brand">
-          <img src="/icon.svg" alt="" class="brand-logo" aria-hidden="true">
+          <img src="icon.svg" alt="" class="brand-logo" aria-hidden="true">
           <div class="brand-copy">
             <div class="title-line">
               <h1>Session history</h1>
-              <span id="workspace-name" class="workspace-badge">Workspace</span>
+              <span id="workspace-name" class="workspace-badge"></span>
             </div>
           </div>
         </div>
@@ -93,6 +96,9 @@
       </section>
     </main>
   </div>
-  <script src="/app.js" type="module"></script>
+  <!-- __FRAMEWORK_COCKPIT_CONFIG__ -->
+  <script src="/shared/cockpit-nav.js"></script>
+  <script src="/shared/workspace-badge.js"></script>
+  <script src="app.js" type="module"></script>
 </body>
 </html>

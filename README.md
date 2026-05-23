@@ -1,6 +1,6 @@
 # Portable Agent Framework
 
-![Version](https://img.shields.io/badge/version-0.10.0-blue)
+![Version](https://img.shields.io/badge/version-0.11.0-blue)
 
 A minimal, agent-agnostic framework for keeping AI-assisted software development coherent across sessions, tasks, projects, and tools.
 
@@ -119,6 +119,27 @@ Typical use looks like this:
 
 ## Optional Extensions
 
+### Framework Cockpit
+
+[`tools/tool-orchestrator/`](tools/tool-orchestrator/) is an optional local shell for opening small framework browser tools from one place.
+
+It currently mounts Task Browser and Session Browser behind a shared **Framework Cockpit** home page with local tool status and compact navigation. The Cockpit is additive: standalone tools remain available with their existing commands.
+
+Quick start:
+
+```bash
+cd framework/tools/tool-orchestrator
+npm start
+```
+
+Then open:
+
+```text
+http://localhost:8789
+```
+
+Read [`tools/tool-orchestrator/README.md`](tools/tool-orchestrator/README.md) for setup and safety details.
+
 ### Session Browser
 
 [`tools/session-browser/`](tools/session-browser/) is an optional but high-value local tool for browsing and searching Pi and OpenCode coding-agent sessions.
@@ -175,6 +196,7 @@ Use it when curated markdown files are not enough for a specific context questio
 - [`USAGE-PROMPTS.md`](USAGE-PROMPTS.md) — copy-friendly prompt examples.
 - [`COMMANDS.md`](COMMANDS.md) — optional native command integration.
 - [`memory-service/`](memory-service/) — optional searchable memory CLI/service.
+- [`tools/tool-orchestrator/`](tools/tool-orchestrator/) — optional local Framework Cockpit shell for small browser tools.
 - [`tools/session-browser/`](tools/session-browser/) — optional local session browser.
 - [`tools/task-browser/`](tools/task-browser/) — optional local task browser.
 

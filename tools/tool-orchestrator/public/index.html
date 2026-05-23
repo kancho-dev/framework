@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Framework Cockpit</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/shared/workspace-badge.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/shared/cockpit-nav.css">
+</head>
+<body>
+  <div id="cockpit-nav"></div>
+  <main class="shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <div class="brand-row">
+          <img class="cockpit-logo" src="icon.svg" alt="" width="76" height="76">
+          <div>
+            <p class="eyebrow">local-only framework tools</p>
+            <h1>Framework Cockpit</h1>
+          </div>
+        </div>
+        <p class="lede">Check the available tools and navigate easily to the right one.</p>
+        <div class="hero-actions">
+          <span id="workspace" class="workspace-badge wide"></span>
+        </div>
+      </div>
+      <div class="hero-panel" aria-hidden="true">
+        <div class="radar">
+          <div class="radar-ring ring-one"></div>
+          <div class="radar-ring ring-two"></div>
+          <div class="radar-sweep"></div>
+          <div class="orbit-card primary"><img src="icon.svg" alt="">Cockpit</div>
+          <span class="tool-dot dot-one"><img src="icons/task-browser.svg" alt=""></span>
+          <span class="tool-dot dot-two"><img src="icons/session-browser.svg" alt=""></span>
+          <span class="tool-dot dot-three">+</span>
+        </div>
+      </div>
+    </header>
+
+    <section>
+      <div class="section-title">
+        <h2>Open a tool</h2>
+        <p>Use readiness at a glance before opening a tool.</p>
+      </div>
+      <div id="tools" class="tool-grid"></div>
+    </section>
+  </main>
+  <script>
+    window.__FRAMEWORK_COCKPIT__ = {
+      enabled: true,
+      home: '/',
+      icon: 'icon.svg',
+      current: 'home',
+      tools: [
+        { id: 'task-browser', title: 'Task Browser', shortTitle: 'Tasks', route: '/tools/tasks/', icon: 'icons/task-browser.svg' },
+        { id: 'session-browser', title: 'Session Browser', shortTitle: 'Sessions', route: '/tools/sessions/', icon: 'icons/session-browser.svg' }
+      ]
+    };
+  </script>
+  <script src="/shared/cockpit-nav.js"></script>
+  <script src="/shared/workspace-badge.js"></script>
+  <script src="app.js" type="module"></script>
+</body>
+</html>

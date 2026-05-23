@@ -34,7 +34,6 @@ button:hover { border-color: var(--accent); }
 .brand-logo { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 10px; box-shadow: 0 6px 18px rgba(0,0,0,.24); }
 .brand-copy { min-width: 0; }
 .title-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.workspace-badge { display: inline-flex; align-items: center; max-width: min(100%, 260px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); background: rgba(156,220,254,.08); border: 1px solid rgba(156,220,254,.28); border-radius: 999px; padding: 1px 8px; font-size: 11px; line-height: 1.6; }
 .header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .auto-refresh { color: var(--muted); font-size: 11px; white-space: nowrap; display: flex; align-items: center; gap: 5px; cursor: pointer; }
 .auto-refresh:hover { color: var(--text); }
@@ -42,7 +41,6 @@ button:hover { border-color: var(--accent); }
 #app { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; min-height: 100vh; }
 body.browse-mode #app { grid-template-columns: minmax(320px, 980px) 1fr; }
 body.browse-mode .sessions-pane { width: min(980px, 100vw); }
-body.browse-mode .workspace-badge { max-width: 420px; }
 body:not(.browse-mode) .session-card .prompt {
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -197,7 +195,6 @@ h4 { margin: 10px 0 4px; color: var(--muted); font-size: 11px; text-transform: u
   .filters { grid-template-columns: 1fr; }
   .sessions-pane { height: auto; max-height: 50vh; border-right: 0; border-bottom: 1px solid var(--border); }
   .sessions-pane header { flex-direction: column; }
-  .workspace-badge { max-width: calc(100vw - 104px); }
   body:not(.browse-mode) .session-card .prompt { -webkit-line-clamp: 2; }
   .reader-layout { grid-template-columns: 1fr; }
   .topics { position: static; max-height: none; }

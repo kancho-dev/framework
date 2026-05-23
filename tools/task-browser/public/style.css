@@ -22,7 +22,6 @@ h1,h2,h3,p { margin:0; } h1{font-size:20px; display:flex; align-items:center; ga
 .primary-meta-line { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; align-items:center; }
 .primary-meta-line > div { display:flex; flex-wrap:wrap; gap:6px; min-width:0; }
 .tags-line { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; align-items:start; margin-top:2px; }
-.workspace-badge { display:inline-flex; align-items:center; max-width:min(52vw, 420px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--accent); background:rgba(156,220,254,.08); border:1px solid rgba(156,220,254,.28); border-radius:999px; padding:1px 8px; font-size:11px; line-height:1.6; }
 .brand { display:flex; align-items:center; gap:10px; min-width:0; }
 .brand-logo { width:34px; height:34px; border-radius:9px; box-shadow:0 6px 18px rgba(0,0,0,.18); }
 .filters { display:grid; gap:8px; margin:10px 14px; }
