@@ -1,4 +1,4 @@
-const state = { tasks: [], selectedKey: null, statuses: [], priorities: [], workspaceRoot: '', metadataPath: '', selectedStatuses: new Set(), tagDrafts: {} };
+const state = { tasks: [], selectedKey: null, statuses: [], priorities: [], workspaceRoot: '', metadataPath: '', selectedStatuses: new Set(), tagDrafts: {}, relationDrafts: {}, relationEditorOpen: false, revealSelectedInBoard: false };
 const priorityRank = { urgent: 0, high: 1, normal: 2, low: 3 };
 const projectColors = new Map();
 const els = {
@@ -40,24 +40,97 @@ function hashString(value) {
 }
 function selectedTask() { return state.selectedKey ? state.tasks.find((task) => task.key === state.selectedKey) : null; }
 function unique(values) { return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b)); }
+function continuityKey() { return `framework.task-browser.selectedKey:${state.workspaceRoot || location.pathname}`; }
+function filtersContinuityKey() { return `framework.task-browser.filters:${state.workspaceRoot || location.pathname}`; }
+function restoreSelectedKey() {
+  if (state.selectedKey) return;
+  const key = localStorage.getItem(continuityKey());
+  if (state.tasks.some((item) => item.key === key)) state.selectedKey = key;
+}
+function persistSelectedKey() {
+  if (state.selectedKey) localStorage.setItem(continuityKey(), state.selectedKey);
+  else localStorage.removeItem(continuityKey());
+}
+function restoreFilters() {
+  const raw = localStorage.getItem(filtersContinuityKey());
+  if (!raw) return;
+  let saved;
+  try { saved = JSON.parse(raw); } catch { return; }
+  if (!saved) return;
+  if (typeof saved.query === 'string') els.filter.value = saved.query;
+  if (Array.isArray(saved.statuses)) {
+    const validStatuses = saved.statuses.filter((status) => state.statuses.includes(status));
+    if (validStatuses.length) state.selectedStatuses = new Set(validStatuses);
+  }
+  if (state.tasks.some((task) => task.project === saved.project)) els.projectFilter.value = saved.project;
+  if (state.priorities.includes(saved.priority)) els.priorityFilter.value = saved.priority;
+}
+function persistFilters() {
+  localStorage.setItem(filtersContinuityKey(), JSON.stringify({
+    query: els.filter.value,
+    statuses: [...state.selectedStatuses],
+    project: els.projectFilter.value,
+    priority: els.priorityFilter.value,
+  }));
+}
+function selectTaskKey(key) {
+  if (state.selectedKey !== key) state.relationEditorOpen = false;
+  state.selectedKey = key;
+  persistSelectedKey();
+}
+function resetFilters() {
+  els.filter.value = '';
+  els.projectFilter.value = 'all';
+  els.priorityFilter.value = 'all';
+  window.FrameworkSelect?.refreshAll?.();
+  state.selectedStatuses = new Set(state.statuses.filter((status) => !['done', 'paused'].includes(status)));
+  persistFilters();
+  renderStatusFilters();
+}
+function showSelectedTaskInBoard() {
+  const task = selectedTask();
+  if (!task) return;
+  els.filter.value = '';
+  els.projectFilter.value = 'all';
+  els.priorityFilter.value = 'all';
+  if (task.metadata?.status) state.selectedStatuses.add(task.metadata.status);
+  state.revealSelectedInBoard = true;
+  persistFilters();
+  renderStatusFilters();
+}
+function scrollSelectedCardIntoView() {
+  if (!state.revealSelectedInBoard || !state.selectedKey) return;
+  state.revealSelectedInBoard = false;
+  const card = els.board.querySelector(`.task-card[data-key="${CSS.escape(state.selectedKey)}"]`);
+  card?.scrollIntoView({ block: 'center', inline: 'center' });
+}
+function shouldRevealRestoredSelection() {
+  const key = localStorage.getItem(continuityKey());
+  return Boolean(key && key === state.selectedKey && state.tasks.some((task) => task.key === key && matches(task)));
+}
 
 async function load() {
   els.status.textContent = 'Scanning tasks…';
   await loadTasks({ preserveScroll: true });
 }
 
-async function loadTasks({ preserveScroll = false } = {}) {
+async function loadTasks({ preserveScroll = false, revealRestoredSelection = true } = {}) {
+  if (isEditingAutocompleteInput()) return;
   const boardScroll = preserveScroll ? captureBoardScroll() : null;
   const res = await fetch('api/tasks');
   if (!res.ok) throw new Error(`Load failed: ${res.status}`);
   const data = await res.json();
   Object.assign(state, data);
   if (state.selectedStatuses.size === 0) state.selectedStatuses = new Set(data.statuses.filter((status) => !['done', 'paused'].includes(status)));
+  restoreSelectedKey();
   document.title = `${data.workspaceName} - Tasks`;
   window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: data.workspaceName, root: data.workspaceRoot, tooltipPrefix: 'Workspace' });
   renderStatusFilters();
   fillSelect(els.projectFilter, unique(data.tasks.map((task) => task.project)), 'All projects');
   fillSelect(els.priorityFilter, data.priorities, 'All priorities');
+  restoreFilters();
+  renderStatusFilters();
+  if (revealRestoredSelection && shouldRevealRestoredSelection()) state.revealSelectedInBoard = true;
   render({ preserveScroll: boardScroll });
 }
 
@@ -65,6 +138,7 @@ function fillSelect(select, values, label) {
   const current = select.value || 'all';
   select.innerHTML = `<option value="all">${label}</option>${values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('')}`;
   select.value = values.includes(current) ? current : 'all';
+  window.FrameworkSelect?.refreshAll?.();
 }
 
 function renderStatusFilters() {
@@ -86,13 +160,19 @@ function render({ preserveScroll = null } = {}) {
   const boardScroll = preserveScroll === true ? captureBoardScroll() : preserveScroll;
   const focus = captureDetailFocus();
   const visible = state.tasks.filter(matches);
-  if (state.selectedKey && !visible.some((task) => task.key === state.selectedKey)) state.selectedKey = null;
+  if (state.selectedKey && !state.tasks.some((task) => task.key === state.selectedKey)) {
+    state.selectedKey = null;
+    persistSelectedKey();
+  }
   document.body.classList.toggle('detail-open', Boolean(state.selectedKey));
   els.status.textContent = `${visible.length} of ${state.tasks.length} tasks • metadata: ${state.metadataPath}`;
   els.board.innerHTML = state.statuses.filter((status) => state.selectedStatuses.has(status)).map((status) => renderColumn(status, sortTasks(status, visible.filter((task) => task.metadata?.status === status)))).join('');
+  window.FrameworkAutocomplete?.cleanup(els.detailMeta);
   renderDetail(selectedTask());
+  attachDetailAutocompletes();
   restoreDetailFocus(focus);
-  if (boardScroll) restoreBoardScroll(boardScroll);
+  if (boardScroll && !state.revealSelectedInBoard) restoreBoardScroll(boardScroll);
+  requestAnimationFrame(scrollSelectedCardIntoView);
 }
 
 function renderColumn(status, tasks) {
@@ -152,8 +232,13 @@ function renderCard(task) {
 function captureDetailFocus() {
   const active = document.activeElement;
   const form = active?.closest?.('.inline-metadata-editor');
-  if (!form || active.name !== 'newTag') return null;
+  if (!form || (active.name !== 'newTag' && !String(active.name || '').startsWith('relation-'))) return null;
   return { key: form.dataset.key, name: active.name, start: active.selectionStart, end: active.selectionEnd };
+}
+
+function isEditingAutocompleteInput() {
+  const active = document.activeElement;
+  return Boolean(active?.closest?.('.inline-metadata-editor') && (active.name === 'newTag' || String(active.name || '').startsWith('relation-')));
 }
 
 function restoreDetailFocus(focus) {
@@ -171,7 +256,8 @@ function renderDetail(task) {
   els.detailKey.innerHTML = `<span class="display-id">${escapeHtml(meta.displayId)}</span>${projectPill(task.project)}<span>${escapeHtml(task.slug)}</span>`;
   els.detailTitle.textContent = task.title;
   const primaryMeta = [editableMetaPill('status', meta.status, state.statuses, `status ${meta.status}`), editableMetaPill('priority', meta.priority, state.priorities, `priority ${meta.priority}`), editableMetaPill('type', meta.type, typeOptions(meta.type), 'type')].join('');
-  els.detailMeta.innerHTML = `<form class="inline-metadata-editor" data-key="${escapeHtml(task.key)}"><div class="meta-line primary-meta-line"><div>${primaryMeta}</div><label class="order-editor">Order <input name="order" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(meta.order ?? '')}"></label></div>${renderTagEditor(meta.tags || [])}${renderRelationsAndAction(meta, task)}</form>`;
+  const filterNotice = matches(task) ? '' : '<div class="detail-notice">Selected task is hidden by current board filters. <button type="button" class="show-selected-in-board">Show in board</button></div>';
+  els.detailMeta.innerHTML = `<form class="inline-metadata-editor" data-key="${escapeHtml(task.key)}">${filterNotice}<div class="meta-line primary-meta-line"><div>${primaryMeta}</div><label class="order-editor">Order <input name="order" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(meta.order ?? '')}"></label></div>${renderTagEditor(meta.tags || [])}${renderRelationsAndAction(meta, task)}</form>`;
   els.resumeFiles.innerHTML = Object.entries(task.files).map(([label, path]) => `<li><strong>${escapeHtml(label)}</strong>: <code>${escapeHtml(path)}</code></li>`).join('');
   els.detailHandoff.textContent = task.handoff || 'No current-state summary found.';
   els.detailPurpose.textContent = task.purpose || 'No purpose section found.';
@@ -186,6 +272,10 @@ function typeOptions(current) {
   return unique([...state.tasks.map((task) => task.metadata?.type), current, 'implementation', 'review', 'research', 'design', 'maintenance', 'release']);
 }
 
+function allTaskTags() {
+  return unique(state.tasks.flatMap((task) => task.metadata?.tags || [])).sort((a, b) => a.localeCompare(b));
+}
+
 function renderTagEditor(tags) {
   const pills = tags.map((tag) => `<span class="label-pill tag-pill"><span aria-label="tag">⌁</span><strong>${escapeHtml(tag)}</strong><button class="remove-tag" type="button" data-tag="${escapeHtml(tag)}" title="Remove tag ${escapeHtml(tag)}">×</button></span>`).join('');
   const draft = state.selectedKey ? state.tagDrafts[state.selectedKey] || '' : '';
@@ -195,11 +285,44 @@ function renderTagEditor(tags) {
 function renderRelationsAndAction(meta, task) {
   const items = [
     ...relationItems('blocked by', meta.blockedBy || []),
+    ...relationItems('blocks', meta.blocks || []),
     ...relationItems('parent', meta.parent ? [meta.parent] : []),
     ...relationItems('child', meta.children || []),
     ...relationItems('related', meta.related || []),
   ].join('');
-  return `<div class="meta-line relation-action-line"><div class="relation-line">${items}</div><div class="prompt-action"><button type="button" class="compact-action copy-resume">Copy task prompt</button><span class="prompt-preview">${escapeHtml(continuePrompt(task))}</span></div></div>`;
+  const editLabel = state.relationEditorOpen ? 'Done' : 'Edit';
+  return `<div class="meta-line relation-action-line"><div class="relation-line">${items || '<span class="muted compact">No relationships</span>'}</div><div class="relationship-actions"><button type="button" class="compact-action toggle-relations" aria-expanded="${state.relationEditorOpen}">✎ ${editLabel}</button><div class="prompt-action"><button type="button" class="compact-action copy-resume">Copy task prompt</button><span class="prompt-preview">${escapeHtml(continuePrompt(task))}</span></div></div></div>${state.relationEditorOpen ? renderRelationshipEditor(meta, task) : ''}`;
+}
+
+function renderRelationshipEditor(meta, task) {
+  return `<div class="relationship-editor">
+    ${relationAdder('parent', 'Set parent')}
+    ${relationAdder('children', 'Add child')}
+    ${relationAdder('related', 'Add related')}
+    ${relationAdder('blockedBy', 'Add blocker')}
+  </div>`;
+}
+
+function relationAdder(field, label) {
+  const value = state.selectedKey ? state.relationDrafts[`${state.selectedKey}:${field}`] || '' : '';
+  return `<div class="relationship-field"><label>${escapeHtml(label)}<input name="relation-${escapeHtml(field)}" placeholder="#37, key, or title…" value="${escapeHtml(value)}"></label><button type="button" class="compact-action ${field === 'parent' ? 'set-parent' : 'add-relation'}" data-field="${escapeHtml(field)}">${field === 'parent' ? 'Set' : 'Add'}</button></div>`;
+}
+
+function relationOptions(currentKey) {
+  return state.tasks.filter((task) => task.key !== currentKey).sort((a, b) => displayNumber(a) - displayNumber(b) || a.key.localeCompare(b.key));
+}
+
+function relationAutocompleteOptions(currentKey) {
+  return relationOptions(currentKey).map((task) => ({ value: task.metadata?.displayId || task.key, label: `${task.key} · ${task.title}` }));
+}
+
+function attachDetailAutocompletes() {
+  const form = els.detailMeta.querySelector('.inline-metadata-editor');
+  if (!form) return;
+  window.FrameworkAutocomplete?.attach(form.querySelector('input[name="newTag"]'), { options: () => allTaskTags(), maxVisible: 12 });
+  for (const input of form.querySelectorAll('input[name^="relation-"]')) {
+    window.FrameworkAutocomplete?.attach(input, { options: () => relationAutocompleteOptions(form.dataset.key), maxVisible: 12, minWidth: 420 });
+  }
 }
 
 function relationItems(label, keys) {
@@ -208,7 +331,9 @@ function relationItems(label, keys) {
     const task = state.tasks.find((item) => item.key === key);
     const text = task?.metadata?.displayId || key;
     const action = task ? `data-related-key="${escapeHtml(key)}"` : '';
-    return `<button class="relation-link" type="button" ${action} title="${escapeHtml(key)}">${escapeHtml(text)}</button>`;
+    const canRemove = ['blocked by', 'parent', 'child', 'related'].includes(label);
+    const removable = task && canRemove ? `<button class="relation-remove" type="button" data-remove-relation="${escapeHtml(label)}" data-related-key="${escapeHtml(key)}" title="Remove ${escapeHtml(label)} ${escapeHtml(key)}">×</button>` : '';
+    return `<span class="relation-item"><button class="relation-link" type="button" ${action} title="${escapeHtml(key)}">${escapeHtml(text)}</button>${removable}</span>`;
   }).join('<span class="relation-separator">,</span>');
   return [`<span class="relation-pill" title="${escapeHtml(label)}"><span>${escapeHtml(label)}</span><strong>${links}</strong></span>`];
 }
@@ -263,10 +388,50 @@ function currentTags(form) {
   return [...form.querySelectorAll('.remove-tag')].map((button) => button.dataset.tag);
 }
 
+function relationFieldFromLabel(label) {
+  return { 'blocked by': 'blockedBy', parent: 'parent', child: 'children', related: 'related' }[label] || null;
+}
+
+function taskKeyFromRelationInput(value) {
+  const query = String(value || '').trim().toLowerCase();
+  if (!query) return '';
+  const matches = state.tasks.filter((task) => [task.key, task.metadata?.displayId, task.title].some((item) => String(item || '').toLowerCase() === query));
+  if (matches.length === 1) return matches[0].key;
+  const partial = state.tasks.filter((task) => [task.key, task.metadata?.displayId, task.title].some((item) => String(item || '').toLowerCase().includes(query)));
+  return partial.length === 1 ? partial[0].key : '';
+}
+
+async function addRelation(form, field) {
+  const input = form.querySelector(`[name="relation-${CSS.escape(field)}"]`);
+  const value = taskKeyFromRelationInput(input?.value);
+  if (!value) {
+    els.status.textContent = 'Choose a single matching task by ID, key, or title.';
+    return;
+  }
+  const task = selectedTask();
+  if (field === 'parent') await saveMetadataPatch(form, { parent: value });
+  else {
+    const current = task?.metadata?.[field] || [];
+    await saveMetadataPatch(form, { [field]: [...new Set([...current, value])] });
+  }
+  if (input) input.value = '';
+}
+
+async function removeRelation(form, label, key) {
+  const field = relationFieldFromLabel(label);
+  if (!field) return;
+  const task = selectedTask();
+  if (field === 'parent') await saveMetadataPatch(form, { parent: null });
+  else {
+    const current = task?.metadata?.[field] || [];
+    await saveMetadataPatch(form, { [field]: current.filter((entry) => entry !== key) });
+  }
+}
+
 els.board.addEventListener('click', (event) => {
   const card = event.target.closest('.task-card');
   if (!card) return;
-  state.selectedKey = card.dataset.key;
+  selectTaskKey(card.dataset.key);
   render({ preserveScroll: true });
 });
 els.board.addEventListener('dragstart', (event) => {
@@ -304,32 +469,34 @@ els.board.addEventListener('drop', async (event) => {
 els.refresh.addEventListener('click', () => load().catch((error) => { els.status.textContent = error.message; }));
 setInterval(() => {
   if (!els.autoRefresh.checked) return;
-  loadTasks({ preserveScroll: true }).catch((error) => { els.status.textContent = error.message; });
+  loadTasks({ preserveScroll: true, revealRestoredSelection: false }).catch((error) => { els.status.textContent = error.message; });
 }, 10_000);
-els.filter.addEventListener('input', render);
+els.filter.addEventListener('input', () => { persistFilters(); render(); });
 els.statusFilter.addEventListener('change', (event) => {
   if (event.target.type !== 'checkbox') return;
   if (event.target.checked) state.selectedStatuses.add(event.target.value);
   else state.selectedStatuses.delete(event.target.value);
+  persistFilters();
   render();
 });
-els.projectFilter.addEventListener('change', render);
-els.priorityFilter.addEventListener('change', render);
-els.clear.addEventListener('click', () => { els.filter.value = ''; els.projectFilter.value = 'all'; els.priorityFilter.value = 'all'; state.selectedStatuses = new Set(state.statuses.filter((status) => !['done', 'paused'].includes(status))); renderStatusFilters(); render(); });
+els.projectFilter.addEventListener('change', () => { persistFilters(); render(); });
+els.priorityFilter.addEventListener('change', () => { persistFilters(); render(); });
+els.clear.addEventListener('click', () => { resetFilters(); render(); });
 function closeDetail() {
-  state.selectedKey = null;
+  selectTaskKey(null);
   render();
 }
 
 els.closeDetail.addEventListener('click', closeDetail);
 els.detailMeta.addEventListener('input', (event) => {
-  if (event.target.name !== 'newTag') return;
   const form = event.target.closest('.inline-metadata-editor');
-  if (form) state.tagDrafts[form.dataset.key] = event.target.value;
+  if (!form) return;
+  if (event.target.name === 'newTag') state.tagDrafts[form.dataset.key] = event.target.value;
+  if (String(event.target.name || '').startsWith('relation-')) state.relationDrafts[`${form.dataset.key}:${event.target.name.replace('relation-', '')}`] = event.target.value;
 });
 els.detailMeta.addEventListener('change', (event) => {
   const form = event.target.closest('.inline-metadata-editor');
-  if (!form || event.target.name === 'newTag') return;
+  if (!form || event.target.name === 'newTag' || String(event.target.name || '').startsWith('relation-')) return;
   if (event.target.name === 'order' && !event.target.validity.valid) {
     els.status.textContent = 'Order must be a positive whole number.';
     return;
@@ -338,22 +505,50 @@ els.detailMeta.addEventListener('change', (event) => {
   saveMetadataPatch(form, { [event.target.name]: value }).catch((error) => { els.status.textContent = error.message; });
 });
 els.detailMeta.addEventListener('click', (event) => {
+  const showSelected = event.target.closest('.show-selected-in-board');
+  if (showSelected) {
+    showSelectedTaskInBoard();
+    render({ preserveScroll: true });
+    return;
+  }
+  const toggleRelations = event.target.closest('.toggle-relations');
+  if (toggleRelations) {
+    state.relationEditorOpen = !state.relationEditorOpen;
+    render({ preserveScroll: true });
+    return;
+  }
   const copy = event.target.closest('.copy-resume');
   if (copy) {
     const task = selectedTask();
     if (task) copyText(continuePrompt(task));
     return;
   }
+  const form = event.target.closest('.inline-metadata-editor');
+  const setParent = event.target.closest('.set-parent');
+  if (form && setParent) {
+    addRelation(form, 'parent').catch((error) => { els.status.textContent = error.message; });
+    return;
+  }
+  const addRelationButton = event.target.closest('.add-relation');
+  if (form && addRelationButton) {
+    addRelation(form, addRelationButton.dataset.field).catch((error) => { els.status.textContent = error.message; });
+    return;
+  }
+  const removeRelationButton = event.target.closest('.relation-remove');
+  if (form && removeRelationButton) {
+    removeRelation(form, removeRelationButton.dataset.removeRelation, removeRelationButton.dataset.relatedKey).catch((error) => { els.status.textContent = error.message; });
+    return;
+  }
   const relation = event.target.closest('[data-related-key]');
   if (relation) {
-    state.selectedKey = relation.dataset.relatedKey;
+    selectTaskKey(relation.dataset.relatedKey);
     render({ preserveScroll: true });
     return;
   }
   const button = event.target.closest('.remove-tag');
   if (!button) return;
-  const form = button.closest('.inline-metadata-editor');
-  saveMetadataPatch(form, { tags: currentTags(form).filter((tag) => tag !== button.dataset.tag) }).catch((error) => { els.status.textContent = error.message; });
+  const tagForm = button.closest('.inline-metadata-editor');
+  saveMetadataPatch(tagForm, { tags: currentTags(tagForm).filter((tag) => tag !== button.dataset.tag) }).catch((error) => { els.status.textContent = error.message; });
 });
 els.detailMeta.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -368,5 +563,9 @@ els.detailMeta.addEventListener('submit', (event) => {
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && state.selectedKey) closeDetail();
 });
+
+for (const select of [els.projectFilter, els.priorityFilter]) {
+  window.FrameworkSelect?.attach(select, { maxVisible: 12 });
+}
 
 load().catch((error) => { els.status.textContent = error.message; });

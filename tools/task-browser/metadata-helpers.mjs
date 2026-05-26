@@ -7,6 +7,7 @@ export const ARRAY_FIELDS = new Set(['tags', 'blockedBy', 'children', 'related']
 export const RELATION_FIELDS = new Set(['blockedBy', 'children', 'related']);
 export const IDENTITY_FIELDS = new Set(['displayId', 'project', 'slug', 'path']);
 export const HISTORY_FIELDS = ['status', 'priority', 'type', 'tags', 'order', 'parent', 'children', 'blockedBy', 'related'];
+export const RELATIONSHIP_FIELDS = new Set(['parent', 'children', 'blockedBy', 'related']);
 
 export async function exists(path) { try { await stat(path); return true; } catch { return false; } }
 
@@ -162,8 +163,21 @@ export function resolveTask(metadata, ref) {
 
 export function resolveRelation(metadata, ref) { return resolveTask(metadata, ref).key; }
 
+export function snapshotTasks(metadata) {
+  return Object.fromEntries(Object.entries(metadata.tasks).map(([key, task]) => [key, { ...task, blockedBy: cleanArray(task.blockedBy), children: cleanArray(task.children), related: cleanArray(task.related) }]));
+}
+
+export function changedTaskKeys(beforeTasks, metadata) {
+  return Object.keys(metadata.tasks).filter((key) => hasChanges(metadataChanges(beforeTasks[key] || {}, metadata.tasks[key] || {})));
+}
+
+export function deriveBlocks(metadata, key) {
+  return Object.entries(metadata.tasks).filter(([, task]) => cleanArray(task.blockedBy).includes(key)).map(([taskKey]) => taskKey).sort();
+}
+
 export function applyOptions(metadata, key, opts) {
   const task = metadata.tasks[key];
+  const relationPatch = {};
   for (const [name, value] of Object.entries(opts)) {
     const field = fieldName(name);
     if (IDENTITY_FIELDS.has(field)) throw new Error(`Identity field is not mutable: ${field}`);
@@ -171,9 +185,97 @@ export function applyOptions(metadata, key, opts) {
     else if (field === 'priority') task.priority = requireOne(value, PRIORITIES, 'priority');
     else if (field === 'type') task.type = String(value).trim() || fail('type must be non-empty');
     else if (field === 'order') task.order = parseOrder(value);
-    else if (field === 'parent') task.parent = resolveRelation(metadata, value);
-    else if (ARRAY_FIELDS.has(field)) task[field] = RELATION_FIELDS.has(field) ? split(value).map((v) => resolveRelation(metadata, v)) : split(value);
+    else if (RELATIONSHIP_FIELDS.has(field)) relationPatch[field] = value;
+    else if (field === 'tags') task.tags = split(value);
     else throw new Error(`Unknown field: ${name}`);
+  }
+  applyRelationshipPatch(metadata, key, relationPatch);
+}
+
+export function applyRelationshipPatch(metadata, key, patch = {}) {
+  if (!metadata.tasks[key]) throw new Error(`Unknown task reference: ${key}`);
+  if ('parent' in patch) setParent(metadata, key, patch.parent ? resolveRelation(metadata, patch.parent) : null);
+  if ('children' in patch) setChildren(metadata, key, relationList(metadata, patch.children, 'children'));
+  if ('blockedBy' in patch) setDirectionalList(metadata, key, 'blockedBy', relationList(metadata, patch.blockedBy, 'blockedBy'));
+  if ('related' in patch) setRelated(metadata, key, relationList(metadata, patch.related, 'related'));
+}
+
+export function addRelationship(metadata, key, field, ref) {
+  const otherKey = resolveRelation(metadata, ref);
+  if (field === 'children') return setParent(metadata, otherKey, key);
+  if (field === 'related') return addRelated(metadata, key, otherKey);
+  if (field === 'blockedBy') return addDirectional(metadata, key, 'blockedBy', otherKey);
+  throw new Error(`Cannot add relationship field: ${field}`);
+}
+
+export function removeRelationship(metadata, key, field, ref) {
+  const otherKey = resolveRelation(metadata, ref);
+  if (field === 'children') return metadata.tasks[otherKey]?.parent === key ? setParent(metadata, otherKey, null) : removeFromArray(metadata.tasks[key], 'children', otherKey);
+  if (field === 'related') return removeRelated(metadata, key, otherKey);
+  if (field === 'blockedBy') return removeDirectional(metadata, key, 'blockedBy', otherKey);
+  throw new Error(`Cannot remove relationship field: ${field}`);
+}
+
+export function setParent(metadata, childKey, parentKey) {
+  if (parentKey && childKey === parentKey) throw new Error('A task cannot be its own parent');
+  if (parentKey) ensureNoAncestorCycle(metadata, childKey, parentKey);
+  const child = metadata.tasks[childKey];
+  const oldParent = child.parent;
+  if (oldParent && metadata.tasks[oldParent]) removeFromArray(metadata.tasks[oldParent], 'children', childKey);
+  child.parent = parentKey || null;
+  if (parentKey) addToArray(metadata.tasks[parentKey], 'children', childKey);
+}
+
+export function setChildren(metadata, parentKey, childKeys) {
+  for (const childKey of cleanArray(childKeys)) {
+    if (!metadata.tasks[childKey]) throw new Error(`Unknown task reference: ${childKey}`);
+    if (childKey === parentKey) throw new Error('A task cannot be its own child');
+  }
+  const next = new Set(cleanArray(childKeys));
+  for (const childKey of cleanArray(metadata.tasks[parentKey].children)) {
+    if (next.has(childKey)) continue;
+    if (metadata.tasks[childKey]?.parent === parentKey) setParent(metadata, childKey, null);
+    else removeFromArray(metadata.tasks[parentKey], 'children', childKey);
+  }
+  for (const childKey of next) setParent(metadata, childKey, parentKey);
+}
+
+function setRelated(metadata, key, relatedKeys) {
+  const next = new Set(cleanArray(relatedKeys));
+  if (next.has(key)) throw new Error('A task cannot be related to itself');
+  for (const otherKey of next) addRelated(metadata, key, otherKey);
+  for (const oldKey of cleanArray(metadata.tasks[key].related)) if (!next.has(oldKey)) removeRelated(metadata, key, oldKey);
+}
+
+function addRelated(metadata, key, otherKey) {
+  if (key === otherKey) throw new Error('A task cannot be related to itself');
+  addToArray(metadata.tasks[key], 'related', otherKey);
+  addToArray(metadata.tasks[otherKey], 'related', key);
+}
+
+function removeRelated(metadata, key, otherKey) {
+  removeFromArray(metadata.tasks[key], 'related', otherKey);
+  if (metadata.tasks[otherKey]) removeFromArray(metadata.tasks[otherKey], 'related', key);
+}
+
+function setDirectionalList(metadata, key, field, values) {
+  metadata.tasks[key][field] = cleanArray(values);
+}
+function addDirectional(metadata, key, field, otherKey) { addToArray(metadata.tasks[key], field, otherKey); }
+function removeDirectional(metadata, key, field, otherKey) { removeFromArray(metadata.tasks[key], field, otherKey); }
+function addToArray(task, field, value) { task[field] = cleanArray([...(task[field] || []), value]); }
+function removeFromArray(task, field, value) { task[field] = cleanArray(task[field]).filter((entry) => entry !== value); }
+function relationList(metadata, value, name) {
+  const values = Array.isArray(value) ? value : split(value);
+  return cleanArray(values).map((ref) => resolveRelation(metadata, ref)).filter((ref) => ref || fail(`${name} contains an empty reference`));
+}
+function ensureNoAncestorCycle(metadata, childKey, parentKey) {
+  let current = parentKey;
+  const seen = new Set([childKey]);
+  while (current) {
+    if (seen.has(current)) throw new Error('Parent relationship would create a cycle');
+    seen.add(current);
+    current = metadata.tasks[current]?.parent || null;
   }
 }
 

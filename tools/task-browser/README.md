@@ -41,7 +41,7 @@ No npm install is needed for the current dependency-free tool.
 - project and priority filters;
 - task detail drawer with Purpose, Next steps, Run timeline, Current state, Success/Acceptance, Resume files, Context, and Metadata history; Next steps are read from `HANDOFF.md` `## Next Action` with `## Next Steps` fallback;
 - editable status, priority, type, tags, and optional positive-integer order metadata;
-- relationship metadata (`blockedBy`, `parent`, `children`, `related`) when present, with links to known tasks;
+- relationship metadata (`blockedBy`, derived `blocks`, `parent`, `children`, `related`) when present, with links to known tasks;
 - cross-column drag/drop to change task status;
 - a copyable generic task-pickup prompt with subtle hover/focus preview.
 
@@ -123,7 +123,8 @@ No-op writes where normalized before/after metadata values are identical do not 
 The detail drawer can edit common metadata fields directly:
 
 - status, priority, and type through compact pill selects;
-- tags through add/remove controls;
+- board filter selects through shared capped-height listbox styling;
+- tags through add/remove controls with shared capped-height autocomplete suggestions from existing task tags;
 - optional order through a small numeric input.
 
 Edits call the local `PATCH /api/task-metadata` endpoint and write only task-browser metadata. They do not silently edit `TASK.md`, `HANDOFF.md`, `CONTEXT.md`, or run logs.
@@ -132,7 +133,9 @@ Dragging a card to another status column changes only that task's task-browser m
 
 ## Relationships
 
-When metadata includes `blockedBy`, `parent`, `children`, or `related`, the detail header shows compact relationship pills grouped by relation type. Known tasks are shown by display ID (for example `#32`) and open that task in the detail drawer. Relationship editing is deferred.
+When metadata includes `blockedBy`, `parent`, `children`, or `related`, the detail header shows compact relationship pills grouped by relation type. Known tasks are shown by display ID (for example `#32`) and open that task in the detail drawer. The drawer also derives a read-only `blocks` view from other tasks that list the current task in `blockedBy`.
+
+Relationship edits use existing task references with shared capped-height autocomplete and store canonical task keys. `parent` and `children` are reciprocal: setting a parent adds the child to the parent, adding/removing children updates each child's parent, moving a child removes it from the old parent, and cycles/self-parenting are rejected. `related` is symmetric, so adding or removing a related task updates both tasks. `blockedBy` remains the stored directional source of truth; use the derived `blocks` view to see tasks this task is blocking.
 
 ## Metadata CLI
 
@@ -152,7 +155,7 @@ node tools/task-browser/metadata-cli.mjs add-blocker '#32' '#12'
 node tools/task-browser/metadata-cli.mjs set-parent '#32' agent-framework/task-browser-prompt-copy-v2
 ```
 
-The CLI accepts display IDs and canonical task keys for task references. Relationship fields are stored as canonical task keys so browser relationship links remain reliable. `blockedBy` is for existing task blockers only; generic blockers should be explained in `HANDOFF.md`, `CONTEXT.md`, or run logs while metadata uses `status: blocked`.
+The CLI accepts display IDs and canonical task keys for task references. Relationship fields are stored as canonical task keys so browser relationship links remain reliable. Parent/child commands maintain reciprocal `parent`/`children` metadata from either side, and `related` commands maintain symmetric links. `blockedBy` is for existing task blockers only; generic blockers should be explained in `HANDOFF.md`, `CONTEXT.md`, or run logs while metadata uses `status: blocked`. The inverse `blocks` relationship is derived from other tasks' `blockedBy` metadata instead of stored separately.
 
 Supported CLI metadata fields are `status`, `priority`, `type`, `order`, `parent`, `tags`, `blockedBy`, `children`, and `related`. Identity fields such as `displayId`, `project`, `slug`, and `path` are preserved. Write commands accept optional provenance flags `--actor`, `--role`, `--session-tool`, `--session-id`, and `--note`; agents should pass real role/session details when useful and available rather than inventing them.
 

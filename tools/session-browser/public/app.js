@@ -1,4 +1,4 @@
-const state = { sessions: [], selectedPath: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, labelFilter: 'all', sourceErrors: [], metadataError: null };
+const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, tagFilter: 'all', sourceErrors: [], metadataError: null };
 
 const els = {
   refresh: document.querySelector('#refresh'),
@@ -8,7 +8,7 @@ const els = {
   cwdFilter: document.querySelector('#cwd-filter'),
   sortMode: document.querySelector('#sort-mode'),
   bookmarkFilter: document.querySelector('#bookmark-filter'),
-  labelFilter: document.querySelector('#label-filter'),
+  tagFilter: document.querySelector('#tag-filter'),
   clearFilters: document.querySelector('#clear-filters'),
   status: document.querySelector('#status'),
   workspaceName: document.querySelector('#workspace-name'),
@@ -21,10 +21,9 @@ const els = {
   showTools: document.querySelector('#show-tools'),
   copyRestore: document.querySelector('#copy-restore'),
   bookmarkSelected: document.querySelector('#bookmark-selected'),
-  labelEditor: document.querySelector('#label-editor'),
-  labelInput: document.querySelector('#label-input'),
-  labelSuggestions: document.querySelector('#label-suggestions'),
-  addLabel: document.querySelector('#add-label'),
+  tagEditor: document.querySelector('#tag-editor'),
+  tagInput: document.querySelector('#tag-input'),
+  addTag: document.querySelector('#add-tag'),
   jumpTop: document.querySelector('#jump-top'),
   jumpBottom: document.querySelector('#jump-bottom'),
   topics: document.querySelector('#topics'),
@@ -98,8 +97,67 @@ function updateDocumentTitle() {
   if (state.workspaceName) document.title = `${state.workspaceName} - Sessions`;
 }
 
-function sessionLabels(session) {
-  return session?.metadata?.labels || [];
+function continuityScope() { return state.workspaceRoot || location.pathname; }
+function continuityKey() { return `framework.session-browser.selectedPath:${continuityScope()}`; }
+function topicContinuityKey(path = state.selectedPath) { return `framework.session-browser.selectedTopic:${continuityScope()}:${path || 'none'}`; }
+function filtersContinuityKey() { return `framework.session-browser.filters:${continuityScope()}`; }
+function restoreSelectedPath() {
+  if (state.selectedPath) return;
+  const path = localStorage.getItem(continuityKey());
+  if (path && state.sessions.some((session) => session.path === path)) state.selectedPath = path;
+}
+function restoreSelectedTopic(detail = state.selectedDetail) {
+  if (!detail || state.selectedTopicId) return;
+  const topicId = localStorage.getItem(topicContinuityKey(detail.path));
+  if (topicId && detail.topicAnchors?.some((anchor) => anchor.id === topicId)) state.selectedTopicId = topicId;
+}
+function persistSelectedPath() {
+  if (state.selectedPath) localStorage.setItem(continuityKey(), state.selectedPath);
+  else localStorage.removeItem(continuityKey());
+}
+function persistSelectedTopic() {
+  if (state.selectedPath && state.selectedTopicId) localStorage.setItem(topicContinuityKey(), state.selectedTopicId);
+  else if (state.selectedPath) localStorage.removeItem(topicContinuityKey());
+}
+function clearSelectedTopic(path = state.selectedPath) {
+  if (path) localStorage.removeItem(topicContinuityKey(path));
+  if (!path || path === state.selectedPath) state.selectedTopicId = null;
+}
+function restoreFilterState() {
+  const raw = localStorage.getItem(filtersContinuityKey());
+  if (!raw) return;
+  let saved;
+  try { saved = JSON.parse(raw); } catch { return; }
+  els.filter.value = saved.query || '';
+  els.bookmarkFilter.checked = Boolean(saved.bookmarkFilter);
+  state.bookmarkFilter = els.bookmarkFilter.checked;
+  state.sourceFilter = saved.sourceFilter || 'all';
+  state.cwdFilter = saved.cwdFilter || 'all';
+  state.tagFilter = saved.tagFilter || 'all';
+  state.sortMode = saved.sortMode || 'updated-desc';
+}
+function persistFilterState() {
+  localStorage.setItem(filtersContinuityKey(), JSON.stringify({
+    query: els.filter.value,
+    bookmarkFilter: state.bookmarkFilter,
+    sourceFilter: state.sourceFilter,
+    cwdFilter: state.cwdFilter,
+    tagFilter: state.tagFilter,
+    sortMode: state.sortMode,
+  }));
+}
+function applyFilterControlValues() {
+  els.bookmarkFilter.checked = state.bookmarkFilter;
+  els.sourceFilter.value = state.sourceFilter;
+  els.cwdFilter.value = state.cwdFilter;
+  els.cwdFilter.title = state.cwdFilter === 'all' ? 'All work dirs' : state.cwdFilter;
+  els.tagFilter.value = state.tagFilter;
+  els.sortMode.value = state.sortMode;
+  window.FrameworkSelect?.refreshAll?.();
+}
+
+function sessionTags(session) {
+  return session?.metadata?.tags || [];
 }
 
 function isBookmarked(session) {
@@ -110,9 +168,9 @@ function matches(session, query) {
   if (state.sourceFilter !== 'all' && session.source !== state.sourceFilter) return false;
   if (state.cwdFilter !== 'all' && (session.cwd || '') !== state.cwdFilter) return false;
   if (state.bookmarkFilter && !isBookmarked(session)) return false;
-  if (state.labelFilter !== 'all' && !sessionLabels(session).includes(state.labelFilter)) return false;
+  if (state.tagFilter !== 'all' && !sessionTags(session).includes(state.tagFilter)) return false;
   if (!query.trim()) return true;
-  const haystack = [session.id, session.name, session.cwd, session.firstPrompt, session.path, sessionLabels(session).join(' ')].join(' ').toLowerCase();
+  const haystack = [session.id, session.name, session.cwd, session.firstPrompt, session.path, sessionTags(session).join(' ')].join(' ').toLowerCase();
   return query.toLowerCase().split(/\s+/).every((term) => haystack.includes(term));
 }
 
@@ -211,9 +269,9 @@ function restoreCommand(detail) {
   return '';
 }
 
-function renderLabelPills(labels) {
-  if (!labels?.length) return '';
-  return `<div class="label-row">${labels.map((label) => `<span class="label-pill" data-label="${escapeHtml(label)}">${escapeHtml(label)}</span>`).join('')}</div>`;
+function renderTagPills(tags) {
+  if (!tags?.length) return '';
+  return `<div class="tag-row">${tags.map((tag) => `<span class="tag-pill" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</span>`).join('')}</div>`;
 }
 
 function renderSessions() {
@@ -232,7 +290,7 @@ function renderSessions() {
         ${originRow(session)}
         <div class="prompt">${escapeHtml(session.name || session.firstPrompt || '(no user prompt found)')}</div>
         ${session.parentId ? '<div class="relation-line"><span class="relation-badge">child session</span></div>' : ''}
-        ${renderLabelPills(sessionLabels(session))}
+        ${renderTagPills(sessionTags(session))}
         <div class="token-bar ${tokenPressureLevel(session)}"><span style="width: ${tokenPressurePercent(session)}%"></span></div>
       </button>
     </li>
@@ -251,21 +309,16 @@ function renderRelations(detail) {
   els.readerRelations.innerHTML = links.join('');
 }
 
-function allLabels() {
-  return Array.from(new Set(state.sessions.flatMap((session) => sessionLabels(session)))).sort((a, b) => a.localeCompare(b));
+function allTags() {
+  return Array.from(new Set(state.sessions.flatMap((session) => sessionTags(session)))).sort((a, b) => a.localeCompare(b));
 }
 
-function renderLabelSuggestions(labels = allLabels()) {
-  els.labelSuggestions.innerHTML = labels.map((label) => `<option value="${escapeHtml(label)}"></option>`).join('');
-}
-
-function renderLabelFilter() {
-  const labels = allLabels();
-  const current = state.labelFilter;
-  els.labelFilter.innerHTML = ['all', ...labels].map((label) => `<option value="${escapeHtml(label)}">${escapeHtml(label === 'all' ? 'All labels' : label)}</option>`).join('');
-  els.labelFilter.value = labels.includes(current) ? current : 'all';
-  state.labelFilter = els.labelFilter.value;
-  renderLabelSuggestions(labels);
+function renderTagFilter() {
+  const tags = allTags();
+  const current = state.tagFilter;
+  els.tagFilter.innerHTML = ['all', ...tags].map((tag) => `<option value="${escapeHtml(tag)}">${escapeHtml(tag === 'all' ? 'All tags' : tag)}</option>`).join('');
+  els.tagFilter.value = tags.includes(current) ? current : 'all';
+  state.tagFilter = els.tagFilter.value;
 }
 
 function renderSourceFilter() {
@@ -290,6 +343,46 @@ function roleLabel(entry) {
   return entry.message?.role || 'message';
 }
 
+function renderMarkdownInline(text) {
+  let html = escapeHtml(text);
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  html = html.replace(/(^|\W)\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  html = html.replace(/(^|\W)_([^_\n]+)_/g, '$1<em>$2</em>');
+  return html;
+}
+
+function renderMarkdownBlock(block) {
+  const lines = block.split('\n');
+  if (/^\s*(?:-{3,}|_{3,}|\*{3,})\s*$/.test(block)) return '<hr>';
+  const heading = block.match(/^(#{1,6})\s+(.+)$/);
+  if (heading) {
+    const level = Math.min(6, heading[1].length + 1);
+    return `<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`;
+  }
+  if (lines.every((line) => /^\s*[-*+]\s+/.test(line))) {
+    return `<ul>${lines.map((line) => `<li>${renderMarkdownInline(line.replace(/^\s*[-*+]\s+/, ''))}</li>`).join('')}</ul>`;
+  }
+  if (lines.every((line) => /^\s*\d+[.)]\s+/.test(line))) {
+    return `<ol>${lines.map((line) => `<li>${renderMarkdownInline(line.replace(/^\s*\d+[.)]\s+/, ''))}</li>`).join('')}</ol>`;
+  }
+  if (lines.every((line) => /^\s*>\s?/.test(line))) {
+    return `<blockquote>${lines.map((line) => renderMarkdownInline(line.replace(/^\s*>\s?/, ''))).join('<br>')}</blockquote>`;
+  }
+  return `<p>${lines.map(renderMarkdownInline).join('<br>')}</p>`;
+}
+
+function renderMarkdown(text) {
+  return text
+    .trim()
+    .split(/\n{2,}/)
+    .filter((block) => block.trim())
+    .map((block) => renderMarkdownBlock(block.trim()))
+    .join('');
+}
+
 function renderAssistantText(text) {
   const parts = [];
   const pattern = /```([^\n`]*)\n([\s\S]*?)```/g;
@@ -297,7 +390,8 @@ function renderAssistantText(text) {
   let match;
   while ((match = pattern.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push(`<div class="assistant-block content">${escapeHtml(text.slice(lastIndex, match.index))}</div>`);
+      const markdown = renderMarkdown(text.slice(lastIndex, match.index));
+      if (markdown) parts.push(`<div class="assistant-block markdown-body">${markdown}</div>`);
     }
     const language = match[1].trim();
     const code = match[2].replace(/\n$/, '');
@@ -310,7 +404,8 @@ function renderAssistantText(text) {
     lastIndex = pattern.lastIndex;
   }
   if (lastIndex < text.length) {
-    parts.push(`<div class="assistant-block content">${escapeHtml(text.slice(lastIndex))}</div>`);
+    const markdown = renderMarkdown(text.slice(lastIndex));
+    if (markdown) parts.push(`<div class="assistant-block markdown-body">${markdown}</div>`);
   }
   return parts.join('');
 }
@@ -477,7 +572,19 @@ function renderEntry(entry, allEntries) {
   return '';
 }
 
-function renderSelectedDetail() {
+function scrollSelectedTopicIntoView() {
+  if (!state.selectedTopicId) return;
+  const target = document.querySelector(`#entry-${CSS.escape(state.selectedTopicId)}`);
+  const pane = document.querySelector('.reader-pane');
+  if (!target || !pane) return;
+  updateReaderHeaderHeight();
+  const headerHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--reader-header-height')) || 190;
+  const paneTop = pane.getBoundingClientRect().top;
+  const targetTop = target.getBoundingClientRect().top;
+  pane.scrollTo({ top: Math.max(0, pane.scrollTop + targetTop - paneTop - headerHeight - 12) });
+}
+
+function renderSelectedDetail({ scrollTopic = true } = {}) {
   const detail = state.selectedDetail;
   if (!detail) return;
   const command = restoreCommand(detail);
@@ -501,9 +608,10 @@ function renderSelectedDetail() {
     ['Tokens:', formatTokens(detail.tokens)],
   ];
   els.readerMeta.innerHTML = `<div class="meta-row primary">${primaryMeta.join('')}</div><div class="meta-row secondary">${secondaryMeta.map(([label, value]) => `<span><strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}</span>`).join('')}</div>`;
-  renderLabelEditor(detail);
+  renderTagEditor(detail);
+  restoreSelectedTopic(detail);
   els.topics.innerHTML = detail.topicAnchors.map((anchor) => `
-    <li><a href="#entry-${escapeHtml(anchor.id)}">${anchor.depth === 'first-prompt' ? '★ ' : ''}${escapeHtml(anchor.title)}</a></li>
+    <li><a class="${anchor.id === state.selectedTopicId ? 'active' : ''}" href="#entry-${escapeHtml(anchor.id)}" data-topic-id="${escapeHtml(anchor.id)}">${anchor.depth === 'first-prompt' ? '★ ' : ''}${escapeHtml(anchor.title)}</a></li>
   `).join('');
   const openDetails = new Set(Array.from(els.messages.querySelectorAll('details[data-detail-key][open]')).map((node) => node.dataset.detailKey));
   els.messages.classList.toggle('hide-tools', !els.showTools.checked);
@@ -511,12 +619,13 @@ function renderSelectedDetail() {
   for (const node of els.messages.querySelectorAll('details[data-detail-key]')) {
     if (openDetails.has(node.dataset.detailKey)) node.open = true;
   }
+  if (scrollTopic) requestAnimationFrame(scrollSelectedTopicIntoView);
 }
 
-function renderLabelEditor(detail) {
-  els.labelEditor.innerHTML = sessionLabels(detail).map((label) => `
-    <span class="editable-label">${escapeHtml(label)} <button type="button" class="remove-label" data-label="${escapeHtml(label)}">×</button></span>
-  `).join('') || '<span class="no-labels">No labels yet</span>';
+function renderTagEditor(detail) {
+  els.tagEditor.innerHTML = sessionTags(detail).map((tag) => `
+    <span class="editable-tag">${escapeHtml(tag)} <button type="button" class="remove-tag" data-tag="${escapeHtml(tag)}">×</button></span>
+  `).join('') || '<span class="no-tags">No tags yet</span>';
 }
 
 function syncMetadata(path, metadata) {
@@ -524,9 +633,9 @@ function syncMetadata(path, metadata) {
     if (session.path === path) session.metadata = metadata;
   }
   if (state.selectedDetail?.path === path) state.selectedDetail.metadata = metadata;
-  renderLabelFilter();
+  renderTagFilter();
   renderSessions();
-  if (state.selectedDetail?.path === path) renderSelectedDetail();
+  if (state.selectedDetail?.path === path) renderSelectedDetail({ scrollTopic: false });
 }
 
 async function saveMetadata(path, patch) {
@@ -545,8 +654,11 @@ function updateSelectedSummary(detail) {
   }
 }
 
-async function selectSession(path) {
+async function selectSession(path, options = {}) {
+  if (state.selectedPath !== path) clearSelectedTopic(state.selectedPath);
   state.selectedPath = path;
+  if (options.topicId) state.selectedTopicId = options.topicId;
+  persistSelectedPath();
   setBrowseMode(false);
   renderSessions();
   els.empty.classList.add('hidden');
@@ -562,19 +674,30 @@ async function selectSession(path) {
   const detail = await res.json();
   if (!res.ok) throw new Error(detail.error || 'Failed to load session');
   state.selectedDetail = detail;
+  if (state.selectedTopicId && !detail.topicAnchors?.some((anchor) => anchor.id === state.selectedTopicId)) state.selectedTopicId = null;
   updateSelectedSummary(detail);
   renderSelectedDetail();
+  persistSelectedTopic();
   requestAnimationFrame(updateReaderHeaderHeight);
 }
 
+function hasReaderTextSelection() {
+  const selection = window.getSelection?.();
+  if (!selection || selection.isCollapsed) return false;
+  const pane = document.querySelector('.reader-pane');
+  return Boolean(pane && selection.rangeCount && pane.contains(selection.anchorNode) && pane.contains(selection.focusNode));
+}
+
 async function reloadSelectedSession() {
-  if (!state.selectedPath) return;
+  if (!state.selectedPath || hasReaderTextSelection()) return;
   const res = await fetch(`api/session?path=${encodeURIComponent(state.selectedPath)}`);
   const detail = await res.json();
   if (!res.ok) throw new Error(detail.error || 'Failed to reload selected session');
   state.selectedDetail = detail;
+  if (state.selectedTopicId && !detail.topicAnchors?.some((anchor) => anchor.id === state.selectedTopicId)) state.selectedTopicId = null;
   updateSelectedSummary(detail);
-  renderSelectedDetail();
+  renderSelectedDetail({ scrollTopic: false });
+  persistSelectedTopic();
 }
 
 async function loadSessions({ reloadSelected = false } = {}) {
@@ -590,10 +713,19 @@ async function loadSessions({ reloadSelected = false } = {}) {
   updateDocumentTitle();
   state.metadataError = data.metadataError || null;
   state.metadataPath = data.metadataPath;
+  restoreFilterState();
   renderSourceFilter();
   renderCwdFilter();
-  renderLabelFilter();
+  renderTagFilter();
+  applyFilterControlValues();
+  restoreSelectedPath();
   renderSessions();
+  if (state.selectedPath && !state.sessions.some((session) => session.path === state.selectedPath)) {
+    clearSelectedTopic();
+    state.selectedPath = null;
+    state.selectedDetail = null;
+    persistSelectedPath();
+  }
   if (reloadSelected && state.selectedPath) await reloadSelectedSession();
 }
 
@@ -614,68 +746,72 @@ els.refresh.addEventListener('click', (event) => {
 });
 els.autoRefresh.addEventListener('change', () => setAutoRefresh(els.autoRefresh.checked));
 els.filter.addEventListener('focus', () => setBrowseMode(true));
-els.filter.addEventListener('input', renderSessions);
-els.bookmarkFilter.addEventListener('change', () => {
-  state.bookmarkFilter = els.bookmarkFilter.checked;
+els.filter.addEventListener('input', () => {
+  persistFilterState();
   renderSessions();
 });
-els.labelFilter.addEventListener('change', () => {
-  state.labelFilter = els.labelFilter.value;
+els.bookmarkFilter.addEventListener('change', () => {
+  state.bookmarkFilter = els.bookmarkFilter.checked;
+  persistFilterState();
+  renderSessions();
+});
+els.tagFilter.addEventListener('change', () => {
+  state.tagFilter = els.tagFilter.value;
+  persistFilterState();
   renderSessions();
 });
 els.sourceFilter.addEventListener('change', () => {
   state.sourceFilter = els.sourceFilter.value;
+  persistFilterState();
   renderSessions();
 });
 els.cwdFilter.addEventListener('change', () => {
   state.cwdFilter = els.cwdFilter.value;
   els.cwdFilter.title = state.cwdFilter === 'all' ? 'All work dirs' : state.cwdFilter;
+  persistFilterState();
   renderSessions();
 });
 els.sortMode.addEventListener('change', () => {
   state.sortMode = els.sortMode.value;
+  persistFilterState();
   renderSessions();
 });
 els.clearFilters.addEventListener('click', () => {
   els.filter.value = '';
-  els.bookmarkFilter.checked = false;
   state.bookmarkFilter = false;
   state.sourceFilter = 'all';
   state.cwdFilter = 'all';
-  state.labelFilter = 'all';
+  state.tagFilter = 'all';
   state.sortMode = 'updated-desc';
-  els.sourceFilter.value = 'all';
-  els.cwdFilter.value = 'all';
-  els.cwdFilter.title = 'All work dirs';
-  els.labelFilter.value = 'all';
-  els.sortMode.value = 'updated-desc';
+  applyFilterControlValues();
+  persistFilterState();
   renderSessions();
 });
 els.showTools.addEventListener('change', () => {
-  renderSelectedDetail();
+  renderSelectedDetail({ scrollTopic: false });
   requestAnimationFrame(updateReaderHeaderHeight);
 });
 els.bookmarkSelected.addEventListener('click', async () => {
   if (!state.selectedDetail) return;
   await saveMetadata(state.selectedDetail.path, { bookmarked: !isBookmarked(state.selectedDetail) });
 });
-els.addLabel.addEventListener('click', async () => {
+els.addTag.addEventListener('click', async () => {
   if (!state.selectedDetail) return;
-  const label = els.labelInput.value.trim();
-  if (!label) return;
-  await saveMetadata(state.selectedDetail.path, { labels: [...sessionLabels(state.selectedDetail), label] });
-  els.labelInput.value = '';
+  const tag = els.tagInput.value.trim();
+  if (!tag) return;
+  await saveMetadata(state.selectedDetail.path, { tags: [...sessionTags(state.selectedDetail), tag] });
+  els.tagInput.value = '';
 });
-els.labelInput.addEventListener('keydown', (event) => {
+els.tagInput.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
-    els.addLabel.click();
+    els.addTag.click();
   }
 });
-els.labelEditor.addEventListener('click', async (event) => {
-  const button = event.target.closest('.remove-label');
+els.tagEditor.addEventListener('click', async (event) => {
+  const button = event.target.closest('.remove-tag');
   if (!button || !state.selectedDetail) return;
-  await saveMetadata(state.selectedDetail.path, { labels: sessionLabels(state.selectedDetail).filter((label) => label !== button.dataset.label) });
+  await saveMetadata(state.selectedDetail.path, { tags: sessionTags(state.selectedDetail).filter((tag) => tag !== button.dataset.tag) });
 });
 els.copyRestore.addEventListener('click', async () => {
   const command = state.selectedDetail ? restoreCommand(state.selectedDetail) : '';
@@ -691,17 +827,27 @@ els.jumpBottom.addEventListener('click', () => {
   pane.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' });
 });
 els.sessions.addEventListener('click', (event) => {
-  const label = event.target.closest('.label-pill');
-  if (label) {
+  const tag = event.target.closest('.tag-pill');
+  if (tag) {
     event.stopPropagation();
-    state.labelFilter = label.dataset.label;
-    els.labelFilter.value = state.labelFilter;
+    state.tagFilter = tag.dataset.tag;
+    els.tagFilter.value = state.tagFilter;
+    persistFilterState();
     renderSessions();
     return;
   }
   const card = event.target.closest('.session-card');
   if (card) selectSession(card.dataset.path).catch((error) => { els.readerTitle.textContent = error.message; });
 });
+els.topics.addEventListener('click', (event) => {
+  const link = event.target.closest('a[data-topic-id]');
+  if (!link) return;
+  event.preventDefault();
+  state.selectedTopicId = link.dataset.topicId;
+  persistSelectedTopic();
+  renderSelectedDetail();
+});
+
 els.messages.addEventListener('click', async (event) => {
   const copyCode = event.target.closest('.copy-code');
   if (copyCode) {
@@ -727,7 +873,15 @@ document.querySelector('.reader-pane').addEventListener('click', () => {
 });
 
 window.addEventListener('resize', updateReaderHeaderHeight);
+window.FrameworkAutocomplete?.attach(els.tagInput, { options: () => allTags(), maxVisible: 12 });
+for (const select of [els.tagFilter, els.sourceFilter, els.cwdFilter, els.sortMode]) {
+  window.FrameworkSelect?.attach(select, { maxVisible: 12 });
+}
 setBrowseMode(true);
 updateReaderHeaderHeight();
 setAutoRefresh(els.autoRefresh.checked);
-loadSessions().catch((error) => { els.status.textContent = error.message; });
+loadSessions()
+  .then(() => {
+    if (state.selectedPath) return selectSession(state.selectedPath);
+  })
+  .catch((error) => { els.status.textContent = error.message; });

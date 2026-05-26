@@ -1,0 +1,83 @@
+.fw-select {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+.fw-select-native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+.fw-select-button {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 8px 28px 8px 10px;
+  overflow: hidden;
+  color: var(--text, #e8eaf0);
+  background: var(--bg, #15161b);
+  border: 1px solid var(--border, #303849);
+  border-radius: 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.fw-select-button::after {
+  content: "▾";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  color: var(--muted, #9aa4b2);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.fw-select-button:hover,
+.fw-select-button:focus-visible,
+.fw-select-button[aria-expanded="true"] {
+  border-color: var(--accent, #9cdcfe);
+  outline: 0;
+}
+.fw-select-button[aria-expanded="true"]::after { color: var(--accent, #9cdcfe); }
+.fw-select-menu {
+  position: fixed;
+  z-index: 10000;
+  box-sizing: border-box;
+  max-height: calc(var(--fw-select-visible, 12) * 30px);
+  overflow-y: auto;
+  padding: 4px;
+  color: var(--text, #e8eaf0);
+  background: var(--panel, #161a22);
+  border: 1px solid var(--border, #303849);
+  border-radius: 10px;
+  box-shadow: 0 14px 36px rgba(0,0,0,.35);
+}
+.fw-select-menu.hidden { display: none; }
+.fw-select-option {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 8px;
+  overflow: hidden;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.fw-select-option:hover,
+.fw-select-option.active { background: rgba(156,220,254,.12); }
+.fw-select-option.selected span { color: var(--accent, #9cdcfe); font-weight: 700; }
+.fw-select-option:disabled { opacity: .45; cursor: not-allowed; }

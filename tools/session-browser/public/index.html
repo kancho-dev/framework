@@ -6,6 +6,8 @@
   <title>Session Browser</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/shared/workspace-badge.css">
+  <link rel="stylesheet" href="/shared/autocomplete.css">
+  <link rel="stylesheet" href="/shared/select.css">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="/shared/cockpit-nav.css">
 </head>
@@ -29,22 +31,22 @@
         </div>
       </header>
       <div class="filters">
-        <input id="filter" type="search" placeholder="Filter by prompt, cwd, name, id, label…" autocomplete="off">
+        <input id="filter" type="search" placeholder="Filter by prompt, cwd, name, id, tag…" autocomplete="off">
         <div class="quick-filters">
           <label class="bookmark-filter"><input id="bookmark-filter" type="checkbox"><span>★ Bookmarked</span></label>
-          <select id="label-filter" aria-label="Filter by label">
-            <option value="all">All labels</option>
+          <select id="tag-filter" aria-label="Filter by tag">
+            <option value="all">All tags</option>
           </select>
           <button id="clear-filters" type="button">Clear</button>
         </div>
         <details class="filter-options">
           <summary>More filters & sort ▾</summary>
           <div>
-            <select id="source-filter" aria-label="Filter by source">
-              <option value="all">All sources</option>
-            </select>
             <select id="cwd-filter" aria-label="Filter by working directory">
               <option value="all">All work dirs</option>
+            </select>
+            <select id="source-filter" aria-label="Filter by source">
+              <option value="all">All sources</option>
             </select>
             <select id="sort-mode" aria-label="Sort sessions">
               <option value="updated-desc">Updated newest</option>
@@ -74,9 +76,9 @@
           <h2 id="reader-title"></h2>
           <div id="reader-relations" class="relations hidden"></div>
           <div id="reader-meta" class="meta"></div>
-          <div class="label-tools">
-            <div id="label-editor" class="label-editor"></div>
-            <div class="label-add"><input id="label-input" type="text" placeholder="Add label…" list="label-suggestions"><datalist id="label-suggestions"></datalist><button id="add-label" type="button">Add</button></div>
+          <div class="tag-tools">
+            <div id="tag-editor" class="tag-editor"></div>
+            <div class="tag-add"><input id="tag-input" type="text" placeholder="Add tag…"><button id="add-tag" type="button">Add</button></div>
           </div>
           <div class="reader-actions">
             <label><input id="show-tools" type="checkbox"> Show tool calls</label>
@@ -99,6 +101,8 @@
   <!-- __FRAMEWORK_COCKPIT_CONFIG__ -->
   <script src="/shared/cockpit-nav.js"></script>
   <script src="/shared/workspace-badge.js"></script>
+  <script src="/shared/autocomplete.js"></script>
+  <script src="/shared/select.js"></script>
   <script src="app.js" type="module"></script>
 </body>
 </html>

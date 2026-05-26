@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appendHistoryEvent, applyBrowserPatch, buildHistoryEvent, findWorkspaceRoot, historyPathFor, metadataPathFor, readHistory, readMetadata, STATUSES, syncMetadataTasks, writeMetadata } from './metadata-helpers.mjs';
+import { appendHistoryEvent, applyBrowserPatch, applyRelationshipPatch, buildHistoryEvent, changedTaskKeys, deriveBlocks, findWorkspaceRoot, historyPathFor, metadataPathFor, readHistory, readMetadata, snapshotTasks, STATUSES, syncMetadataTasks, writeMetadata } from './metadata-helpers.mjs';
 import { exists, normalizeBasePath, readStaticText, safeError, sendHtml, sendJson, serveStaticPath, stripBasePath } from '../shared-web/http.mjs';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
@@ -156,7 +156,7 @@ async function taskPayload() {
     if (!historyByTask.has(event.taskKey)) historyByTask.set(event.taskKey, []);
     if (historyByTask.get(event.taskKey).length < 8) historyByTask.get(event.taskKey).push(event);
   }
-  const tasks = discovered.map((task) => ({ ...task, metadata: metadata.tasks[task.key], metadataHistory: historyByTask.get(task.key) || [] }));
+  const tasks = discovered.map((task) => ({ ...task, metadata: { ...metadata.tasks[task.key], blocks: deriveBlocks(metadata, task.key) }, metadataHistory: historyByTask.get(task.key) || [] }));
   const missing = Object.entries(metadata.tasks).filter(([, value]) => value.missing).map(([key, value]) => ({ key, metadata: value }));
   return { workspaceRoot: WORKSPACE_ROOT, workspaceName: basename(WORKSPACE_ROOT), metadataPath: METADATA_PATH, statuses: STATUSES, priorities: PRIORITIES, tasks, missing };
 }
@@ -166,13 +166,14 @@ async function updateTaskMetadata(key, patch) {
   const discovered = await discoverTasks();
   if (!discovered.some((task) => task.key === key)) throw Object.assign(new Error('Unknown task'), { statusCode: 404 });
   const metadata = await syncMetadata(discovered);
+  const beforeTasks = snapshotTasks(metadata);
   const current = metadata.tasks[key] || {};
-  const next = applyBrowserPatch(current, patch);
-  metadata.tasks[key] = next;
-  const event = buildHistoryEvent({ key, task: next, before: current, after: next, actor: 'operator', source: 'browser', action: 'metadata.patch' });
+  metadata.tasks[key] = applyBrowserPatch(current, patch);
+  applyRelationshipPatch(metadata, key, patch);
+  const events = changedTaskKeys(beforeTasks, metadata).map((taskKey) => buildHistoryEvent({ key: taskKey, task: metadata.tasks[taskKey], before: beforeTasks[taskKey], after: metadata.tasks[taskKey], actor: 'operator', source: 'browser', action: 'metadata.patch' })).filter(Boolean);
   await writeMetadata(METADATA_PATH, metadata);
-  if (event) await appendHistoryEvent(HISTORY_PATH, event);
-  return next;
+  for (const event of events) await appendHistoryEvent(HISTORY_PATH, event);
+  return { ...metadata.tasks[key], blocks: deriveBlocks(metadata, key) };
 }
 
 async function readJsonBody(req) {

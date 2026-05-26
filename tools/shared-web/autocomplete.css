@@ -1,0 +1,44 @@
+.fw-autocomplete {
+  position: fixed;
+  z-index: 10000;
+  box-sizing: border-box;
+  max-height: calc(var(--fw-autocomplete-visible, 12) * 30px);
+  overflow-y: auto;
+  padding: 4px;
+  color: var(--text, #e8eaf0);
+  background: var(--panel, #161a22);
+  border: 1px solid var(--border, #303849);
+  border-radius: 10px;
+  box-shadow: 0 14px 36px rgba(0,0,0,.35);
+}
+.fw-autocomplete.hidden { display: none; }
+.fw-autocomplete-option {
+  display: grid;
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 8px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  text-align: left;
+  cursor: pointer;
+}
+.fw-autocomplete-option:hover,
+.fw-autocomplete-option.active { background: rgba(156,220,254,.12); }
+.fw-autocomplete-option strong {
+  overflow: hidden;
+  color: var(--text, #e8eaf0);
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fw-autocomplete-option span {
+  overflow: hidden;
+  color: var(--muted, #9aa4b2);
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

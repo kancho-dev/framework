@@ -332,22 +332,29 @@ function sessionKey(sessionOrPath, source = null) {
   return `pi:${resolve(sessionOrPath?.path || '')}`;
 }
 
-function normalizeLabels(labels) {
-  if (!Array.isArray(labels)) return [];
-  return Array.from(new Set(labels.map((label) => String(label || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+function normalizeTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  return Array.from(new Set(tags.map((tag) => String(tag || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 }
 
+function metadataTags(value) {
+  return normalizeTags([...(Array.isArray(value?.tags) ? value.tags : []), ...(Array.isArray(value?.labels) ? value.labels : [])]);
+}
+
+const METADATA_VERSION = 2;
+
 function emptyMetadata() {
-  return { version: 1, sessions: {} };
+  return { version: METADATA_VERSION, sessions: {} };
 }
 
 async function readMetadata() {
   try {
     const parsed = JSON.parse(await readFile(METADATA_PATH, 'utf8'));
     const sessions = parsed && typeof parsed.sessions === 'object' && !Array.isArray(parsed.sessions) ? parsed.sessions : {};
-    const normalized = emptyMetadata();
+    const normalized = { ...emptyMetadata(), version: Math.max(Number(parsed?.version || 1), METADATA_VERSION) };
     for (const [key, value] of Object.entries(sessions)) {
-      normalized.sessions[key] = { bookmarked: Boolean(value?.bookmarked), labels: normalizeLabels(value?.labels) };
+      const tags = metadataTags(value);
+      normalized.sessions[key] = { bookmarked: Boolean(value?.bookmarked), tags };
     }
     return { metadata: normalized, error: null };
   } catch (error) {
@@ -365,7 +372,7 @@ async function writeMetadata(metadata) {
 
 function metadataForSession(metadata, session) {
   const item = metadata.sessions[sessionKey(session)] || {};
-  return { bookmarkKey: sessionKey(session), bookmarked: Boolean(item.bookmarked), labels: normalizeLabels(item.labels) };
+  return { bookmarkKey: sessionKey(session), bookmarked: Boolean(item.bookmarked), tags: metadataTags(item) };
 }
 
 function attachMetadata(session, metadata) {
@@ -376,12 +383,13 @@ async function updateSessionMetadata(path, patch) {
   const key = sessionKey(path);
   const { metadata, error } = await readMetadata();
   if (error) throw new Error(error);
-  const current = metadata.sessions[key] || { bookmarked: false, labels: [] };
+  const current = metadata.sessions[key] || { bookmarked: false, tags: [] };
+  const patchTags = patch.tags === undefined ? patch.labels : patch.tags;
   const next = {
     bookmarked: patch.bookmarked === undefined ? Boolean(current.bookmarked) : Boolean(patch.bookmarked),
-    labels: patch.labels === undefined ? normalizeLabels(current.labels) : normalizeLabels(patch.labels),
+    tags: patchTags === undefined ? metadataTags(current) : normalizeTags(patchTags),
   };
-  if (!next.bookmarked && next.labels.length === 0) delete metadata.sessions[key];
+  if (!next.bookmarked && next.tags.length === 0) delete metadata.sessions[key];
   else metadata.sessions[key] = next;
   await writeMetadata(metadata);
   return { key, ...next };

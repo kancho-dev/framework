@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from 'node:path';
-import { appendHistoryEvent, applyOptions, ARRAY_FIELDS, buildHistoryEvent, cleanArray, discoverTask, fieldName, findWorkspaceRoot, historyPathFor, metadataPathFor, normalizeTask, readHistory, readMetadata, required, resolveRelation, resolveTask, split, writeMetadata } from './metadata-helpers.mjs';
+import { addRelationship, appendHistoryEvent, applyOptions, applyRelationshipPatch, ARRAY_FIELDS, buildHistoryEvent, changedTaskKeys, cleanArray, discoverTask, fieldName, findWorkspaceRoot, historyPathFor, metadataPathFor, normalizeTask, readHistory, readMetadata, removeRelationship, required, resolveTask, setChildren as setChildrenRelation, setParent as setParentRelation, snapshotTasks, split, writeMetadata } from './metadata-helpers.mjs';
 
 main().catch((error) => {
   console.error(`Error: ${error.message}`);
@@ -42,11 +42,11 @@ async function initTask(ctx, key, opts) {
   const provenance = provenanceOptions(opts);
   const discovered = await discoverTask(ctx.workspaceRoot, key);
   const existing = ctx.metadata.tasks[key] || {};
-  const before = { ...existing };
+  const beforeTasks = snapshotTasks(ctx.metadata);
   const isNew = !ctx.metadata.tasks[key]?.displayId;
   ctx.metadata.tasks[key] = normalizeTask({ ...existing, ...discovered, displayId: existing.displayId || `#${ctx.metadata.nextDisplayNumber++}` }, existing);
   applyOptions(ctx.metadata, key, opts);
-  await writeWithHistory(ctx, key, before, 'metadata.init', provenance);
+  await writeWithHistory(ctx, beforeTasks, 'metadata.init', provenance);
   return { key, metadata: ctx.metadata.tasks[key], created: isNew };
 }
 
@@ -66,43 +66,50 @@ async function list(ctx, opts) {
 async function setTask(ctx, ref, opts) {
   const provenance = provenanceOptions(opts);
   const { key } = resolveTask(ctx.metadata, ref);
-  const before = { ...ctx.metadata.tasks[key] };
+  const beforeTasks = snapshotTasks(ctx.metadata);
   applyOptions(ctx.metadata, key, opts);
-  await writeWithHistory(ctx, key, before, 'metadata.set', provenance);
+  await writeWithHistory(ctx, beforeTasks, 'metadata.set', provenance);
   return { key, metadata: ctx.metadata.tasks[key] };
 }
 
 async function clearTask(ctx, ref, opts) {
   const provenance = provenanceOptions(opts);
   const { key, task } = resolveTask(ctx.metadata, ref);
-  const before = { ...task };
+  const beforeTasks = snapshotTasks(ctx.metadata);
   for (const flag of opts._) {
     const field = fieldName(flag.replace(/^--/, ''));
-    if (field === 'order' || field === 'parent') task[field] = null;
+    if (field === 'order') task[field] = null;
+    else if (field === 'parent') setParentRelation(ctx.metadata, key, null);
+    else if (field === 'children') setChildrenRelation(ctx.metadata, key, []);
+    else if (field === 'related' || field === 'blockedBy') applyRelationshipPatch(ctx.metadata, key, { [field]: [] });
     else if (ARRAY_FIELDS.has(field)) task[field] = [];
     else throw new Error(`Cannot clear field: ${field}`);
   }
-  await writeWithHistory(ctx, key, before, 'metadata.clear', provenance);
+  await writeWithHistory(ctx, beforeTasks, 'metadata.clear', provenance);
   return { key, metadata: task };
 }
 
 async function setParent(ctx, ref, parentRef) {
   const { key, task } = resolveTask(ctx.metadata, ref);
-  const before = { ...task };
-  task.parent = parentRef ? resolveRelation(ctx.metadata, parentRef) : null;
-  await writeWithHistory(ctx, key, before, parentRef ? 'metadata.set-parent' : 'metadata.clear-parent', {});
+  const beforeTasks = snapshotTasks(ctx.metadata);
+  setParentRelation(ctx.metadata, key, parentRef ? resolveTask(ctx.metadata, parentRef).key : null);
+  await writeWithHistory(ctx, beforeTasks, parentRef ? 'metadata.set-parent' : 'metadata.clear-parent', {});
   return { key, metadata: task };
 }
 
 async function arrayOp(ctx, args, field, op, relation) {
   const { values, provenance } = splitCommandArgs(args);
   const { key, task } = resolveTask(ctx.metadata, required(values[0], 'task reference'));
-  const before = { ...task };
+  const beforeTasks = snapshotTasks(ctx.metadata);
   const value = required(values[1], `${field} value`);
-  const item = relation ? resolveRelation(ctx.metadata, value) : value.trim();
-  const current = cleanArray(task[field]);
-  task[field] = op === 'add' ? cleanArray([...current, item]) : current.filter((entry) => entry !== item);
-  await writeWithHistory(ctx, key, before, `metadata.${op}-${field}`, provenance);
+  if (relation) {
+    if (op === 'add') addRelationship(ctx.metadata, key, field, value);
+    else removeRelationship(ctx.metadata, key, field, value);
+  } else {
+    const current = cleanArray(task[field]);
+    task[field] = op === 'add' ? cleanArray([...current, value.trim()]) : current.filter((entry) => entry !== value.trim());
+  }
+  await writeWithHistory(ctx, beforeTasks, `metadata.${op}-${field}`, provenance);
   return { key, metadata: task };
 }
 
@@ -111,11 +118,10 @@ async function history(ctx, ref, opts) {
   return { key, history: await readHistory(ctx.historyPath, { taskKey: key, limit: Number(opts.limit) || 20 }) };
 }
 
-async function writeWithHistory(ctx, key, before, action, provenance) {
-  const task = ctx.metadata.tasks[key];
-  const event = buildHistoryEvent({ key, task, before, after: task, source: 'metadata-cli', action, actor: provenance.actor || 'agent', role: provenance.role || null, sessionTool: provenance.sessionTool || null, sessionId: provenance.sessionId || null, note: provenance.note || null });
+async function writeWithHistory(ctx, beforeTasks, action, provenance) {
+  const events = changedTaskKeys(beforeTasks, ctx.metadata).map((key) => buildHistoryEvent({ key, task: ctx.metadata.tasks[key], before: beforeTasks[key], after: ctx.metadata.tasks[key], source: 'metadata-cli', action, actor: provenance.actor || 'agent', role: provenance.role || null, sessionTool: provenance.sessionTool || null, sessionId: provenance.sessionId || null, note: provenance.note || null })).filter(Boolean);
   await writeMetadata(ctx.metadataPath, ctx.metadata);
-  if (event) await appendHistoryEvent(ctx.historyPath, event);
+  for (const event of events) await appendHistoryEvent(ctx.historyPath, event);
 }
 
 function splitCommandArgs(args) {
