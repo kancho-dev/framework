@@ -1,18 +1,26 @@
 const toolsEl = document.querySelector('#tools');
 const workspaceEl = document.querySelector('#workspace');
 const AUTO_REFRESH_MS = 60_000;
-
 setWorkspaceBadge({ placeholder: 'Loading workspace…' });
 loadStatus();
 setInterval(loadStatus, AUTO_REFRESH_MS);
 
+function workspaceParam() {
+  return new URLSearchParams(location.search).get('workspace');
+}
+
+function statusUrl() {
+  const params = new URLSearchParams(location.search);
+  return `api/tools${params.toString() ? `?${params}` : ''}`;
+}
+
 async function loadStatus() {
   toolsEl.innerHTML = '<article class="tool-card muted">Loading tool status…</article>';
   try {
-    const res = await fetch('api/tools');
+    const res = await fetch(statusUrl());
     if (!res.ok) throw new Error(`Status request failed: ${res.status}`);
     const data = await res.json();
-    setWorkspaceBadge({ root: data.workspaceRoot });
+    setWorkspaceBadge({ name: data.workspaceName, root: data.workspaceRoot, workspaces: data.workspaces, currentWorkspace: data.currentWorkspace });
     toolsEl.innerHTML = `${data.tools.map(renderTool).join('')}${renderPlaceholderCard()}`;
   } catch (error) {
     setWorkspaceBadge({ unavailable: true });
@@ -21,6 +29,7 @@ async function loadStatus() {
 }
 
 function renderTool(tool) {
+  const disabled = tool.status === 'unavailable';
   return `
     <article class="tool-card">
       <div class="tool-head">
@@ -36,8 +45,8 @@ function renderTool(tool) {
       <p class="tool-description">${escapeHtml(tool.description)}</p>
       <p class="detail">${escapeHtml(tool.detail || '')}</p>
       <div class="actions">
-        <a class="button" href="${escapeHtml(tool.route)}">${escapeHtml(tool.action)}</a>
-        <a class="ghost" href="${escapeHtml(tool.api)}">Check API</a>
+        ${disabled ? '' : `<a class="button" href="${escapeHtml(tool.route)}">${escapeHtml(tool.action)}</a>`}
+        ${disabled ? '' : `<a class="ghost" href="${escapeHtml(tool.api)}">Check API</a>`}
       </div>
     </article>`;
 }

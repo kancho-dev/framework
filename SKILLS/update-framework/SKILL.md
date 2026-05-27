@@ -85,7 +85,7 @@ If the updated framework includes optional browser tools:
    - `PI_SESSION_ROOT` / `SESSION_ROOT` when Pi sessions are not in the default location
    - `OPENCODE_DB` / `OPENCODE_DATA_DIR` when OpenCode data is not in the default location
 9. Remind the Operator that task metadata, session transcripts, cwd paths, tool outputs, copied databases, exports, logs, and env files can be sensitive.
-10. Do not copy session files, OpenCode databases, exports, logs, local `.env` files, or local `.task-browser/` metadata into the framework repo.
+10. Do not copy session files, OpenCode databases, exports, logs, local `.env` files, local `.tools-config/`, or legacy local `.task-browser/` metadata into the framework repo.
 11. For full details, refer to the relevant tool README under `framework/tools/`.
 
 ## Outputs

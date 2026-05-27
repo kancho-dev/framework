@@ -66,10 +66,10 @@ For `done`:
 
 ## Metadata
 
-Task Browser stores workflow metadata in a workspace-level JSON file by default:
+Task Browser stores workflow metadata in a private workspace-level JSON file by default:
 
 ```text
-.task-browser/tasks.json
+.tools-config/task-browser/tasks.json
 ```
 
 The tool creates or updates this file when `/api/tasks` is loaded. Existing display IDs are preserved; newly discovered tasks get the next number.
@@ -109,14 +109,14 @@ Framework task files remain the source of truth for purpose, scope, acceptance c
 Task Browser writes an append-only local JSONL history for durable task-browser metadata changes by default:
 
 ```text
-.task-browser/task-history.jsonl
+.tools-config/task-browser/task-history.jsonl
 ```
 
 Each event records the task key/display ID, timestamp, source, best-effort provenance, and before/after values for changed durable metadata fields: `status`, `priority`, `type`, `tags`, `order`, `parent`, `children`, `blockedBy`, and `related`. Identity/discovery refresh fields such as `displayId`, `project`, `slug`, `path`, and `missing` are not logged as action history.
 
 Browser edits and drag/drop writes default to `actor: "operator"`, `source: "browser"`, and null role/session fields. CLI writes default to `actor: "agent"`, `source: "metadata-cli"`, and null role/session fields unless explicitly provided. This is provenance for local handoff, not authentication or a compliance-grade audit trail.
 
-No-op writes where normalized before/after metadata values are identical do not append events. Safe deletion/retention is simple: stop the server/CLI if active, then delete or archive `.task-browser/task-history.jsonl`; current board state remains in `.task-browser/tasks.json`.
+No-op writes where normalized before/after metadata values are identical do not append events. Safe deletion/retention is simple: stop the server/CLI if active, then delete or archive `.tools-config/task-browser/task-history.jsonl`; current board state remains in `.tools-config/task-browser/tasks.json`.
 
 ## Editing And Drag/Drop
 
@@ -161,7 +161,7 @@ Supported CLI metadata fields are `status`, `priority`, `type`, `order`, `parent
 
 ## Metadata Hygiene Guidance
 
-Use task-browser metadata only when the workspace has adopted task-browser, such as when `.task-browser/tasks.json` exists or the Operator/current task says the board is used. Do not require this metadata in workspaces that are not using task-browser, and do not commit `.task-browser/tasks.json` unless sharing local board state is intentional.
+Use task-browser metadata only when the workspace has adopted task-browser, such as when `.tools-config/task-browser/tasks.json` exists or the Operator/current task says the board is used. Do not require this metadata in workspaces that are not using task-browser, and do not commit `.tools-config/task-browser/tasks.json` unless sharing local board state is intentional.
 
 Scenario rules:
 
@@ -176,7 +176,7 @@ Scenario rules:
 
 Deferred features and optimizations are tracked in `agent-framework/task-browser-deferred-features-and-optimizations`, including same-column DnD reordering, richer prompt-copy modes, richer relationship editing, performance improvements, and experimental shared/team metadata.
 
-Local ignored `.task-browser/tasks.json` remains the default. Shared/team metadata should be treated as deliberate opt-in future design, not default behavior.
+Local ignored `.tools-config/task-browser/tasks.json` is the default. Shared/team metadata should be treated as deliberate opt-in future design, not default behavior.
 
 ## Configuration
 
@@ -184,9 +184,13 @@ Local ignored `.task-browser/tasks.json` remains the default. Shared/team metada
 | --- | --- |
 | `PORT` | HTTP port. Default: `8788`. |
 | `WORKSPACE_ROOT` | Workspace to scan. Default: nearest parent containing `AGENTS.md`, otherwise current directory. |
-| `TASK_BROWSER_METADATA` | Metadata JSON path. Default: `$WORKSPACE_ROOT/.task-browser/tasks.json`. |
-| `TASK_BROWSER_HISTORY` | Metadata history JSONL path. Default: next to metadata as `.task-browser/task-history.jsonl`. |
+| `TASK_BROWSER_METADATA` | Metadata JSON path. Default: `$WORKSPACE_ROOT/.tools-config/task-browser/tasks.json`. |
+| `TASK_BROWSER_HISTORY` | Metadata history JSONL path. Default: next to metadata as `$WORKSPACE_ROOT/.tools-config/task-browser/task-history.jsonl`. |
+
+## Migration
+
+For existing-workspace upgrades from older metadata paths, use `MIGRATIONS.md` as the source of truth. Explicit `TASK_BROWSER_METADATA` and `TASK_BROWSER_HISTORY` override paths remain supported.
 
 ## Safety And Privacy
 
-The tool is local-only and reads task markdown from the configured workspace. It writes only the task-browser metadata JSON file and metadata history JSONL file. Task names, paths, tags, relationships, timing, provenance, and handoff text can reveal private work details; do not commit `.task-browser/tasks.json` or `.task-browser/task-history.jsonl` unless that workspace state is intended to be shared.
+The tool is local-only and reads task markdown from the configured workspace. It writes only the task-browser metadata JSON file and metadata history JSONL file. Task names, paths, tags, relationships, timing, provenance, and handoff text can reveal private work details; do not commit `.tools-config/task-browser/tasks.json` or `.tools-config/task-browser/task-history.jsonl` unless that workspace state is intended to be shared.

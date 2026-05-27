@@ -113,7 +113,7 @@ h1,h2,h3,p { margin:0; } h1{font-size:20px; display:flex; align-items:center; ga
 .relationship-field input:focus { outline:0; border-color:var(--accent); }
 .relationship-editor button:disabled { opacity:.45; cursor:not-allowed; }
 .prompt-action { position:relative; width:fit-content; }
-.prompt-preview { position:absolute; right:0; top:calc(100% + 6px); z-index:4; width:max-content; max-width:min(520px, 80vw); opacity:0; pointer-events:none; color:var(--muted); background:var(--panel-2); border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.28); padding:6px 8px; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:opacity .12s ease; }
+.prompt-preview { position:absolute; right:0; top:calc(100% + 6px); z-index:4; width:max-content; max-width:min(520px, 80vw); opacity:0; pointer-events:none; color:var(--muted); background:var(--panel-2); border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.28); padding:6px 8px; font-size:11px; line-height:1.35; white-space:normal; overflow-wrap:anywhere; transition:opacity .12s ease; }
 .prompt-action:hover .prompt-preview, .prompt-action:focus-within .prompt-preview { opacity:1; }
 .detail-body { display:grid; gap:14px; padding:18px; }
 .detail-body section { border:1px solid var(--border); background:var(--panel); border-radius:14px; padding:16px; }

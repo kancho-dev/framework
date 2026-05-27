@@ -167,7 +167,7 @@ For meaningful reviews, write a separate Oracle task run log, update `HANDOFF.md
 
 ## Task-browser Metadata Hygiene
 
-This section applies only in workspaces that use the optional task-browser tool, for example when `.task-browser/tasks.json` exists, the Operator says the board is used, or the current task asks for task-browser metadata updates.
+This section applies only in workspaces that use the optional task-browser tool, for example when `.tools-config/task-browser/tasks.json` exists, the Operator says the board is used, or the current task asks for task-browser metadata updates.
 
 Task markdown remains the source of truth. Task-browser metadata and metadata history are local workflow/provenance data by default and must not be the only record of state, blockers, review results, or closure.
 
@@ -180,7 +180,7 @@ When task-browser is used, agents should keep metadata aligned before ending mea
 - relationships: store `parent`, `children`, `related`, and `blockedBy` as canonical task keys; `blockedBy` should point only at existing task blockers;
 - closure: set `status: done` only after task files record acceptance or closure.
 
-Use `tools/task-browser/metadata-cli.mjs` as the preferred non-interactive way to inspect or update metadata. It accepts display IDs such as `#32` and canonical keys such as `agent-framework/task-slug`, but stores relationships as canonical keys. In framework versions with task-browser action history, CLI writes append local `.task-browser/task-history.jsonl` events for actual durable metadata changes. Agents may pass real provenance when useful, such as `--role Builder`, `--session-tool pi`, or `--session-id ...`; leave role/session details unset rather than inventing them. See `tools/task-browser/README.md` for detailed history behavior and privacy notes.
+Use `tools/task-browser/metadata-cli.mjs` as the preferred non-interactive way to inspect or update metadata. It accepts display IDs such as `#32` and canonical keys such as `agent-framework/task-slug`, but stores relationships as canonical keys. In framework versions with task-browser action history, CLI writes append local `.tools-config/task-browser/task-history.jsonl` events by default for actual durable metadata changes. Agents may pass real provenance when useful, such as `--role Builder`, `--session-tool pi`, or `--session-id ...`; leave role/session details unset rather than inventing them. See `tools/task-browser/README.md` for detailed history behavior and privacy notes.
 
 ## End Of Task Session
 

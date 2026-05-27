@@ -13,7 +13,7 @@ projects/*/project/
 # Operator-maintained notes
 OPERATOR-NOTES.md
 
-# Tool-local workspace adapters and caches
+# Tool-local workspace adapters and config
 .pi/
 .opencode/
-.task-browser/
+.tools-config/

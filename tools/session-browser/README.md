@@ -57,7 +57,7 @@ No npm install is needed for the current dependency-free tool.
 | `OPENCODE_DB` | Exact OpenCode SQLite database path. |
 | `OPENCODE_DATA_DIR` | OpenCode data directory. Default DB becomes `$OPENCODE_DATA_DIR/opencode.db`. Also used for diff sidecar files. |
 | `SESSION_BROWSER_OPENCODE_LIMIT` | Maximum OpenCode sessions to list after workspace filtering. Default: `500`. |
-| `SESSION_BROWSER_METADATA` | Local JSON sidecar file for bookmarks and tags. Default: `tools/session-browser/.cache/metadata.json`. |
+| `SESSION_BROWSER_METADATA` | Local JSON sidecar file for bookmarks and tags. Default: `$WORKSPACE_ROOT/.tools-config/session-browser/metadata.json`. |
 
 Default Pi session root:
 
@@ -126,10 +126,10 @@ OpenCode support is best-effort and fail-soft. If the DB, `sqlite3`, or expected
 
 Bookmarks and tags are an Operator-curated local layer. They do not change Pi JSONL files or the OpenCode SQLite database.
 
-By default the metadata is stored at:
+By default the metadata is stored in the workspace-local private tools config directory:
 
 ```text
-tools/session-browser/.cache/metadata.json
+.tools-config/session-browser/metadata.json
 ```
 
 Override it when needed:
@@ -158,9 +158,11 @@ The file shape is intentionally simple and private/local. Older metadata files u
 
 To reset bookmarks and tags, stop the server and delete the metadata file. To back them up, copy that file. Treat it as private because tags and session keys can reveal local paths, project names, or work topics.
 
+For existing-workspace upgrades from older metadata paths, use `MIGRATIONS.md` as the source of truth. Explicit `SESSION_BROWSER_METADATA` override paths remain supported.
+
 The first slice is deliberately manual: the tool does not auto-tag sessions and does not expose CLI/API workflows for agents to write tags on your behalf.
 
-Update note for framework agents: when upgrading a workspace that already has `SESSION_BROWSER_METADATA` or `tools/session-browser/.cache/metadata.json`, suggest running the migration command above. The migration is idempotent and creates a timestamped backup before rewriting local private metadata.
+Update note for framework agents: when upgrading existing workspaces, follow `MIGRATIONS.md` for metadata-path migration. The tag migration command above is idempotent and creates a timestamped backup before rewriting local private metadata.
 
 ## Privacy And Safety
 

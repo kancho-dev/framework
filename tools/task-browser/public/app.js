@@ -362,7 +362,14 @@ function formatHistoryValue(value) { return Array.isArray(value) ? value.join(',
 function historyMeta(event) { return [event.actor, event.role, event.sessionTool, event.sessionId, event.source].filter(Boolean).join(' • ') || 'unknown source'; }
 
 function continuePrompt(task) {
-  return `Use task-pickup skill for task ${task.key}`;
+  const prompt = `Use task-pickup skill for task ${task.key}`;
+  const status = String(task.metadata?.status || '').toLowerCase();
+  const type = String(task.metadata?.type || '').toLowerCase();
+  if (status === 'review') return `${prompt} as an Oracle and use review-and-test skill`;
+  if (type === 'implementation' && ['active', 'planned'].includes(status)) {
+    return `${prompt} as a Builder. Understand the task and check if it's ready for implementation from a senior developer point of view. If it's ready start implementation and if not let's clarify what's not clear`;
+  }
+  return prompt;
 }
 
 async function copyText(text) {

@@ -187,7 +187,7 @@ framework/tools/task-browser/
 
 It is a local web tool for browsing tracked task directories under `projects/*/work/*/`, viewing status/priority/type/tag metadata, and resuming task work from handoff and run-log context.
 
-It writes task-browser-owned workflow metadata to `.task-browser/tasks.json` by default and, in versions with action history, append-only metadata-change history to `.task-browser/task-history.jsonl`. Keep these files private unless the workspace's task metadata/provenance history is intended to be shared. If a workspace uses task-browser, agents should keep this metadata aligned with task state using the browser UI or `framework/tools/task-browser/metadata-cli.mjs`; do not create or require this metadata in workspaces that have not adopted task-browser.
+It writes task-browser-owned workflow metadata to `.tools-config/task-browser/tasks.json` by default and, in versions with action history, append-only metadata-change history to `.tools-config/task-browser/task-history.jsonl`. Keep these files private unless the workspace's task metadata/provenance history is intended to be shared. If a workspace uses task-browser, agents should keep this metadata aligned with task state using the browser UI or `framework/tools/task-browser/metadata-cli.mjs`; do not create or require this metadata in workspaces that have not adopted task-browser.
 
 Safety:
 
@@ -245,7 +245,7 @@ Safety:
 
 - if missing, create from the template
 - if present, merge the framework-related ignore rules into it rather than replacing unrelated local rules
-- by default, ignore the nested `framework/` repository, nested `projects/[name]/project/` repositories, `OPERATOR-NOTES.md`, and tool-local adapter/cache directories such as `.pi/`, `.opencode/`, and `.task-browser/`
+- by default, ignore the nested `framework/` repository, nested `projects/[name]/project/` repositories, `OPERATOR-NOTES.md`, and tool-local adapter/cache directories such as `.pi/`, `.opencode/`, and `.tools-config/`
 - do not ignore `projects/[name]/library/` or `projects/[name]/work/` in the default model; those belong to the workspace root repo
 - check this early in an existing-workspace adoption; it is one of the easiest places to make the workspace awkward by accident
 - if the workspace is in a mixed migration state, make sure the ignore rules still match the real nested-repo boundaries instead of assuming every project is already organized identically
@@ -268,11 +268,28 @@ projects/*/project/
 # Operator-maintained notes
 OPERATOR-NOTES.md
 
-# Tool-local workspace adapters and caches
+# Tool-local workspace adapters and config
 .pi/
 .opencode/
-.task-browser/
+.tools-config/
 ```
+
+### `.tools-config/`
+
+Optional browser tools use `.tools-config/` as the default private workspace-local location for tool-owned metadata/config:
+
+```text
+.tools-config/
+  task-browser/
+    tasks.json
+    task-history.jsonl
+  session-browser/
+    metadata.json
+  tool-orchestrator/
+    workspaces.json
+```
+
+Keep this directory ignored unless the workspace intentionally shares local tool state. For existing-workspace upgrades from older tool metadata paths, use `MIGRATIONS.md` as the source of truth.
 
 ### `README.md`
 

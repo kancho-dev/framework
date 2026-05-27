@@ -81,7 +81,7 @@ If using the default model, configure the workspace root repository to ignore ne
 - `framework/`
 - `projects/*/project/`
 
-Also ignore local adapter/cache metadata such as `.pi/`, `.opencode/`, and `.task-browser/` unless that workspace state is intentionally shared.
+Also ignore local adapter/cache metadata such as `.pi/`, `.opencode/`, and `.tools-config/` unless that workspace state is intentionally shared.
 
 Do not ignore `projects/[name]/library/` or `projects/[name]/work/` in the default model.
 
@@ -95,8 +95,11 @@ Do not ignore `projects/[name]/library/` or `projects/[name]/work/` in the defau
 - durable project knowledge → `projects/[name]/library/*.md`
 - durable fixes and mistakes → `FIXES.md`
 - exact historical recall → optional memory service
-- task-browser workflow metadata → `.task-browser/tasks.json`
-- task-browser metadata-change history → `.task-browser/task-history.jsonl`
+- private tools config/state → `.tools-config/`
+- task-browser workflow metadata → `.tools-config/task-browser/tasks.json`
+- task-browser metadata-change history → `.tools-config/task-browser/task-history.jsonl`
+- session-browser bookmark/tag metadata → `.tools-config/session-browser/metadata.json`
+- tool-orchestrator workspace config → `.tools-config/tool-orchestrator/workspaces.json`
 
 ## Tool Agnosticism
 

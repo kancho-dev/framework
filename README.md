@@ -169,7 +169,7 @@ Read [`tools/session-browser/README.md`](tools/session-browser/README.md) for se
 
 [`tools/task-browser/`](tools/task-browser/) is an optional local tool for browsing tracked task directories across workspace projects.
 
-It reads framework task markdown, stores task-browser-owned workflow metadata in `.task-browser/tasks.json`, stores local metadata-change history in `.task-browser/task-history.jsonl`, and provides a kanban-lite view, task detail drawer, run timeline, filters, and copyable task-pickup prompts.
+It reads framework task markdown, stores task-browser-owned workflow metadata in `.tools-config/task-browser/tasks.json`, stores local metadata-change history in `.tools-config/task-browser/task-history.jsonl`, and provides a kanban-lite view, task detail drawer, run timeline, filters, and copyable task-pickup prompts.
 
 Read [`tools/task-browser/README.md`](tools/task-browser/README.md) for setup, metadata, configuration, and safety details.
 

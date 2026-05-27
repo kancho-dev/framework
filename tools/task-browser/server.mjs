@@ -9,9 +9,9 @@ const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
 const SHARED_WEB_DIR = join(TOOL_DIR, '..', 'shared-web');
 const PORT = parsePort(process.env.PORT || '8788');
-const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
-const METADATA_PATH = metadataPathFor(WORKSPACE_ROOT);
-const HISTORY_PATH = historyPathFor(WORKSPACE_ROOT, METADATA_PATH);
+const DEFAULT_WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
+const DEFAULT_METADATA_PATH = metadataPathFor(DEFAULT_WORKSPACE_ROOT);
+const DEFAULT_HISTORY_PATH = historyPathFor(DEFAULT_WORKSPACE_ROOT, DEFAULT_METADATA_PATH);
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 function parsePort(value) {
@@ -20,8 +20,8 @@ function parsePort(value) {
   return port;
 }
 
-async function discoverTasks() {
-  const projectsDir = join(WORKSPACE_ROOT, 'projects');
+async function discoverTasks(ctx) {
+  const projectsDir = join(ctx.workspaceRoot, 'projects');
   const projects = await safeReadDir(projectsDir);
   const tasks = [];
   for (const projectEntry of projects.filter((entry) => entry.isDirectory())) {
@@ -36,10 +36,10 @@ async function discoverTasks() {
         readFile(taskPath, 'utf8').catch(() => ''),
         readFile(handoffPath, 'utf8').catch(() => ''),
         readFile(join(taskDir, 'CONTEXT.md'), 'utf8').catch(() => ''),
-        summarizeRuns(join(taskDir, 'runs')),
+        summarizeRuns(ctx, join(taskDir, 'runs')),
         stat(handoffPath).catch(() => null),
       ]);
-      tasks.push(summarizeTask(projectEntry.name, taskEntry.name, taskDir, taskText, handoffText, contextText, runs, handoffStat));
+      tasks.push(summarizeTask(ctx, projectEntry.name, taskEntry.name, taskDir, taskText, handoffText, contextText, runs, handoffStat));
     }
   }
   return tasks.sort((a, b) => a.key.localeCompare(b.key));
@@ -49,8 +49,8 @@ async function safeReadDir(path) {
   try { return await readdir(path, { withFileTypes: true }); } catch { return []; }
 }
 
-function summarizeTask(project, slug, taskDir, taskText, handoffText, contextText, runs, handoffStat) {
-  const relPath = relativePath(taskDir);
+function summarizeTask(ctx, project, slug, taskDir, taskText, handoffText, contextText, runs, handoffStat) {
+  const relPath = relativePath(ctx, taskDir);
   const title = firstHeading(taskText) || slug;
   const latestRunAt = runTimestamp(runs[0]?.file) || handoffStat?.mtime?.toISOString() || null;
   return {
@@ -76,8 +76,8 @@ function summarizeTask(project, slug, taskDir, taskText, handoffText, contextTex
   };
 }
 
-function relativePath(path) {
-  return resolve(path).replace(`${WORKSPACE_ROOT}/`, '');
+function relativePath(ctx, path) {
+  return resolve(path).replace(`${ctx.workspaceRoot}/`, '');
 }
 
 function firstHeading(text) {
@@ -103,23 +103,23 @@ function compact(text, max) {
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }
 
-async function summarizeRuns(runsDir) {
+async function summarizeRuns(ctx, runsDir) {
   const entries = (await safeReadDir(runsDir)).filter((entry) => entry.isFile() && entry.name.endsWith('.md')).sort((a, b) => b.name.localeCompare(a.name));
   return Promise.all(entries.map(async (entry) => {
     const path = join(runsDir, entry.name);
     const text = await readFile(path, 'utf8').catch(() => '');
     return {
       file: entry.name,
-      path: relativePath(path),
+      path: relativePath(ctx, path),
       title: runTitle(entry.name, firstHeading(text)),
       goal: compact(sectionText(text, 'Goal') || sectionText(text, 'Purpose') || '', 360),
     };
   }));
 }
 
-async function syncMetadata(discovered) {
-  const metadata = syncMetadataTasks(await readMetadata(METADATA_PATH, { allowMissing: true }), discovered, { inferType });
-  await writeMetadata(METADATA_PATH, metadata);
+async function syncMetadata(ctx, discovered) {
+  const metadata = syncMetadataTasks(await readMetadata(ctx.metadataPath, { allowMissing: true }), discovered, { inferType });
+  await writeMetadata(ctx.metadataPath, metadata);
   return metadata;
 }
 
@@ -147,10 +147,10 @@ function inferType(task) {
   return 'implementation';
 }
 
-async function taskPayload() {
-  const discovered = await discoverTasks();
-  const metadata = await syncMetadata(discovered);
-  const history = await readHistory(HISTORY_PATH, { limit: 1000 });
+async function taskPayload(ctx) {
+  const discovered = await discoverTasks(ctx);
+  const metadata = await syncMetadata(ctx, discovered);
+  const history = await readHistory(ctx.historyPath, { limit: 1000 });
   const historyByTask = new Map();
   for (const event of history) {
     if (!historyByTask.has(event.taskKey)) historyByTask.set(event.taskKey, []);
@@ -158,21 +158,21 @@ async function taskPayload() {
   }
   const tasks = discovered.map((task) => ({ ...task, metadata: { ...metadata.tasks[task.key], blocks: deriveBlocks(metadata, task.key) }, metadataHistory: historyByTask.get(task.key) || [] }));
   const missing = Object.entries(metadata.tasks).filter(([, value]) => value.missing).map(([key, value]) => ({ key, metadata: value }));
-  return { workspaceRoot: WORKSPACE_ROOT, workspaceName: basename(WORKSPACE_ROOT), metadataPath: METADATA_PATH, statuses: STATUSES, priorities: PRIORITIES, tasks, missing };
+  return { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, metadataPath: ctx.metadataPath, statuses: STATUSES, priorities: PRIORITIES, tasks, missing };
 }
 
-async function updateTaskMetadata(key, patch) {
+async function updateTaskMetadata(ctx, key, patch) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw Object.assign(new Error('Invalid metadata patch'), { statusCode: 400 });
-  const discovered = await discoverTasks();
+  const discovered = await discoverTasks(ctx);
   if (!discovered.some((task) => task.key === key)) throw Object.assign(new Error('Unknown task'), { statusCode: 404 });
-  const metadata = await syncMetadata(discovered);
+  const metadata = await syncMetadata(ctx, discovered);
   const beforeTasks = snapshotTasks(metadata);
   const current = metadata.tasks[key] || {};
   metadata.tasks[key] = applyBrowserPatch(current, patch);
   applyRelationshipPatch(metadata, key, patch);
   const events = changedTaskKeys(beforeTasks, metadata).map((taskKey) => buildHistoryEvent({ key: taskKey, task: metadata.tasks[taskKey], before: beforeTasks[taskKey], after: metadata.tasks[taskKey], actor: 'operator', source: 'browser', action: 'metadata.patch' })).filter(Boolean);
-  await writeMetadata(METADATA_PATH, metadata);
-  for (const event of events) await appendHistoryEvent(HISTORY_PATH, event);
+  await writeMetadata(ctx.metadataPath, metadata);
+  for (const event of events) await appendHistoryEvent(ctx.historyPath, event);
   return { ...metadata.tasks[key], blocks: deriveBlocks(metadata, key) };
 }
 
@@ -187,15 +187,16 @@ async function readJsonBody(req) {
   }
 }
 
-export function createTaskBrowserHandler({ basePath = '/', cockpit = null } = {}) {
+export function createTaskBrowserHandler({ basePath = '/', cockpit = null, workspaceRoot = DEFAULT_WORKSPACE_ROOT, workspaceName = basename(workspaceRoot), metadataPath = metadataPathFor(workspaceRoot), historyPath = historyPathFor(workspaceRoot, metadataPath) } = {}) {
   const normalizedBase = normalizeBasePath(basePath);
+  const ctx = { workspaceRoot: resolve(workspaceRoot), workspaceName, metadataPath: resolve(metadataPath), historyPath: resolve(historyPath) };
   return async function taskBrowserHandler(req, res) {
     try {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       const pathname = stripBasePath(url.pathname, normalizedBase);
       if (pathname === null) return false;
       if (pathname === '/api/tasks') {
-        sendJson(res, 200, await taskPayload());
+        sendJson(res, 200, await taskPayload(ctx));
         return true;
       }
       if (pathname === '/api/task-metadata' && req.method === 'PATCH') {
@@ -208,7 +209,7 @@ export function createTaskBrowserHandler({ basePath = '/', cockpit = null } = {}
           sendJson(res, 400, { error: 'Missing task key' });
           return true;
         }
-        sendJson(res, 200, { metadata: await updateTaskMetadata(body.key, body.metadata) });
+        sendJson(res, 200, { metadata: await updateTaskMetadata(ctx, body.key, body.metadata) });
         return true;
       }
       if (pathname.startsWith('/shared/')) {
@@ -218,7 +219,7 @@ export function createTaskBrowserHandler({ basePath = '/', cockpit = null } = {}
       if (pathname === '/') {
         let html = await readStaticText(PUBLIC_DIR, '/index.html');
         html = html.replaceAll('/shared/', `${normalizedBase}/shared/`);
-        html = html.replace('<!-- __FRAMEWORK_COCKPIT_CONFIG__ -->', cockpit ? `<script>window.__FRAMEWORK_COCKPIT__ = ${JSON.stringify(cockpit)};</script>` : '');
+        html = html.replace('<!-- __FRAMEWORK_COCKPIT_CONFIG__ -->', cockpit ? `<script>window.__FRAMEWORK_COCKPIT__ = ${JSON.stringify(cockpit)}; window.__FRAMEWORK_WORKSPACE_ID__ = ${JSON.stringify(cockpit.workspaceId || null)};</script><script src="${normalizedBase}/shared/workspace-query.js"></script>` : '');
         await sendHtml(res, html);
         return true;
       }
@@ -235,7 +236,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const server = createServer(createTaskBrowserHandler());
   server.listen(PORT, () => {
     console.log(`Task Browser listening at http://localhost:${PORT}`);
-    console.log(`Workspace: ${WORKSPACE_ROOT}`);
-    console.log(`Metadata: ${METADATA_PATH}`);
+    console.log(`Workspace: ${DEFAULT_WORKSPACE_ROOT}`);
+    console.log(`Metadata: ${DEFAULT_METADATA_PATH}`);
   });
 }

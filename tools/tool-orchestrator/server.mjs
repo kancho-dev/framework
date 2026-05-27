@@ -1,11 +1,12 @@
 import { createServer } from 'node:http';
-import { dirname, join, resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTaskBrowserHandler } from '../task-browser/server.mjs';
 import { createSessionBrowserHandler } from '../session-browser/server.mjs';
 import { exists, safeError, sendJson, serveStaticPath } from '../shared-web/http.mjs';
 
-const toolNav = [
+const baseToolNav = [
   { id: 'task-browser', title: 'Task Browser', shortTitle: 'Tasks', route: '/tools/tasks/', icon: '/tools/tasks/icon.svg' },
   { id: 'session-browser', title: 'Session Browser', shortTitle: 'Sessions', route: '/tools/sessions/', icon: '/tools/sessions/icon.svg' },
 ];
@@ -14,29 +15,10 @@ const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
 const PORT = parsePort(process.env.TOOL_ORCHESTRATOR_PORT || process.env.PORT || '8789');
 const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
-
-const tools = [
-  {
-    id: 'task-browser',
-    title: 'Task Browser',
-    route: '/tools/tasks/',
-    api: '/tools/tasks/api/tasks',
-    icon: 'icons/task-browser.svg',
-    description: 'Review task state, handoffs, runs, and metadata.',
-    action: 'Open tasks',
-    handler: createTaskBrowserHandler({ basePath: '/tools/tasks', cockpit: { enabled: true, home: '/', current: 'task-browser', tools: toolNav } }),
-  },
-  {
-    id: 'session-browser',
-    title: 'Session Browser',
-    route: '/tools/sessions/',
-    api: '/tools/sessions/api/sessions',
-    icon: 'icons/session-browser.svg',
-    description: 'Search recent local agent sessions for context.',
-    action: 'Open sessions',
-    handler: createSessionBrowserHandler({ basePath: '/tools/sessions', cockpit: { enabled: true, home: '/', current: 'session-browser', tools: toolNav } }),
-  },
-];
+const DEFAULT_WORKSPACE_CONFIG_PATH = join(WORKSPACE_ROOT, '.tools-config', 'tool-orchestrator', 'workspaces.json');
+const WORKSPACE_CONFIG_PATH = process.env.TOOL_ORCHESTRATOR_WORKSPACES_CONFIG || (await exists(DEFAULT_WORKSPACE_CONFIG_PATH) ? DEFAULT_WORKSPACE_CONFIG_PATH : '');
+const workspaceConfig = await loadWorkspaceConfig();
+const handlers = new Map(workspaceConfig.workspaces.map((workspace) => [workspace.id, createWorkspaceHandlers(workspace)]));
 
 function parsePort(value) {
   const port = Number(value);
@@ -54,33 +36,162 @@ async function findWorkspaceRoot(start) {
   }
 }
 
-async function toolStatuses() {
-  const taskRoot = join(WORKSPACE_ROOT, 'projects');
-  const statuses = await Promise.all(tools.map(async (tool) => {
+async function loadWorkspaceConfig() {
+  if (!WORKSPACE_CONFIG_PATH) return defaultWorkspaceConfig();
+  const parsed = JSON.parse(await readFile(resolve(WORKSPACE_CONFIG_PATH), 'utf8'));
+  if (!Array.isArray(parsed.workspaces) || parsed.workspaces.length === 0) throw new Error('Workspace config must include a non-empty workspaces array');
+  const ids = new Set();
+  const workspaces = parsed.workspaces.map((entry) => normalizeWorkspace(entry, ids));
+  const fallbackId = workspaces.find((workspace) => workspace.root === WORKSPACE_ROOT)?.id || workspaces[0].id;
+  const defaultWorkspace = parsed.defaultWorkspace && ids.has(parsed.defaultWorkspace) ? parsed.defaultWorkspace : fallbackId;
+  return { defaultWorkspace, workspaces, configured: true, path: resolve(WORKSPACE_CONFIG_PATH) };
+}
+
+function defaultWorkspaceConfig() {
+  const id = 'default';
+  return {
+    defaultWorkspace: id,
+    configured: false,
+    path: null,
+    workspaces: [{ id, name: basename(WORKSPACE_ROOT) || WORKSPACE_ROOT, root: WORKSPACE_ROOT, tools: {} }],
+  };
+}
+
+function normalizeWorkspace(entry, ids) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('Workspace entries must be objects');
+  const id = String(entry.id || '').trim();
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(id)) throw new Error(`Invalid workspace id: ${id || '(missing)'}`);
+  if (ids.has(id)) throw new Error(`Duplicate workspace id: ${id}`);
+  ids.add(id);
+  const root = resolve(requiredString(entry.root, `workspace ${id} root`));
+  const tools = entry.tools && typeof entry.tools === 'object' && !Array.isArray(entry.tools) ? entry.tools : {};
+  return {
+    id,
+    name: String(entry.name || basename(root) || id),
+    root,
+    taskMetadataPath: entry.taskMetadataPath ? resolve(String(entry.taskMetadataPath)) : null,
+    taskHistoryPath: entry.taskHistoryPath ? resolve(String(entry.taskHistoryPath)) : null,
+    sessionMetadataPath: entry.sessionMetadataPath ? resolve(String(entry.sessionMetadataPath)) : null,
+    tools: Object.fromEntries(Object.entries(tools).map(([key, value]) => [key, value !== false])),
+  };
+}
+
+function requiredString(value, label) {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`Missing ${label}`);
+  return value;
+}
+
+function selectedWorkspace(url) {
+  const requested = url.searchParams.get('workspace');
+  return workspaceConfig.workspaces.find((workspace) => workspace.id === requested) || workspaceConfig.workspaces.find((workspace) => workspace.id === workspaceConfig.defaultWorkspace) || workspaceConfig.workspaces[0];
+}
+
+function workspaceQuery(workspace) {
+  return workspaceConfig.configured ? `?workspace=${encodeURIComponent(workspace.id)}` : '';
+}
+
+function routeFor(route, workspace) {
+  return `${route}${workspaceQuery(workspace)}`;
+}
+
+function toolEnabled(workspace, toolId) {
+  return workspace.tools?.[toolId] !== false;
+}
+
+function navFor(workspace) {
+  return baseToolNav
+    .filter((tool) => toolEnabled(workspace, tool.id))
+    .map((tool) => ({ ...tool, route: routeFor(tool.route, workspace) }));
+}
+
+function cockpitConfig(workspace, current = 'home') {
+  return {
+    enabled: true,
+    home: `/${workspaceQuery(workspace)}`,
+    current,
+    workspaceId: workspace.id,
+    currentWorkspace: publicWorkspace(workspace),
+    workspaces: workspaceConfig.workspaces.map(publicWorkspace),
+    tools: navFor(workspace),
+  };
+}
+
+function createWorkspaceHandlers(workspace) {
+  return {
+    'task-browser': createTaskBrowserHandler({
+      basePath: '/tools/tasks',
+      workspaceRoot: workspace.root,
+      workspaceName: workspace.name,
+      ...(workspace.taskMetadataPath ? { metadataPath: workspace.taskMetadataPath } : {}),
+      ...(workspace.taskHistoryPath ? { historyPath: workspace.taskHistoryPath } : {}),
+      cockpit: cockpitConfig(workspace, 'task-browser'),
+    }),
+    'session-browser': createSessionBrowserHandler({
+      basePath: '/tools/sessions',
+      workspaceRoot: workspace.root,
+      workspaceName: workspace.name,
+      ...(workspace.sessionMetadataPath ? { metadataPath: workspace.sessionMetadataPath } : {}),
+      cockpit: cockpitConfig(workspace, 'session-browser'),
+    }),
+  };
+}
+
+async function toolStatuses(workspace) {
+  const taskRoot = join(workspace.root, 'projects');
+  const statusTools = [
+    {
+      id: 'task-browser',
+      title: 'Task Browser',
+      route: routeFor('/tools/tasks/', workspace),
+      api: routeFor('/tools/tasks/api/tasks', workspace),
+      icon: 'icons/task-browser.svg',
+      description: 'Review task state, handoffs, runs, and metadata.',
+      action: 'Open tasks',
+    },
+    {
+      id: 'session-browser',
+      title: 'Session Browser',
+      route: routeFor('/tools/sessions/', workspace),
+      api: routeFor('/tools/sessions/api/sessions', workspace),
+      icon: 'icons/session-browser.svg',
+      description: 'Search recent local agent sessions for context.',
+      action: 'Open sessions',
+    },
+  ].filter((tool) => toolEnabled(workspace, tool.id));
+  const statuses = await Promise.all(statusTools.map(async (tool) => {
     if (tool.id === 'task-browser') {
-      return { ...publicTool(tool), status: await exists(taskRoot) ? 'ready' : 'warning', detail: await exists(taskRoot) ? 'Tasks available from this workspace.' : 'No projects directory found under workspace root.' };
+      const ready = await exists(taskRoot);
+      return { ...tool, status: ready ? 'ready' : 'warning', detail: ready ? 'Tasks available from this workspace.' : 'No projects directory found under workspace root.' };
     }
-    if (tool.id === 'session-browser') {
-      return { ...publicTool(tool), status: 'ready', detail: 'Session sources are checked on open.' };
-    }
-    return { ...publicTool(tool), status: 'unknown', detail: 'No status check configured.' };
+    if (tool.id === 'session-browser') return { ...tool, status: 'ready', detail: 'Session sources are checked on open.' };
+    return { ...tool, status: 'unknown', detail: 'No status check configured.' };
   }));
-  return { workspaceRoot: WORKSPACE_ROOT, localOnly: true, tools: statuses };
+  return {
+    workspaceRoot: workspace.root,
+    workspaceName: workspace.name,
+    currentWorkspace: publicWorkspace(workspace),
+    workspaces: workspaceConfig.workspaces.map(publicWorkspace),
+    multiWorkspaceConfigured: workspaceConfig.configured,
+    configPath: workspaceConfig.path,
+    localOnly: true,
+    tools: statuses,
+  };
 }
 
-function publicTool(tool) {
-  const { handler, ...rest } = tool;
-  return rest;
+function publicWorkspace(workspace) {
+  return { id: workspace.id, name: workspace.name, root: workspace.root, tools: workspace.tools || {} };
 }
 
-async function routeToMountedTool(req, res) {
-  for (const tool of tools) {
+async function routeToMountedTool(req, res, workspace) {
+  const workspaceHandlers = handlers.get(workspace.id);
+  for (const tool of baseToolNav) {
+    if (!toolEnabled(workspace, tool.id)) continue;
     if (req.url === tool.route.slice(0, -1)) {
-      res.writeHead(302, { location: tool.route });
+      res.writeHead(302, { location: routeFor(tool.route, workspace) });
       res.end();
       return true;
     }
-    const handled = await tool.handler(req, res);
+    const handled = await workspaceHandlers[tool.id](req, res);
     if (handled) return true;
   }
   return false;
@@ -89,9 +200,10 @@ async function routeToMountedTool(req, res) {
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-    if (url.pathname === '/api/tools') return sendJson(res, 200, await toolStatuses());
+    const workspace = selectedWorkspace(url);
+    if (url.pathname === '/api/tools') return sendJson(res, 200, await toolStatuses(workspace));
     if (url.pathname.startsWith('/shared/')) return serveStaticPath(res, join(TOOL_DIR, '..', 'shared-web'), url.pathname.replace('/shared', '') || '/');
-    if (await routeToMountedTool(req, res)) return;
+    if (await routeToMountedTool(req, res, workspace)) return;
     await serveStaticPath(res, PUBLIC_DIR, url.pathname);
   } catch (error) {
     sendJson(res, 500, { error: safeError(error) });
@@ -100,6 +212,7 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Framework Cockpit: http://localhost:${PORT}`);
-  console.log(`Workspace root: ${WORKSPACE_ROOT}`);
+  console.log(`Default workspace root: ${WORKSPACE_ROOT}`);
+  if (workspaceConfig.path) console.log(`Workspace config: ${workspaceConfig.path}`);
   console.log('Local-only tool shell; standalone Task Browser and Session Browser remain available.');
 });

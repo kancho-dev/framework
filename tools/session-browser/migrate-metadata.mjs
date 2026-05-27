@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
-const metadataPath = resolve(process.env.SESSION_BROWSER_METADATA || join(TOOL_DIR, '.cache', 'metadata.json'));
+const legacyMetadataPath = join(TOOL_DIR, '.cache', 'metadata.json');
+const workspaceRoot = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
+const metadataPath = resolve(process.env.SESSION_BROWSER_METADATA || join(workspaceRoot, '.tools-config', 'session-browser', 'metadata.json'));
 
 function normalizeTags(tags) {
   if (!Array.isArray(tags)) return [];
@@ -16,13 +18,26 @@ function backupSuffix(date = new Date()) {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
+async function exists(path) { try { await stat(path); return true; } catch { return false; } }
+
+async function findWorkspaceRoot(start) {
+  let current = resolve(start);
+  while (true) {
+    if (await exists(join(current, 'AGENTS.md'))) return current;
+    const parent = dirname(current);
+    if (parent === current) return resolve(start);
+    current = parent;
+  }
+}
+
 async function main() {
   let parsed;
   try {
     parsed = JSON.parse(await readFile(metadataPath, 'utf8'));
   } catch (error) {
     if (error?.code === 'ENOENT') {
-      console.log(`No Session Browser metadata found at ${metadataPath}; nothing to migrate.`);
+      const migrationHint = process.env.SESSION_BROWSER_METADATA ? '' : ' For metadata-path upgrades, see MIGRATIONS.md.';
+      console.log(`No Session Browser metadata found at ${metadataPath}; nothing to migrate.${migrationHint}`);
       return;
     }
     throw error;
