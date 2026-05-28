@@ -21,6 +21,40 @@ Mounted tools:
 - `/tools/tasks/` — Task Browser
 - `/tools/sessions/` — Session Browser
 
+## Cockpit Widget Dashboard
+
+The Cockpit home surface is a local-first widget dashboard. It ships a default layout without writing workspace files. The first dashboard customization writes selected-workspace config to:
+
+```text
+$WORKSPACE_ROOT/.tools-config/tool-orchestrator/dashboard.json
+```
+
+Config schema:
+
+```json
+{
+  "version": 1,
+  "workspaceId": "main",
+  "layout": [
+    { "id": "task-counts", "type": "task-counts", "size": "small" },
+    { "id": "priority-tasks", "type": "priority-tasks", "size": "wide" },
+    { "id": "latest-bookmarked-session", "type": "latest-bookmarked-session", "size": "small" },
+    { "id": "latest-updated-session", "type": "latest-updated-session", "size": "small" },
+    { "id": "tools", "type": "tools", "size": "wide" }
+  ]
+}
+```
+
+Widget contract for this first slice:
+
+- stable `type` and per-layout `id`;
+- title/size owned by Cockpit's widget catalog;
+- widget data remains selected-workspace scoped;
+- task widgets call Task Browser `/api/summary`;
+- session widgets call Session Browser `/api/summary`;
+- widgets render loading, empty, and error states through the dashboard shell;
+- widgets are glanceable recovery surfaces and deep-link to the owning mounted tool for full workflows.
+
 Optional multi-workspace config:
 
 ```json

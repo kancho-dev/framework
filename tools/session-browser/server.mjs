@@ -738,6 +738,23 @@ async function loadOpenCodeSession(ctx, ref) {
   return { ...summary, ...relations, entries, activeEntries: entries, topicAnchors };
 }
 
+function sessionDashboardSummary(sessions) {
+  const visible = sessions.filter((session) => !session.archivedAt);
+  const latestUpdatedSession = visible[0] || null;
+  const latestBookmarkedSession = visible.find((session) => session.metadata?.bookmarked) || null;
+  const compact = (session) => session ? {
+    id: session.id,
+    title: session.name || session.summary || session.id,
+    source: session.source,
+    updatedAt: session.updatedAt,
+    path: session.path,
+    ref: session.ref,
+    bookmarked: Boolean(session.metadata?.bookmarked),
+    messageCount: session.messageCount,
+  } : null;
+  return { latestBookmarkedSession: compact(latestBookmarkedSession), latestUpdatedSession: compact(latestUpdatedSession) };
+}
+
 async function listSessions(ctx) {
   const { metadata, error: metadataError } = await readMetadata(ctx);
   const results = await Promise.allSettled([
@@ -777,6 +794,12 @@ export function createSessionBrowserHandler({ basePath = '/', cockpit = null, wo
         const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(ctx), '/api/sessions', REQUEST_TIMEOUT_MS)
           .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: ctx.metadataPath }));
         sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
+        return true;
+      }
+      if (pathname === '/api/summary') {
+        const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(ctx), '/api/summary', REQUEST_TIMEOUT_MS)
+          .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: ctx.metadataPath }));
+        sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, metadataPath, sourceErrors, metadataError, ...sessionDashboardSummary(sessions) });
         return true;
       }
       if (pathname === '/api/session') {

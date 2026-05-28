@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTaskBrowserHandler } from '../task-browser/server.mjs';
@@ -104,6 +104,67 @@ function navFor(workspace) {
     .map((tool) => ({ ...tool, route: routeFor(tool.route, workspace) }));
 }
 
+function dashboardConfigPath(workspace) {
+  return join(workspace.root, '.tools-config', 'tool-orchestrator', 'dashboard.json');
+}
+
+const widgetCatalog = {
+  'task-counts': { id: 'task-counts', type: 'task-counts', size: 'small', tool: 'task-browser' },
+  'priority-tasks': { id: 'priority-tasks', type: 'priority-tasks', size: 'wide', tool: 'task-browser' },
+  'latest-bookmarked-session': { id: 'latest-bookmarked-session', type: 'latest-bookmarked-session', size: 'small', tool: 'session-browser' },
+  'latest-updated-session': { id: 'latest-updated-session', type: 'latest-updated-session', size: 'small', tool: 'session-browser' },
+  tools: { id: 'tools', type: 'tools', size: 'wide' },
+};
+
+function availableWidgets(workspace) {
+  const enabledToolCount = navFor(workspace).length;
+  return Object.values(widgetCatalog)
+    .filter((widget) => !widget.tool || toolEnabled(workspace, widget.tool))
+    .map((widget) => widget.type === 'tools' ? { ...widget, size: enabledToolCount <= 1 ? 'small' : 'wide' } : widget);
+}
+
+function defaultDashboardLayout(workspace) {
+  const available = availableWidgets(workspace);
+  return available.some((widget) => widget.type === 'tools') ? available : [widgetCatalog.tools];
+}
+
+const widgetTypes = new Set(Object.keys(widgetCatalog));
+
+async function readDashboardConfig(workspace) {
+  const path = dashboardConfigPath(workspace);
+  const catalog = availableWidgets(workspace);
+  if (!(await exists(path))) return { source: 'default', path, catalog, layout: defaultDashboardLayout(workspace) };
+  const parsed = JSON.parse(await readFile(path, 'utf8'));
+  return { source: 'workspace', path, catalog, layout: normalizeDashboardLayout(workspace, parsed.layout) };
+}
+
+function normalizeDashboardLayout(workspace, layout) {
+  if (!Array.isArray(layout)) throw Object.assign(new Error('Dashboard layout must be an array'), { statusCode: 400 });
+  const availableTypes = new Set(availableWidgets(workspace).map((widget) => widget.type));
+  const normalized = layout.filter((widget) => widgetTypes.has(widget?.type) && availableTypes.has(widget.type)).map((widget) => ({
+    id: String(widget.id || widget.type),
+    type: widget.type,
+    size: widgetCatalog[widget.type].size,
+  }));
+  return normalized.length ? normalized : defaultDashboardLayout(workspace);
+}
+
+async function readJsonBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  if (chunks.reduce((total, chunk) => total + chunk.length, 0) > 64_000) throw Object.assign(new Error('Request too large'), { statusCode: 413 });
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); }
+  catch { throw Object.assign(new Error('Invalid JSON'), { statusCode: 400 }); }
+}
+
+async function writeDashboardConfig(workspace, body) {
+  const path = dashboardConfigPath(workspace);
+  const config = { version: 1, workspaceId: workspace.id, layout: normalizeDashboardLayout(workspace, body.layout) };
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  return { source: 'workspace', path, catalog: availableWidgets(workspace), layout: config.layout };
+}
+
 function cockpitConfig(workspace, current = 'home') {
   return {
     enabled: true,
@@ -202,6 +263,8 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const workspace = selectedWorkspace(url);
     if (url.pathname === '/api/tools') return sendJson(res, 200, await toolStatuses(workspace));
+    if (url.pathname === '/api/dashboard-config' && req.method === 'GET') return sendJson(res, 200, await readDashboardConfig(workspace));
+    if (url.pathname === '/api/dashboard-config' && req.method === 'PUT') return sendJson(res, 200, await writeDashboardConfig(workspace, await readJsonBody(req)));
     if (url.pathname.startsWith('/shared/')) return serveStaticPath(res, join(TOOL_DIR, '..', 'shared-web'), url.pathname.replace('/shared', '') || '/');
     if (await routeToMountedTool(req, res, workspace)) return;
     await serveStaticPath(res, PUBLIC_DIR, url.pathname);

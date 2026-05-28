@@ -13,39 +13,25 @@
 <body>
   <div id="cockpit-nav"></div>
   <main class="shell">
-    <header class="hero">
-      <div class="hero-copy">
-        <div class="brand-row">
-          <img class="cockpit-logo" src="icon.svg" alt="" width="76" height="76">
-          <div>
-            <p class="eyebrow">local-only framework tools</p>
-            <h1>Framework Cockpit</h1>
-          </div>
-        </div>
-        <p class="lede">Check the available tools and navigate easily to the right one.</p>
-        <div class="hero-actions">
-          <span id="workspace" class="workspace-badge wide"></span>
-        </div>
+    <header class="topbar">
+      <div class="brand-row">
+        <img class="cockpit-logo" src="icon.svg" alt="" width="38" height="38">
+        <h1>Framework Cockpit <span id="workspace" class="workspace-badge wide"></span></h1>
       </div>
-      <div class="hero-panel" aria-hidden="true">
-        <div class="radar">
-          <div class="radar-ring ring-one"></div>
-          <div class="radar-ring ring-two"></div>
-          <div class="radar-sweep"></div>
-          <div class="orbit-card primary"><img src="icon.svg" alt="">Cockpit</div>
-          <span class="tool-dot dot-one"><img src="icons/task-browser.svg" alt=""></span>
-          <span class="tool-dot dot-two"><img src="icons/session-browser.svg" alt=""></span>
-          <span class="tool-dot dot-three">+</span>
-        </div>
+      <div class="topbar-actions">
+        <span id="refresh-notice" class="refresh-notice" hidden></span>
+        <button id="edit-dashboard" class="customize-button" title="Customize dashboard">⚙ Customize</button>
+        <button id="save-dashboard" class="button" hidden>Save layout</button>
+        <button id="cancel-dashboard" class="ghost" hidden>Cancel</button>
       </div>
     </header>
 
-    <section>
+    <section class="dashboard-section">
       <div class="section-title">
-        <h2>Open a tool</h2>
-        <p>Use readiness at a glance before opening a tool.</p>
+        <h2>Cockpit Widget Dashboard</h2>
+        <p>Glanceable recovery widgets for the selected workspace.</p>
       </div>
-      <div id="tools" class="tool-grid"></div>
+      <div id="dashboard" class="dashboard-grid"></div>
     </section>
   </main>
   <script>

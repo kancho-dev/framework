@@ -161,6 +161,42 @@ async function taskPayload(ctx) {
   return { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, metadataPath: ctx.metadataPath, statuses: STATUSES, priorities: PRIORITIES, tasks, missing };
 }
 
+function taskDashboardSummary(discovered, metadata) {
+  const tasks = discovered.map((task, index) => ({ ...task, metadata: { ...metadata.tasks[task.key], blocks: deriveBlocks(metadata, task.key) }, index }));
+  const counts = { active: 0, blocked: 0, review: 0 };
+  for (const task of tasks) {
+    if (task.metadata.status === 'active') counts.active += 1;
+    if (task.metadata.status === 'blocked') counts.blocked += 1;
+    if (task.metadata.status === 'review') counts.review += 1;
+  }
+  const priorityRank = { urgent: 0, high: 1, normal: 2, low: 3 };
+  const statusRank = { blocked: 0, review: 1, active: 2 };
+  const sortedAttentionTasks = tasks
+    .filter((task) => ['blocked', 'review', 'active'].includes(task.metadata.status))
+    .sort((a, b) => (statusRank[a.metadata.status] - statusRank[b.metadata.status])
+      || ((priorityRank[a.metadata.priority] ?? 4) - (priorityRank[b.metadata.priority] ?? 4))
+      || (a.index - b.index)
+      || a.title.localeCompare(b.title)
+      || a.key.localeCompare(b.key));
+  const compactTask = (task) => task ? ({
+    key: task.key,
+    title: task.title,
+    status: task.metadata.status || 'unknown',
+    priority: task.metadata.priority || 'normal',
+    path: task.path,
+    nextSteps: task.nextSteps,
+  }) : null;
+  const topPriorityTasks = sortedAttentionTasks.slice(0, 3).map(compactTask);
+  const topTasksByStatus = Object.fromEntries(['active', 'blocked', 'review'].map((status) => [status, compactTask(sortedAttentionTasks.find((task) => task.metadata.status === status))]));
+  return { counts, topPriorityTasks, topTasksByStatus };
+}
+
+async function taskSummaryPayload(ctx) {
+  const discovered = await discoverTasks(ctx);
+  const metadata = await syncMetadata(ctx, discovered);
+  return { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, ...taskDashboardSummary(discovered, metadata) };
+}
+
 async function updateTaskMetadata(ctx, key, patch) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw Object.assign(new Error('Invalid metadata patch'), { statusCode: 400 });
   const discovered = await discoverTasks(ctx);
@@ -197,6 +233,10 @@ export function createTaskBrowserHandler({ basePath = '/', cockpit = null, works
       if (pathname === null) return false;
       if (pathname === '/api/tasks') {
         sendJson(res, 200, await taskPayload(ctx));
+        return true;
+      }
+      if (pathname === '/api/summary') {
+        sendJson(res, 200, await taskSummaryPayload(ctx));
         return true;
       }
       if (pathname === '/api/task-metadata' && req.method === 'PATCH') {

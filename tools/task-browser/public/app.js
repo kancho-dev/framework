@@ -42,8 +42,28 @@ function selectedTask() { return state.selectedKey ? state.tasks.find((task) => 
 function unique(values) { return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b)); }
 function continuityKey() { return `framework.task-browser.selectedKey:${state.workspaceRoot || location.pathname}`; }
 function filtersContinuityKey() { return `framework.task-browser.filters:${state.workspaceRoot || location.pathname}`; }
+function requestedSelection() {
+  const params = new URLSearchParams(location.search);
+  return { key: params.get('selectTask') || params.get('task'), status: params.get('selectStatus') || params.get('status') };
+}
 function restoreSelectedKey() {
   if (state.selectedKey) return;
+  const requested = requestedSelection();
+  if (requested.key && state.tasks.some((item) => item.key === requested.key)) {
+    state.selectedKey = requested.key;
+    persistSelectedKey();
+    showSelectedTaskInBoard();
+    return;
+  }
+  if (requested.status && state.statuses.includes(requested.status)) {
+    const candidate = sortTasks(requested.status, state.tasks.filter((task) => task.metadata?.status === requested.status))[0];
+    if (candidate) {
+      state.selectedKey = candidate.key;
+      persistSelectedKey();
+      showSelectedTaskInBoard();
+      return;
+    }
+  }
   const key = localStorage.getItem(continuityKey());
   if (state.tasks.some((item) => item.key === key)) state.selectedKey = key;
 }
