@@ -101,8 +101,18 @@ function continuityScope() { return state.workspaceRoot || location.pathname; }
 function continuityKey() { return `framework.session-browser.selectedPath:${continuityScope()}`; }
 function topicContinuityKey(path = state.selectedPath) { return `framework.session-browser.selectedTopic:${continuityScope()}:${path || 'none'}`; }
 function filtersContinuityKey() { return `framework.session-browser.filters:${continuityScope()}`; }
+function requestedSelection() {
+  const params = new URLSearchParams(location.search);
+  return params.get('selectSession') || params.get('session');
+}
 function restoreSelectedPath() {
   if (state.selectedPath) return;
+  const requested = requestedSelection();
+  if (requested && state.sessions.some((session) => session.path === requested)) {
+    state.selectedPath = requested;
+    persistSelectedPath();
+    return;
+  }
   const path = localStorage.getItem(continuityKey());
   if (path && state.sessions.some((session) => session.path === path)) state.selectedPath = path;
 }

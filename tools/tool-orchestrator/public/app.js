@@ -156,6 +156,12 @@ function taskUrl(extra = {}) {
   return `/tools/tasks/${params.toString() ? `?${params}` : ''}`;
 }
 
+function sessionUrl(session) {
+  const params = new URLSearchParams(location.search);
+  if (session?.path) params.set('selectSession', session.path);
+  return `/tools/sessions/${params.toString() ? `?${params}` : ''}`;
+}
+
 function renderTaskCounts(summary) {
   const counts = summary.counts || {};
   const topByStatus = summary.topTasksByStatus || {};
@@ -172,7 +178,7 @@ function renderPriorityTasks(summary) {
 }
 
 function renderSession(title, session) {
-  return `<p class="kicker">session browser summary</p><h3>${escapeHtml(title)}</h3>${session ? `<p>${escapeHtml(session.title)}</p><p class="detail">${escapeHtml(session.source || 'session')} · ${escapeHtml(formatDate(session.updatedAt))}</p><a class="ghost" href="/tools/sessions/${workspaceQuery()}">Open sessions</a>` : '<p class="empty">No matching session found.</p>'}`;
+  return `<p class="kicker">session browser summary</p><h3>${escapeHtml(title)}</h3>${session ? `<p>${escapeHtml(session.title)}</p><p class="detail">${escapeHtml(session.source || 'session')} · ${escapeHtml(formatDate(session.updatedAt))}</p><a class="ghost" href="${escapeHtml(sessionUrl(session))}">Open session</a>` : '<p class="empty">No matching session found.</p>'}`;
 }
 
 function renderTools(tools) {
