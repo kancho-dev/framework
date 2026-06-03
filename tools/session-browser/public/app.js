@@ -101,15 +101,21 @@ function continuityScope() { return state.workspaceRoot || location.pathname; }
 function continuityKey() { return `framework.session-browser.selectedPath:${continuityScope()}`; }
 function topicContinuityKey(path = state.selectedPath) { return `framework.session-browser.selectedTopic:${continuityScope()}:${path || 'none'}`; }
 function filtersContinuityKey() { return `framework.session-browser.filters:${continuityScope()}`; }
+function requestedParams() { return new URLSearchParams(location.search); }
 function requestedSelection() {
-  const params = new URLSearchParams(location.search);
+  const params = requestedParams();
   return params.get('selectSession') || params.get('session');
+}
+function requestedTopic() {
+  const params = requestedParams();
+  return params.get('selectTopic') || params.get('topic');
 }
 function restoreSelectedPath() {
   if (state.selectedPath) return;
   const requested = requestedSelection();
   if (requested && state.sessions.some((session) => session.path === requested)) {
     state.selectedPath = requested;
+    state.selectedTopicId = requestedTopic();
     persistSelectedPath();
     return;
   }
@@ -282,6 +288,29 @@ function restoreCommand(detail) {
 function renderTagPills(tags) {
   if (!tags?.length) return '';
   return `<div class="tag-row">${tags.map((tag) => `<span class="tag-pill" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</span>`).join('')}</div>`;
+}
+
+function scrollSelectedSessionCardIntoView() {
+  if (!state.selectedPath) return;
+  const card = Array.from(els.sessions.querySelectorAll('.session-card')).find((node) => node.dataset.path === state.selectedPath);
+  card?.scrollIntoView({ block: 'nearest' });
+}
+
+function scrollSelectedTopicLinkIntoView() {
+  if (!state.selectedTopicId) return;
+  const link = Array.from(els.topics.querySelectorAll('a[data-topic-id]')).find((node) => node.dataset.topicId === state.selectedTopicId);
+  const container = link?.closest('.topics');
+  if (!link || !container) return;
+  const linkRect = link.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  container.scrollTop += linkRect.top - containerRect.top - (container.clientHeight / 2) + (linkRect.height / 2);
+}
+
+function scheduleSelectedTopicLinkScroll() {
+  requestAnimationFrame(() => {
+    updateReaderHeaderHeight();
+    requestAnimationFrame(scrollSelectedTopicLinkIntoView);
+  });
 }
 
 function renderSessions() {
@@ -576,7 +605,8 @@ function renderEntry(entry, allEntries) {
   }
 
   if (entry.type === 'model_change') {
-    return `<section class="message system" id="entry-${escapeHtml(entry.id)}"><span class="timestamp">${escapeHtml(timestamp)}</span><div class="message-role">model</div><div>${escapeHtml(entry.provider)}/${escapeHtml(entry.modelId)}</div></section>`;
+    const label = entry.modelLabel || `${entry.provider ? `${entry.provider}/` : ''}${entry.modelId || ''}${entry.variant ? `:${entry.variant}` : ''}`;
+    return `<section class="message system" id="entry-${escapeHtml(entry.id)}"><span class="timestamp">${escapeHtml(timestamp)}</span><div class="message-role">model</div><div>${escapeHtml(label)}</div></section>`;
   }
 
   return '';
@@ -612,6 +642,7 @@ function renderSelectedDetail({ scrollTopic = true } = {}) {
   ];
   const secondaryMeta = [
     ['Cwd:', shortPath(detail.cwd)],
+    ['Model:', detail.modelLabel || 'unknown'],
     ['Messages:', `${detail.userMessageCount} user, ${detail.assistantMessageCount} assistant`],
     ['Tool Messages:', detail.toolMessageCount || detail.toolCallCount],
     ['Tool Calls:', detail.toolCallCount],
@@ -623,6 +654,7 @@ function renderSelectedDetail({ scrollTopic = true } = {}) {
   els.topics.innerHTML = detail.topicAnchors.map((anchor) => `
     <li><a class="${anchor.id === state.selectedTopicId ? 'active' : ''}" href="#entry-${escapeHtml(anchor.id)}" data-topic-id="${escapeHtml(anchor.id)}">${anchor.depth === 'first-prompt' ? '★ ' : ''}${escapeHtml(anchor.title)}</a></li>
   `).join('');
+  scheduleSelectedTopicLinkScroll();
   const openDetails = new Set(Array.from(els.messages.querySelectorAll('details[data-detail-key][open]')).map((node) => node.dataset.detailKey));
   els.messages.classList.toggle('hide-tools', !els.showTools.checked);
   els.messages.innerHTML = detail.activeEntries.map((entry) => renderEntry(entry, detail.entries)).join('');
@@ -671,6 +703,7 @@ async function selectSession(path, options = {}) {
   persistSelectedPath();
   setBrowseMode(false);
   renderSessions();
+  requestAnimationFrame(scrollSelectedSessionCardIntoView);
   els.empty.classList.add('hidden');
   els.reader.classList.remove('hidden');
   els.readerTitle.textContent = 'Loading…';
@@ -706,6 +739,7 @@ async function reloadSelectedSession() {
   state.selectedDetail = detail;
   if (state.selectedTopicId && !detail.topicAnchors?.some((anchor) => anchor.id === state.selectedTopicId)) state.selectedTopicId = null;
   updateSelectedSummary(detail);
+  requestAnimationFrame(scrollSelectedSessionCardIntoView);
   renderSelectedDetail({ scrollTopic: false });
   persistSelectedTopic();
 }
@@ -730,6 +764,7 @@ async function loadSessions({ reloadSelected = false } = {}) {
   applyFilterControlValues();
   restoreSelectedPath();
   renderSessions();
+  requestAnimationFrame(scrollSelectedSessionCardIntoView);
   if (state.selectedPath && !state.sessions.some((session) => session.path === state.selectedPath)) {
     clearSelectedTopic();
     state.selectedPath = null;
@@ -813,10 +848,10 @@ els.addTag.addEventListener('click', async () => {
   els.tagInput.value = '';
 });
 els.tagInput.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    els.addTag.click();
-  }
+  if (event.key !== 'Enter') return;
+  if (els.tagInput.getAttribute('aria-expanded') === 'true') return;
+  event.preventDefault();
+  els.addTag.click();
 });
 els.tagEditor.addEventListener('click', async (event) => {
   const button = event.target.closest('.remove-tag');

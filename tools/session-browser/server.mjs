@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { exists, normalizeBasePath, readStaticText, safeError, sendHtml, sendJson, serveStaticPath, stripBasePath } from '../shared-web/http.mjs';
+import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel, piModelState } from '../shared-web/model-normalization.mjs';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = parsePort(process.env.PORT || '8787');
@@ -133,6 +134,27 @@ function textFromContent(content) {
 function truncate(text, max = 220) {
   const clean = String(text || '').replace(/\s+/g, ' ').trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+function modelKeyFromParts(parts = {}) {
+  return modelLabelFromParts(parts);
+}
+
+function enrichPiModelEvents(entries) {
+  const state = { source: 'pi', provider: '', model: '', variant: '' };
+  return entries.map((entry, index) => {
+    if (entry?.type === 'model_change') {
+      state.provider = entry.provider || '';
+      state.model = entry.modelId || entry.model || '';
+      if (entries[index + 1]?.type === 'thinking_level_change') return null;
+      return { ...entry, modelLabel: modelLabelFromParts(state), rawProvider: entry.provider || '', rawModel: entry.modelId || entry.model || '', variant: state.variant || '' };
+    }
+    if (entry?.type === 'thinking_level_change') {
+      state.variant = entry.thinkingLevel || '';
+      return { ...entry, type: 'model_change', modelLabel: modelLabelFromParts(state), rawProvider: state.provider || '', rawModel: state.model || '', variant: state.variant || '', thinkingLevel: state.variant || '' };
+    }
+    return entry;
+  }).filter(Boolean);
 }
 
 function latestSessionName(entries) {
@@ -267,6 +289,7 @@ function summarizeSession(path, fileStat, parsed) {
   if (!stats.tokens.total) {
     stats = collectStats(entries);
   }
+  const modelState = piModelState(activeEntries);
 
   return {
     id: header?.id || path.split('/').pop()?.replace(/\.jsonl$/, '') || path,
@@ -288,6 +311,8 @@ function summarizeSession(path, fileStat, parsed) {
     toolNames: stats.toolNames,
     tokens: stats.tokens,
     tokenPressure: stats.tokenPressure,
+    modelLabel: modelState.label,
+    model: modelState,
   };
 }
 
@@ -296,7 +321,7 @@ async function loadSessionFile(path) {
   const parsed = parseJsonl(content);
   const summary = summarizeSession(path, fileStat, parsed);
   const entries = parsed.filter((entry) => entry?.type !== 'session');
-  const activeEntries = buildActiveEntries(entries, summary.leafId);
+  const activeEntries = enrichPiModelEvents(buildActiveEntries(entries, summary.leafId));
   const topicAnchors = activeEntries
     .filter((entry) => entry?.type === 'message' && entry.message?.role === 'user')
     .map((entry, index) => ({
@@ -413,6 +438,45 @@ function parseJson(value, fallback = {}) {
   }
 }
 
+function openCodeModelLabel(value) {
+  return modelLabelFromParts(parseOpenCodeModel(value) || {});
+}
+
+function latestOpenCodeMessageModel(messages) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const label = modelLabelFromParts(openCodeMessageModelParts(messages[i]));
+    if (label) return label;
+  }
+  return '';
+}
+
+function openCodeModelChangeEntries(entries) {
+  const result = [];
+  let previous = '';
+  for (const entry of entries) {
+    if (entry?.type === 'message' && entry.message?.role === 'assistant') {
+      const parts = { source: 'opencode', provider: entry.message.provider || '', model: entry.message.model || '', variant: entry.message.variant || '' };
+      const key = modelKeyFromParts(parts);
+      if (key && key !== previous) {
+        result.push({
+          id: `model-${entry.id}`,
+          type: 'model_change',
+          timestamp: entry.timestamp,
+          source: 'opencode',
+          provider: parts.provider,
+          modelId: parts.model,
+          variant: parts.variant,
+          modelLabel: key,
+          synthetic: true,
+        });
+        previous = key;
+      }
+    }
+    result.push(entry);
+  }
+  return result;
+}
+
 function extractOpenCodeText(parts) {
   return parts
     .filter((part) => part?.data?.type === 'text' && typeof part.data.text === 'string')
@@ -522,7 +586,7 @@ function openCodeUsage(messages, parts) {
 async function loadOpenCodeRows(sessionId = null) {
   const sessionWhere = sessionId ? `where id = ${sqlString(sessionId)}` : '';
   const sessions = await sqliteJson(OPENCODE_DB, `
-    select id, directory, title, parent_id as parentId, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
+    select id, directory, title, model, parent_id as parentId, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
     from session
     ${sessionWhere}
     order by time_updated desc
@@ -588,6 +652,7 @@ function summarizeOpenCodeSession(session, messages, parts) {
   const assistantAnswerCount = assistantMessages.filter((message) => extractOpenCodeText(messageParts.get(message.id) || []).trim()).length;
   const toolCallCount = parts.filter(isOpenCodeToolPart).length;
   const usage = openCodeUsage(messages, parts);
+  const modelLabel = openCodeModelLabel(session.model) || latestOpenCodeMessageModel(assistantMessages);
   return {
     id: session.id,
     source: 'opencode',
@@ -595,6 +660,7 @@ function summarizeOpenCodeSession(session, messages, parts) {
     parentId: session.parentId || null,
     cwd: session.directory || '',
     name: session.title,
+    modelLabel,
     firstPrompt: truncate(extractOpenCodeText(messageParts.get(userMessages[0]?.id) || [])),
     createdAt: timestampFromMs(session.createdAt),
     updatedAt: timestampFromMs(session.updatedAt),
@@ -619,7 +685,7 @@ async function listOpenCodeSessions(ctx) {
   const workspacePrefixSql = sqlString(`${sqlLike(ctx.workspaceRoot)}/%`);
   const sessions = await sqliteJson(
     OPENCODE_DB,
-    `select id, parent_id as parentId, directory, title, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
+    `select id, parent_id as parentId, directory, title, model, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
      from session
      where time_archived is null
        and (directory = ${workspaceRootSql} or directory like ${workspacePrefixSql} escape '\\')
@@ -630,6 +696,7 @@ async function listOpenCodeSessions(ctx) {
   const sessionIds = sessions.map((session) => sqlString(session.id)).join(',');
   let messageUsageRows = [];
   let partUsageRows = [];
+  let messageModelRows = [];
   try {
     messageUsageRows = await sqliteJson(OPENCODE_DB, `
       select
@@ -664,6 +731,23 @@ async function listOpenCodeSessions(ctx) {
   } catch {
     partUsageRows = [];
   }
+  try {
+    messageModelRows = await sqliteJson(OPENCODE_DB, `
+      select
+        session_id as sessionId,
+        json_extract(data, '$.providerID') as providerID,
+        coalesce(json_extract(data, '$.modelID'), json_extract(data, '$.model')) as modelID,
+        json_extract(data, '$.variant') as variant,
+        time_created as createdAt
+      from message
+      where session_id in (${sessionIds})
+        and json_extract(data, '$.role') = 'assistant'
+        and coalesce(json_extract(data, '$.modelID'), json_extract(data, '$.model')) is not null
+      order by time_created desc
+    `);
+  } catch {
+    messageModelRows = [];
+  }
   const usageBySession = new Map();
   for (const row of [...messageUsageRows, ...partUsageRows]) {
     const sessionId = row.sessionId;
@@ -684,6 +768,12 @@ async function listOpenCodeSessions(ctx) {
     usage.tokens.total += explicitTotal || (input + output + cacheRead + cacheWrite);
     usage.tokenPressure.total = Math.max(usage.tokenPressure.total, Number(row.pressure || 0));
   }
+  const fallbackModelBySession = new Map();
+  for (const row of messageModelRows) {
+    if (!row.sessionId || fallbackModelBySession.has(row.sessionId)) continue;
+    const label = modelLabelFromParts({ source: 'opencode', provider: row.providerID, model: row.modelID, variant: row.variant });
+    if (label) fallbackModelBySession.set(row.sessionId, label);
+  }
 
   return sessions.map((session) => ({
     source: 'opencode',
@@ -692,6 +782,7 @@ async function listOpenCodeSessions(ctx) {
     parentId: session.parentId || null,
     cwd: session.directory || '',
     name: session.title || '',
+    modelLabel: openCodeModelLabel(session.model) || fallbackModelBySession.get(session.id) || '',
     firstPrompt: '',
     createdAt: timestampFromMs(session.createdAt),
     updatedAt: timestampFromMs(session.updatedAt),
@@ -722,7 +813,9 @@ async function loadOpenCodeSession(ctx, ref) {
     source: 'opencode',
     message: {
       role: message.data.role,
+      provider: message.data.providerID || '',
       model: message.data.modelID || message.data.model,
+      variant: message.data.variant || '',
       mode: message.data.mode || '',
       content: openCodeContentBlocks(message.data, partsByMessage.get(message.id) || [], diffs, session.directory || ''),
     },
@@ -735,7 +828,8 @@ async function loadOpenCodeSession(ctx, ref) {
       title: truncate(textFromContent(entry.message.content), 80) || `User prompt ${index + 1}`,
       depth: index === 0 ? 'first-prompt' : 'user-prompt',
     }));
-  return { ...summary, ...relations, entries, activeEntries: entries, topicAnchors };
+  const activeEntries = openCodeModelChangeEntries(entries);
+  return { ...summary, ...relations, entries, activeEntries, topicAnchors };
 }
 
 function sessionDashboardSummary(sessions) {

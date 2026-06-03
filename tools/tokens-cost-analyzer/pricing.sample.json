@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "currency": "USD",
+  "models": [
+    {
+      "provider": "example",
+      "model": "example-model",
+      "aliases": ["example/example-model"],
+      "effectiveDate": "2026-01-01",
+      "unit": "per_1m_tokens",
+      "input": 0,
+      "output": 0,
+      "cacheRead": null,
+      "cacheWrite": null,
+      "notes": "Workspace-local override or extra model. Local entries are matched before the bundled Pi-derived pricing table. Null cache prices intentionally leave cache tokens unpriced."
+    }
+  ]
+}

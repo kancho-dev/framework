@@ -4,11 +4,13 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTaskBrowserHandler } from '../task-browser/server.mjs';
 import { createSessionBrowserHandler } from '../session-browser/server.mjs';
+import { createTokensCostAnalyzerHandler } from '../tokens-cost-analyzer/server.mjs';
 import { exists, safeError, sendJson, serveStaticPath } from '../shared-web/http.mjs';
 
 const baseToolNav = [
   { id: 'task-browser', title: 'Task Browser', shortTitle: 'Tasks', route: '/tools/tasks/', icon: '/tools/tasks/icon.svg' },
   { id: 'session-browser', title: 'Session Browser', shortTitle: 'Sessions', route: '/tools/sessions/', icon: '/tools/sessions/icon.svg' },
+  { id: 'tokens-cost-analyzer', title: 'Tokens / Cost Analyzer', shortTitle: 'Costs', route: '/tools/tokens-cost-analyzer/', icon: '/tools/tokens-cost-analyzer/icon.svg' },
 ];
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
@@ -72,6 +74,7 @@ function normalizeWorkspace(entry, ids) {
     taskMetadataPath: entry.taskMetadataPath ? resolve(String(entry.taskMetadataPath)) : null,
     taskHistoryPath: entry.taskHistoryPath ? resolve(String(entry.taskHistoryPath)) : null,
     sessionMetadataPath: entry.sessionMetadataPath ? resolve(String(entry.sessionMetadataPath)) : null,
+    tokensCostAnalyzerOutputPath: entry.tokensCostAnalyzerOutputPath ? resolve(String(entry.tokensCostAnalyzerOutputPath)) : null,
     tools: Object.fromEntries(Object.entries(tools).map(([key, value]) => [key, value !== false])),
   };
 }
@@ -95,13 +98,14 @@ function routeFor(route, workspace) {
 }
 
 function toolEnabled(workspace, toolId) {
+  if (toolId === 'tokens-cost-analyzer') return workspace.tools?.[toolId] === true;
   return workspace.tools?.[toolId] !== false;
 }
 
 function navFor(workspace) {
   return baseToolNav
     .filter((tool) => toolEnabled(workspace, tool.id))
-    .map((tool) => ({ ...tool, route: routeFor(tool.route, workspace) }));
+    .map((tool) => ({ ...tool, route: routeFor(tool.route, workspace), icon: tool.icon.startsWith('/tools/') ? routeFor(tool.icon, workspace) : tool.icon }));
 }
 
 function dashboardConfigPath(workspace) {
@@ -194,6 +198,12 @@ function createWorkspaceHandlers(workspace) {
       ...(workspace.sessionMetadataPath ? { metadataPath: workspace.sessionMetadataPath } : {}),
       cockpit: cockpitConfig(workspace, 'session-browser'),
     }),
+    'tokens-cost-analyzer': createTokensCostAnalyzerHandler({
+      basePath: '/tools/tokens-cost-analyzer',
+      workspaceRoot: workspace.root,
+      ...(workspace.tokensCostAnalyzerOutputPath ? { outputDir: workspace.tokensCostAnalyzerOutputPath } : {}),
+      cockpit: cockpitConfig(workspace, 'tokens-cost-analyzer'),
+    }),
   };
 }
 
@@ -218,6 +228,15 @@ async function toolStatuses(workspace) {
       description: 'Search recent local agent sessions for context.',
       action: 'Open sessions',
     },
+    {
+      id: 'tokens-cost-analyzer',
+      title: 'Tokens / Cost Analyzer',
+      route: routeFor('/tools/tokens-cost-analyzer/', workspace),
+      api: routeFor('/tools/tokens-cost-analyzer/api/report', workspace),
+      icon: routeFor('/tools/tokens-cost-analyzer/icon.svg', workspace),
+      description: 'Visualize local token usage, cost confidence, and subscription spend.',
+      action: 'Open costs',
+    },
   ].filter((tool) => toolEnabled(workspace, tool.id));
   const statuses = await Promise.all(statusTools.map(async (tool) => {
     if (tool.id === 'task-browser') {
@@ -225,6 +244,7 @@ async function toolStatuses(workspace) {
       return { ...tool, status: ready ? 'ready' : 'warning', detail: ready ? 'Tasks available from this workspace.' : 'No projects directory found under workspace root.' };
     }
     if (tool.id === 'session-browser') return { ...tool, status: 'ready', detail: 'Session sources are checked on open.' };
+    if (tool.id === 'tokens-cost-analyzer') return { ...tool, status: 'ready', detail: 'Local token/cost analysis runs on open or refresh.' };
     return { ...tool, status: 'unknown', detail: 'No status check configured.' };
   }));
   return {

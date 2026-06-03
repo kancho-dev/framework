@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tokens / Cost Analyzer</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/shared/workspace-badge.css">
+  <link rel="stylesheet" href="/shared/select.css">
+  <link rel="stylesheet" href="/shared/cockpit-nav.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app">
+    <div id="cockpit-nav"></div>
+    <header>
+      <div class="brand"><img src="icon.svg" alt="" width="38" height="38"><h1>Tokens / Cost Analyzer <span id="workspace-name" class="workspace-badge wide"></span></h1></div>
+      <div class="header-actions"><button id="refresh">Refresh analysis</button></div>
+    </header>
+    <p id="status" class="status">Loading…</p>
+    <section id="warnings" class="warnings hidden"></section>
+    <section class="hero-grid" id="totals"></section>
+    <section class="panel wide"><div class="panel-title"><h2>Monthly spend cockpit</h2><span>estimated token cost vs subscriptions</span></div><div id="monthly-chart" class="chart"></div></section>
+    <section class="grid two">
+      <article class="panel"><div class="panel-title"><h2>Models</h2><span>token-heavy drivers</span></div><div id="model-chart" class="bars"></div></article>
+      <article class="panel"><div class="panel-title"><h2>Subscriptions</h2><span>private local data</span></div><div id="subscription-chart" class="bars"></div></article>
+    </section>
+    <section class="panel"><div class="panel-title"><h2>Top drivers — sessions</h2><span>aggregated by source session</span></div><div id="drivers" class="drivers"></div></section>
+    <section class="panel"><div class="panel-title"><h2>Top drivers — prompts / messages</h2><span>single normalized records</span></div><div id="message-drivers" class="drivers"></div></section>
+    <section id="trust-inspector-panel" class="panel hidden"><div class="panel-title"><h2>Trust flags inspector</h2><span>unknown, unpriced, or warning records</span></div><div id="trust-inspector" class="inspector"></div></section>
+  </main>
+  <!-- __FRAMEWORK_COCKPIT_CONFIG__ -->
+  <script src="/shared/cockpit-nav.js"></script>
+  <script src="/shared/select.js"></script>
+  <script src="/shared/workspace-badge.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
