@@ -1,3 +1,7 @@
+import { escapeHtml } from '/shared/browser/dom.js';
+import { formatDateTime, formatTokens, money, shortMoney } from '/shared/browser/format.js';
+import { sessionBrowserHrefFor, storeSessionBrowserSelection } from '/shared/browser/session-links.js';
+
 const state = { data: null };
 const statusEl = document.querySelector('#status');
 const workspaceEl = document.querySelector('#workspace-name');
@@ -6,7 +10,7 @@ document.querySelector('#refresh').addEventListener('click', () => load(true));
 document.addEventListener('click', (event) => {
   const link = event.target.closest('a[data-session-browser-path]');
   if (!link) return;
-  storeSessionBrowserSelection(link.dataset.sessionBrowserPath, link.dataset.sessionTopicId);
+  storeSessionBrowserSelection(link.dataset.sessionBrowserPath, link.dataset.sessionTopicId, { workspaceRoot: state.data?.workspaceRoot });
 });
 load(false);
 
@@ -76,19 +80,7 @@ function renderBars(selector, rows, field, labelFn) {
 }
 
 function sessionBrowserHref(driver) {
-  if (!driver.sessionBrowserPath) return '';
-  const route = window.__FRAMEWORK_COCKPIT__?.tools?.find((tool) => tool.id === 'session-browser')?.route;
-  return route || '../sessions/';
-}
-
-function sessionBrowserScope() { return state.data?.workspaceRoot || location.pathname; }
-function sessionBrowserSelectedKey() { return `framework.session-browser.selectedPath:${sessionBrowserScope()}`; }
-function sessionBrowserTopicKey(path) { return `framework.session-browser.selectedTopic:${sessionBrowserScope()}:${path || 'none'}`; }
-function storeSessionBrowserSelection(path, topicId) {
-  if (!path) return;
-  localStorage.setItem(sessionBrowserSelectedKey(), path);
-  if (topicId) localStorage.setItem(sessionBrowserTopicKey(path), topicId);
-  else localStorage.removeItem(sessionBrowserTopicKey(path));
+  return sessionBrowserHrefFor(driver, { fallbackRoute: '../sessions/' });
 }
 
 function renderTrustInspector(issues) {
@@ -117,8 +109,3 @@ function renderDrivers(selector, drivers) {
 
 function metric(label, value, note) { return `<article class="metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`; }
 function height(value, max) { return Math.max(value > 0 ? 3 : 0, (Number(value) || 0) / max * 220); }
-function money(value, currency) { return value == null ? 'unknown' : new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(value)); }
-function shortMoney(value) { return Number(value) >= 1000 ? `${Math.round(value / 1000)}k` : Number(value).toFixed(0); }
-function formatTokens(value) { return new Intl.NumberFormat(undefined, { notation: Number(value) > 999999 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(Number(value) || 0); }
-function formatDateTime(value) { return value ? new Date(value).toLocaleString() : 'unknown time'; }
-function escapeHtml(value) { return String(value ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }

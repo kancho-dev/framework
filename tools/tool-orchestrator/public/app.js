@@ -1,3 +1,7 @@
+import { fetchJson } from '/shared/browser/api.js';
+import { escapeHtml } from '/shared/browser/dom.js';
+import { formatDate } from '/shared/browser/format.js';
+
 const dashboardEl = document.querySelector('#dashboard');
 const workspaceEl = document.querySelector('#workspace');
 const editButton = document.querySelector('#edit-dashboard');
@@ -69,12 +73,6 @@ async function loadDashboard() {
     if (firstLoad) dashboardEl.innerHTML = `<article class="widget danger"><h3>Dashboard unavailable</h3><p>${escapeHtml(error.message || 'Unknown error')}</p></article>`;
     else showRefreshNotice(error);
   }
-}
-
-async function fetchJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url} failed: ${res.status}`);
-  return res.json();
 }
 
 function catalogFromConfig(catalog) {
@@ -195,10 +193,6 @@ function renderAddCard(layout) {
   return `<article class="widget add-widget"><p class="kicker">widget catalog</p><h3>Add widget</h3>${available.length ? `<div class="widget-catalog">${available.map(([type, widget]) => `<button type="button" data-action="add" data-widget-type="${escapeHtml(type)}"><strong>${escapeHtml(widget.title)}</strong><span>${escapeHtml(widget.size)}</span></button>`).join('')}</div>` : '<p>All available widgets are visible.</p>'}</article>`;
 }
 
-function formatDate(value) {
-  return value ? new Date(value).toLocaleString() : 'unknown time';
-}
-
 function showRefreshNotice(error) {
   const notice = document.querySelector('#refresh-notice');
   if (!notice) return;
@@ -212,6 +206,3 @@ function setWorkspaceBadge(options) {
   window.FrameworkWorkspaceBadge?.set(workspaceEl, { tooltipPrefix: 'Workspace', ...options });
 }
 
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-}
