@@ -1,3 +1,9 @@
+import { escapeHtml, formatDate, shortPath, formatTokens, tokenPressureLevel, tokenPressurePercent, tokenPressurePill } from './formatters.js';
+import { restoreCommand, copyRestoreCommand, copyAndFlash } from './copy-restore.js';
+import { renderEntry } from './entry-rendering.js';
+import { fetchSessionDetail, fetchSessions, putMetadata } from './api.js';
+import { sessionBrowserScope } from '/shared/browser/session-links.js';
+
 const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, tagFilter: 'all', sourceErrors: [], metadataError: null };
 
 const els = {
@@ -30,31 +36,10 @@ const els = {
   messages: document.querySelector('#messages'),
 };
 
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
-}
 
-function textFromContent(content) {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content.filter((block) => block?.type === 'text').map((block) => block.text || '').join('\n');
-}
 
-function formatDate(value) {
-  if (!value) return 'unknown';
-  return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
 
-function formatTime(value) {
-  if (!value) return '';
-  return new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
 
-function shortPath(value, max = 72) {
-  const text = String(value || '');
-  if (text.length <= max) return text;
-  return `…${text.slice(-(max - 1))}`;
-}
 
 function workspaceDisplayName() {
   return state.workspaceName || window.FrameworkWorkspaceBadge?.workspaceNameFromPath(state.workspaceRoot, 'workspace') || 'workspace';
@@ -97,7 +82,7 @@ function updateDocumentTitle() {
   if (state.workspaceName) document.title = `${state.workspaceName} - Sessions`;
 }
 
-function continuityScope() { return state.workspaceRoot || location.pathname; }
+function continuityScope() { return sessionBrowserScope(state.workspaceRoot, location.pathname); }
 function continuityKey() { return `framework.session-browser.selectedPath:${continuityScope()}`; }
 function topicContinuityKey(path = state.selectedPath) { return `framework.session-browser.selectedTopic:${continuityScope()}:${path || 'none'}`; }
 function filtersContinuityKey() { return `framework.session-browser.filters:${continuityScope()}`; }
@@ -222,69 +207,6 @@ function setBrowseMode(enabled) {
   document.body.classList.toggle('browse-mode', enabled);
 }
 
-function formatCompactNumber(value) {
-  const number = Number(value || 0);
-  if (number >= 1_000_000) return `${Math.round(number / 1000).toLocaleString()}k`;
-  if (number >= 1000) return `${Math.round(number / 1000)}k`;
-  return number.toLocaleString();
-}
-
-function formatTokens(tokens) {
-  return `↓${formatCompactNumber(tokens?.input)} ↑${formatCompactNumber(tokens?.output)} R${formatCompactNumber(tokens?.cacheRead)}`;
-}
-
-function tokenPressureTotal(sessionOrTokens) {
-  return Number(sessionOrTokens?.tokenPressure?.total ?? sessionOrTokens?.tokens?.total ?? sessionOrTokens?.total ?? 0);
-}
-
-function tokenPressureLevel(sessionOrTokens) {
-  const total = tokenPressureTotal(sessionOrTokens);
-  if (total >= 300_000) return 'critical';
-  if (total >= 150_000) return 'high';
-  if (total >= 50_000) return 'medium';
-  return 'low';
-}
-
-function tokenPressurePercent(sessionOrTokens) {
-  return Math.min(100, Math.max(2, Math.round((tokenPressureTotal(sessionOrTokens) / 300_000) * 100)));
-}
-
-function tokenPressurePill(sessionOrTokens) {
-  const total = tokenPressureTotal(sessionOrTokens);
-  return `<span class="token-pill ${tokenPressureLevel(sessionOrTokens)}" title="Recorded token pressure; excludes repeated cache-read tokens and is not a model context-window percentage">${formatCompactNumber(total)} tok</span>`;
-}
-
-function shellQuote(value) {
-  return `'${String(value || '').replace(/'/g, `'\\''`)}'`;
-}
-
-async function copyText(text) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand('copy');
-  textarea.remove();
-}
-
-function flashButton(button, label = 'Copied') {
-  const previous = button.textContent;
-  button.textContent = label;
-  setTimeout(() => { button.textContent = previous; }, 1400);
-}
-
-function restoreCommand(detail) {
-  if (detail.source === 'pi') return `pi --session ${shellQuote(detail.path)}`;
-  if (detail.source === 'opencode') return `opencode --session ${shellQuote(detail.id)} ${shellQuote(detail.cwd || '.')}`;
-  return '';
-}
-
 function renderTagPills(tags) {
   if (!tags?.length) return '';
   return `<div class="tag-row">${tags.map((tag) => `<span class="tag-pill" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</span>`).join('')}</div>`;
@@ -377,241 +299,6 @@ function renderCwdFilter() {
   els.cwdFilter.title = state.cwdFilter === 'all' ? 'All work dirs' : state.cwdFilter;
 }
 
-function roleLabel(entry) {
-  if (entry.type !== 'message') return entry.type;
-  return entry.message?.role || 'message';
-}
-
-function renderMarkdownInline(text) {
-  let html = escapeHtml(text);
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-  html = html.replace(/(^|\W)\*([^*\n]+)\*/g, '$1<em>$2</em>');
-  html = html.replace(/(^|\W)_([^_\n]+)_/g, '$1<em>$2</em>');
-  return html;
-}
-
-function renderMarkdownBlock(block) {
-  const lines = block.split('\n');
-  if (/^\s*(?:-{3,}|_{3,}|\*{3,})\s*$/.test(block)) return '<hr>';
-  const heading = block.match(/^(#{1,6})\s+(.+)$/);
-  if (heading) {
-    const level = Math.min(6, heading[1].length + 1);
-    return `<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`;
-  }
-  if (lines.every((line) => /^\s*[-*+]\s+/.test(line))) {
-    return `<ul>${lines.map((line) => `<li>${renderMarkdownInline(line.replace(/^\s*[-*+]\s+/, ''))}</li>`).join('')}</ul>`;
-  }
-  if (lines.every((line) => /^\s*\d+[.)]\s+/.test(line))) {
-    return `<ol>${lines.map((line) => `<li>${renderMarkdownInline(line.replace(/^\s*\d+[.)]\s+/, ''))}</li>`).join('')}</ol>`;
-  }
-  if (lines.every((line) => /^\s*>\s?/.test(line))) {
-    return `<blockquote>${lines.map((line) => renderMarkdownInline(line.replace(/^\s*>\s?/, ''))).join('<br>')}</blockquote>`;
-  }
-  return `<p>${lines.map(renderMarkdownInline).join('<br>')}</p>`;
-}
-
-function renderMarkdown(text) {
-  return text
-    .trim()
-    .split(/\n{2,}/)
-    .filter((block) => block.trim())
-    .map((block) => renderMarkdownBlock(block.trim()))
-    .join('');
-}
-
-function renderAssistantText(text) {
-  const parts = [];
-  const pattern = /```([^\n`]*)\n([\s\S]*?)```/g;
-  let lastIndex = 0;
-  let match;
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      const markdown = renderMarkdown(text.slice(lastIndex, match.index));
-      if (markdown) parts.push(`<div class="assistant-block markdown-body">${markdown}</div>`);
-    }
-    const language = match[1].trim();
-    const code = match[2].replace(/\n$/, '');
-    parts.push(`
-      <div class="code-block">
-        <div class="code-block-header"><span>${escapeHtml(language || 'code')}</span><button type="button" class="copy-code">Copy</button></div>
-        <pre><code>${escapeHtml(code)}</code></pre>
-      </div>
-    `);
-    lastIndex = pattern.lastIndex;
-  }
-  if (lastIndex < text.length) {
-    const markdown = renderMarkdown(text.slice(lastIndex));
-    if (markdown) parts.push(`<div class="assistant-block markdown-body">${markdown}</div>`);
-  }
-  return parts.join('');
-}
-
-function renderToolResult(entries, toolCallId) {
-  return entries.find((entry) => entry?.type === 'message' && entry.message?.role === 'toolResult' && entry.message?.toolCallId === toolCallId)?.message;
-}
-
-function renderDiffText(diff) {
-  return escapeHtml(diff).split('\n').map((line) => {
-    const cls = line.startsWith('+') && !line.startsWith('+++')
-      ? 'diff-added'
-      : line.startsWith('-') && !line.startsWith('---')
-        ? 'diff-removed'
-        : 'diff-context';
-    return `<div class="${cls}">${line || ' '}</div>`;
-  }).join('');
-}
-
-function renderOldNewDiff(oldText = '', newText = '') {
-  const oldLines = String(oldText).split('\n').map((line) => `<div class="diff-removed">− ${escapeHtml(line || ' ')}</div>`).join('');
-  const newLines = String(newText).split('\n').map((line) => `<div class="diff-added">+ ${escapeHtml(line || ' ')}</div>`).join('');
-  return `${oldLines}${newLines}`;
-}
-
-function detailKeyAttr(key) {
-  return ` data-detail-key="${escapeHtml(key)}"`;
-}
-
-function renderToolExpandedContent(call, result, resultText) {
-  const args = call.arguments || {};
-  const keyBase = `tool:${call.id || call.name}`;
-  if (call.name === 'todowrite') {
-    const todosHtml = renderTodos(call.result || args.input || args.todos || '');
-    if (todosHtml) return `<details${detailKeyAttr(`${keyBase}:todos`)}><summary>todos</summary>${todosHtml}</details>`;
-  }
-  if (call.name === 'write' && typeof args.content === 'string') {
-    return `<details${detailKeyAttr(`${keyBase}:write`)}><summary>written content</summary><pre>${escapeHtml(args.content)}</pre>${resultText ? `<pre>${escapeHtml(resultText)}</pre>` : ''}</details>`;
-  }
-  if (call.name === 'edit') {
-    const diff = result?.details?.diff;
-    if (typeof diff === 'string' && diff.trim()) {
-      return `<details${detailKeyAttr(`${keyBase}:diff`)}><summary>diff</summary><div class="diff">${renderDiffText(diff)}</div>${resultText ? `<pre>${escapeHtml(resultText)}</pre>` : ''}</details>`;
-    }
-    const oldText = typeof args.oldText === 'string' ? args.oldText : undefined;
-    const newText = typeof args.newText === 'string' ? args.newText : undefined;
-    const edits = Array.isArray(args.edits) ? args.edits : [];
-    const editHtml = edits.length
-      ? edits.map((edit, index) => `<h4>edit ${index + 1}</h4><div class="diff">${renderOldNewDiff(edit.oldText || '', edit.newText || '')}</div>`).join('')
-      : `<div class="diff">${renderOldNewDiff(oldText || '', newText || '')}</div>`;
-    return `<details${detailKeyAttr(`${keyBase}:edit`)}><summary>edit content</summary>${editHtml}${resultText ? `<pre>${escapeHtml(resultText)}</pre>` : ''}</details>`;
-  }
-  const diffHtml = Array.isArray(call.diffs) && call.diffs.length ? renderDiffSummary(call.diffs, `${keyBase}:diffs`) : '';
-  return `${resultText ? `<details${detailKeyAttr(`${keyBase}:result`)}><summary>result ${result?.isError ? '<span class="error">error</span>' : ''}</summary><pre>${escapeHtml(resultText)}</pre></details>` : ''}${diffHtml}`;
-}
-
-function parseMaybeJson(value) {
-  if (Array.isArray(value) || (value && typeof value === 'object')) return value;
-  if (typeof value !== 'string' || !value.trim()) return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
-function normalizeTodos(value) {
-  const parsed = parseMaybeJson(value);
-  if (Array.isArray(parsed)) return parsed;
-  if (Array.isArray(parsed?.todos)) return parsed.todos;
-  return null;
-}
-
-function renderTodos(value) {
-  const todos = normalizeTodos(value);
-  if (!todos?.length) return '';
-  return `<ol class="todo-list">${todos.map((todo) => {
-    const status = String(todo.status || 'pending');
-    const label = status === 'completed' ? 'DONE' : status === 'in_progress' ? 'NOW' : 'TODO';
-    return `<li class="todo-item ${escapeHtml(status)}"><span class="todo-status">${escapeHtml(label)}</span><span class="todo-priority">${escapeHtml(todo.priority || 'normal')}</span><span>${escapeHtml(todo.content || '')}</span></li>`;
-  }).join('')}</ol>`;
-}
-
-function renderDiffSummary(diffs, detailKey = 'diff-summary') {
-  const additions = diffs.reduce((sum, diff) => sum + (diff.additions || 0), 0);
-  const deletions = diffs.reduce((sum, diff) => sum + (diff.deletions || 0), 0);
-  const fileCount = new Set(diffs.map((diff) => diff.file)).size;
-  return `<details class="patch-block"${detailKeyAttr(detailKey)}><summary>diff · ${fileCount} ${fileCount === 1 ? 'file' : 'files'} · +${additions}/-${deletions}</summary>${renderDiffBodies(diffs)}</details>`;
-}
-
-function renderDiffBodies(diffs) {
-  return diffs.map((diff) => `
-    <h4>${escapeHtml(diff.status || 'modified')} · ${escapeHtml(diff.file || 'unknown file')} · +${diff.additions || 0}/-${diff.deletions || 0}</h4>
-    <div class="diff">${renderDiffText(diff.patch || '')}</div>
-  `).join('');
-}
-
-function renderToolCall(call, entries) {
-  const result = renderToolResult(entries, call.id);
-  const resultText = (call.result || textFromContent(result?.content)).trim();
-  const title = call.name === 'bash'
-    ? `$ ${call.arguments?.command || 'bash'}`
-    : `${call.name}${call.arguments?.path || call.arguments?.file_path ? ` · ${call.arguments.path || call.arguments.file_path}` : ''}`;
-
-  return `
-    <div class="tool-call">
-      <div class="tool-title">${escapeHtml(title)}</div>
-      ${renderToolExpandedContent(call, result, resultText)}
-    </div>
-  `;
-}
-
-function renderPatchBlock(block) {
-  const diffs = Array.isArray(block.diffs) ? block.diffs : [];
-  const files = block.files || diffs.map((diff) => diff.file);
-  const title = files.length === 1 ? files[0] : `${files.length || diffs.length} files`;
-  const body = diffs.length
-    ? renderDiffBodies(diffs)
-    : `<pre>${escapeHtml(files.join('\n') || 'Patch details unavailable')}</pre>`;
-  return `<details class="patch-block"${detailKeyAttr(`patch:${block.id || files.join('|') || title}`)}><summary>patch · ${escapeHtml(title)}</summary>${body}</details>`;
-}
-
-function modeBadge(mode) {
-  return mode ? `<span class="mode-badge">${escapeHtml(mode)}</span>` : '';
-}
-
-function renderEntry(entry, allEntries) {
-  const role = roleLabel(entry);
-  const timestamp = formatDate(entry.timestamp);
-  if (entry.type === 'message' && role === 'toolResult') return '';
-
-  if (entry.type === 'message' && role === 'assistant') {
-    const blocks = Array.isArray(entry.message.content) ? entry.message.content : [];
-    const hasText = blocks.some((block) => block.type === 'text' && block.text?.trim());
-    const html = blocks.map((block) => {
-      if (block.type === 'text') return renderAssistantText(block.text || '');
-      if (block.type === 'thinking') return `<details class="thinking"${detailKeyAttr(`thinking:${entry.id}`)}><summary>thinking</summary><pre>${escapeHtml(block.thinking)}</pre></details>`;
-      if (block.type === 'toolCall') return renderToolCall(block, allEntries);
-      if (block.type === 'patch') return renderPatchBlock(block);
-      return '';
-    }).join('');
-    const kind = hasText ? 'assistant' : 'tool-message';
-    const label = hasText ? 'assistant' : 'tool';
-    return `<section class="message ${kind}" id="entry-${escapeHtml(entry.id)}"><span class="timestamp">${escapeHtml(timestamp)}</span><div class="message-role">${label}${modeBadge(entry.message.mode)}</div>${html}</section>`;
-  }
-
-  if (entry.type === 'message' && role === 'user') {
-    const text = textFromContent(entry.message.content);
-    return `<section class="message user" id="entry-${escapeHtml(entry.id)}"><button type="button" class="copy-user-prompt" title="Copy prompt" aria-label="Copy prompt">⧉</button><div class="message-head"><div class="message-role">user</div><div class="message-actions"><span class="timestamp">${escapeHtml(timestamp)}</span></div></div><div class="content">${escapeHtml(text)}</div></section>`;
-  }
-
-  if (entry.type === 'compaction') {
-    return `<section class="message system" id="entry-${escapeHtml(entry.id)}"><span class="timestamp">${escapeHtml(timestamp)}</span><div class="message-role">compaction</div><details><summary>summary from ${entry.tokensBefore?.toLocaleString?.() || '?'} tokens</summary><pre>${escapeHtml(entry.summary)}</pre></details></section>`;
-  }
-
-  if (entry.type === 'branch_summary') {
-    return `<section class="message system" id="entry-${escapeHtml(entry.id)}"><span class="timestamp">${escapeHtml(timestamp)}</span><div class="message-role">branch summary</div><div class="content">${escapeHtml(entry.summary)}</div></section>`;
-  }
-
-  if (entry.type === 'model_change') {
-    const label = entry.modelLabel || `${entry.provider ? `${entry.provider}/` : ''}${entry.modelId || ''}${entry.variant ? `:${entry.variant}` : ''}`;
-    return `<section class="message system" id="entry-${escapeHtml(entry.id)}"><span class="timestamp">${escapeHtml(timestamp)}</span><div class="message-role">model</div><div>${escapeHtml(label)}</div></section>`;
-  }
-
-  return '';
-}
-
 function scrollSelectedTopicIntoView() {
   if (!state.selectedTopicId) return;
   const target = document.querySelector(`#entry-${CSS.escape(state.selectedTopicId)}`);
@@ -681,10 +368,8 @@ function syncMetadata(path, metadata) {
 }
 
 async function saveMetadata(path, patch) {
-  const res = await fetch('api/metadata', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, ...patch }) });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to save metadata');
-  syncMetadata(path, data.metadata);
+  const metadata = await putMetadata(path, patch);
+  syncMetadata(path, metadata);
 }
 
 function updateSelectedSummary(detail) {
@@ -713,9 +398,7 @@ async function selectSession(path, options = {}) {
   els.messages.innerHTML = '';
   els.topics.innerHTML = '';
 
-  const res = await fetch(`api/session?path=${encodeURIComponent(path)}`);
-  const detail = await res.json();
-  if (!res.ok) throw new Error(detail.error || 'Failed to load session');
+  const detail = await fetchSessionDetail(path);
   state.selectedDetail = detail;
   if (state.selectedTopicId && !detail.topicAnchors?.some((anchor) => anchor.id === state.selectedTopicId)) state.selectedTopicId = null;
   updateSelectedSummary(detail);
@@ -733,9 +416,7 @@ function hasReaderTextSelection() {
 
 async function reloadSelectedSession() {
   if (!state.selectedPath || hasReaderTextSelection()) return;
-  const res = await fetch(`api/session?path=${encodeURIComponent(state.selectedPath)}`);
-  const detail = await res.json();
-  if (!res.ok) throw new Error(detail.error || 'Failed to reload selected session');
+  const detail = await fetchSessionDetail(state.selectedPath);
   state.selectedDetail = detail;
   if (state.selectedTopicId && !detail.topicAnchors?.some((anchor) => anchor.id === state.selectedTopicId)) state.selectedTopicId = null;
   updateSelectedSummary(detail);
@@ -746,9 +427,7 @@ async function reloadSelectedSession() {
 
 async function loadSessions({ reloadSelected = false } = {}) {
   els.status.textContent = 'Loading sessions…';
-  const res = await fetch('api/sessions');
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to load sessions');
+  const data = await fetchSessions();
   state.sessions = data.sessions;
   state.sessionRoot = data.sessionRoot;
   state.sourceErrors = data.sourceErrors || [];
@@ -861,8 +540,7 @@ els.tagEditor.addEventListener('click', async (event) => {
 els.copyRestore.addEventListener('click', async () => {
   const command = state.selectedDetail ? restoreCommand(state.selectedDetail) : '';
   if (!command) return;
-  await copyText(command);
-  flashButton(els.copyRestore);
+  await copyRestoreCommand(state.selectedDetail, els.copyRestore);
 });
 els.jumpTop.addEventListener('click', () => {
   document.querySelector('.reader-pane').scrollTo({ top: 0, behavior: 'smooth' });
@@ -897,15 +575,13 @@ els.messages.addEventListener('click', async (event) => {
   const copyCode = event.target.closest('.copy-code');
   if (copyCode) {
     const code = copyCode.closest('.code-block')?.querySelector('code')?.textContent || '';
-    await copyText(code);
-    flashButton(copyCode);
+    await copyAndFlash(code, copyCode);
     return;
   }
   const copyPrompt = event.target.closest('.copy-user-prompt');
   if (copyPrompt) {
     const prompt = copyPrompt.closest('.message.user')?.querySelector('.content')?.textContent || '';
-    await copyText(prompt);
-    flashButton(copyPrompt);
+    await copyAndFlash(prompt, copyPrompt);
   }
 });
 
