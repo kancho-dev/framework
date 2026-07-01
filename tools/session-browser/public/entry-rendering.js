@@ -234,4 +234,3 @@ export function renderEntry(entry, allEntries) {
 
   return '';
 }
-

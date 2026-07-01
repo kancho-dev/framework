@@ -414,18 +414,18 @@ function hasReaderTextSelection() {
   return Boolean(pane && selection.rangeCount && pane.contains(selection.anchorNode) && pane.contains(selection.focusNode));
 }
 
-async function reloadSelectedSession() {
+async function reloadSelectedSession({ scrollSelected = true } = {}) {
   if (!state.selectedPath || hasReaderTextSelection()) return;
   const detail = await fetchSessionDetail(state.selectedPath);
   state.selectedDetail = detail;
   if (state.selectedTopicId && !detail.topicAnchors?.some((anchor) => anchor.id === state.selectedTopicId)) state.selectedTopicId = null;
   updateSelectedSummary(detail);
-  requestAnimationFrame(scrollSelectedSessionCardIntoView);
+  if (scrollSelected) requestAnimationFrame(scrollSelectedSessionCardIntoView);
   renderSelectedDetail({ scrollTopic: false });
   persistSelectedTopic();
 }
 
-async function loadSessions({ reloadSelected = false } = {}) {
+async function loadSessions({ reloadSelected = false, scrollSelected = true } = {}) {
   els.status.textContent = 'Loading sessions…';
   const data = await fetchSessions();
   state.sessions = data.sessions;
@@ -443,14 +443,14 @@ async function loadSessions({ reloadSelected = false } = {}) {
   applyFilterControlValues();
   restoreSelectedPath();
   renderSessions();
-  requestAnimationFrame(scrollSelectedSessionCardIntoView);
+  if (scrollSelected) requestAnimationFrame(scrollSelectedSessionCardIntoView);
   if (state.selectedPath && !state.sessions.some((session) => session.path === state.selectedPath)) {
     clearSelectedTopic();
     state.selectedPath = null;
     state.selectedDetail = null;
     persistSelectedPath();
   }
-  if (reloadSelected && state.selectedPath) await reloadSelectedSession();
+  if (reloadSelected && state.selectedPath) await reloadSelectedSession({ scrollSelected });
 }
 
 let autoRefreshTimer;
@@ -458,7 +458,7 @@ function setAutoRefresh(enabled) {
   clearInterval(autoRefreshTimer);
   if (enabled) {
     autoRefreshTimer = setInterval(() => {
-      loadSessions({ reloadSelected: true }).catch((error) => { els.status.textContent = error.message; });
+      loadSessions({ reloadSelected: true, scrollSelected: false }).catch((error) => { els.status.textContent = error.message; });
     }, 10_000);
   }
 }

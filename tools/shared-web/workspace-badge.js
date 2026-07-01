@@ -16,8 +16,10 @@
       currentWorkspace = cockpit.currentWorkspace,
       workspaceId = cockpit.workspaceId,
       onSwitch,
+      workspaceFilter,
     } = options;
-    const items = compatibleWorkspaces(Array.isArray(workspaces) ? workspaces : [], cockpit.current);
+    const allWorkspaces = Array.isArray(workspaces) ? workspaces : [];
+    const items = typeof workspaceFilter === 'function' ? allWorkspaces.filter(workspaceFilter) : allWorkspaces;
     const currentId = workspaceId || currentWorkspace?.id;
     const label = unavailable ? 'Workspace unavailable' : (name || currentWorkspace?.name || workspaceNameFromPath(root || currentWorkspace?.root, placeholder));
     const title = root || currentWorkspace?.root ? `${tooltipPrefix}: ${root || currentWorkspace.root}` : tooltipPrefix;
@@ -52,17 +54,6 @@
     }
 
     element.textContent = label;
-  }
-
-  function compatibleWorkspaces(workspaces, currentTool) {
-    if (!currentTool || currentTool === 'home') return workspaces;
-    const filtered = workspaces.filter((workspace) => toolEnabled(workspace, currentTool));
-    return filtered.length ? filtered : workspaces;
-  }
-
-  function toolEnabled(workspace, toolId) {
-    if (toolId === 'tokens-cost-analyzer') return workspace?.tools?.[toolId] === true;
-    return workspace?.tools?.[toolId] !== false;
   }
 
   function fitSelectToSelectedOption(select, button) {

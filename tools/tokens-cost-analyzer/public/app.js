@@ -5,7 +5,8 @@ import { sessionBrowserHrefFor, storeSessionBrowserSelection } from '/shared/bro
 const state = { data: null };
 const statusEl = document.querySelector('#status');
 const workspaceEl = document.querySelector('#workspace-name');
-window.FrameworkWorkspaceBadge?.set(workspaceEl, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
+const tokenAnalyzerWorkspaceFilter = (workspace) => workspace?.tools?.['tokens-cost-analyzer'] === true;
+window.FrameworkWorkspaceBadge?.set(workspaceEl, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace', workspaceFilter: tokenAnalyzerWorkspaceFilter });
 document.querySelector('#refresh').addEventListener('click', () => load(true));
 document.addEventListener('click', (event) => {
   const link = event.target.closest('a[data-session-browser-path]');
@@ -22,7 +23,7 @@ async function load(refresh) {
     const res = await fetch(`api/report${params.toString() ? `?${params}` : ''}`);
     if (!res.ok) throw new Error((await res.json()).error || res.statusText);
     state.data = await res.json();
-    window.FrameworkWorkspaceBadge?.set(workspaceEl, { root: state.data.workspaceRoot, tooltipPrefix: 'Workspace' });
+    window.FrameworkWorkspaceBadge?.set(workspaceEl, { root: state.data.workspaceRoot, tooltipPrefix: 'Workspace', workspaceFilter: tokenAnalyzerWorkspaceFilter });
     render(state.data);
     statusEl.textContent = `Generated ${formatDateTime(state.data.generatedAt)} · ${state.data.workspaceRoot}`;
   } catch (error) {

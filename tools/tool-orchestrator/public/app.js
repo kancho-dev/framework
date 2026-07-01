@@ -205,4 +205,3 @@ function showRefreshNotice(error) {
 function setWorkspaceBadge(options) {
   window.FrameworkWorkspaceBadge?.set(workspaceEl, { tooltipPrefix: 'Workspace', ...options });
 }
-
