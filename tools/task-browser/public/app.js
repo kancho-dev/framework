@@ -5,7 +5,7 @@ import { restoreFilters, persistFilters, resetFilters, renderStatusFilters, matc
 import { captureBoardScroll, restoreBoardScroll, renderBoard, showSelectedTaskInBoard as revealSelectedTaskInBoard, scrollSelectedCardIntoView, shouldRevealRestoredSelection } from './board.js';
 import { captureDetailFocus, isEditingAutocompleteInput, restoreDetailFocus, renderDetail, attachDetailAutocompletes, continuePrompt } from './detail.js';
 import { fetchTasks, saveMetadata } from './api.js';
-import { currentTags, addRelation, removeRelation } from './relations.js';
+import { addRelationPatch, currentTags, relationInput, removeRelationPatch, taskKeyFromRelationInput } from './relations.js';
 
 window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
 
@@ -194,17 +194,17 @@ els.detailMeta.addEventListener('click', (event) => {
   const form = event.target.closest('.inline-metadata-editor');
   const setParent = event.target.closest('.set-parent');
   if (form && setParent) {
-    addRelation(form, 'parent', saveMetadataPatch).catch((error) => { els.status.textContent = error.message; });
+    addRelation(form, 'parent');
     return;
   }
   const addRelationButton = event.target.closest('.add-relation');
   if (form && addRelationButton) {
-    addRelation(form, addRelationButton.dataset.field, saveMetadataPatch).catch((error) => { els.status.textContent = error.message; });
+    addRelation(form, addRelationButton.dataset.field);
     return;
   }
   const removeRelationButton = event.target.closest('.relation-remove');
   if (form && removeRelationButton) {
-    removeRelation(form, removeRelationButton.dataset.removeRelation, removeRelationButton.dataset.relatedKey, saveMetadataPatch).catch((error) => { els.status.textContent = error.message; });
+    removeRelation(form, removeRelationButton.dataset.removeRelation, removeRelationButton.dataset.relatedKey);
     return;
   }
   const relation = event.target.closest('[data-related-key]');
@@ -218,6 +218,24 @@ els.detailMeta.addEventListener('click', (event) => {
   const tagForm = button.closest('.inline-metadata-editor');
   saveMetadataPatch(tagForm, { tags: currentTags(tagForm).filter((tag) => tag !== button.dataset.tag) }).catch((error) => { els.status.textContent = error.message; });
 });
+function addRelation(form, field) {
+  const input = relationInput(form, field);
+  const relatedKey = taskKeyFromRelationInput(input?.value, state.tasks);
+  if (!relatedKey) {
+    els.status.textContent = 'Choose a single matching task by ID, key, or title.';
+    return;
+  }
+  saveMetadataPatch(form, addRelationPatch(selectedTask(), field, relatedKey))
+    .then(() => { if (input) input.value = ''; })
+    .catch((error) => { els.status.textContent = error.message; });
+}
+
+function removeRelation(form, label, relatedKey) {
+  const patch = removeRelationPatch(selectedTask(), label, relatedKey);
+  if (!patch) return;
+  saveMetadataPatch(form, patch).catch((error) => { els.status.textContent = error.message; });
+}
+
 els.detailMeta.addEventListener('submit', (event) => {
   event.preventDefault();
   const form = event.target.closest('.inline-metadata-editor');
