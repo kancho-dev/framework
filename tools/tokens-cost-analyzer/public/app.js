@@ -65,7 +65,7 @@ function renderMonthly(monthly, currency) {
     const estimated = height(m.estimatedCost, max);
     const subscription = height(m.subscriptionCost, max);
     const top = Math.max(m.estimatedCost, m.subscriptionCost);
-    return `<div class="month" title="${m.month}\nEstimated token cost ${money(m.estimatedCost, 'USD')}\nNative recorded cost ${money(m.recordedCost, 'USD')}\nSubscriptions ${money(m.subscriptionCost, currency)}\nEffective subscription / 1M tokens ${m.effectiveSubscriptionPer1M == null ? 'unknown' : money(m.effectiveSubscriptionPer1M, currency)}">
+    return `<div class="month" title="${m.month}\nToken usage ${formatTokens(m.tokens)}\nEstimated token cost ${money(m.estimatedCost, 'USD')}\nNative recorded cost ${money(m.recordedCost, 'USD')}\nSubscriptions ${money(m.subscriptionCost, currency)}\nEffective subscription / 1M tokens ${m.effectiveSubscriptionPer1M == null ? 'unknown' : money(m.effectiveSubscriptionPer1M, currency)}">
       <div class="stack">
         <div class="seg subscription" style="height:${subscription}px"></div>
         <div class="seg estimated" style="height:${estimated}px"></div>
