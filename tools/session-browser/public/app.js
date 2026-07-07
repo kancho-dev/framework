@@ -311,6 +311,20 @@ function scrollSelectedTopicIntoView() {
   pane.scrollTo({ top: Math.max(0, pane.scrollTop + targetTop - paneTop - headerHeight - 12) });
 }
 
+function captureTableScrollPositions() {
+  return Array.from(els.messages.querySelectorAll('.markdown-table-wrap')).map((node, index) => [node.dataset.tableKey || `index:${index}`, node.scrollLeft]);
+}
+
+function restoreTableScrollPositions(positions) {
+  if (!positions?.length) return;
+  const byKey = new Map(positions);
+  for (const [index, node] of Array.from(els.messages.querySelectorAll('.markdown-table-wrap')).entries()) {
+    const key = node.dataset.tableKey || `index:${index}`;
+    const scrollLeft = byKey.get(key);
+    if (scrollLeft) node.scrollLeft = scrollLeft;
+  }
+}
+
 function renderSelectedDetail({ scrollTopic = true } = {}) {
   const detail = state.selectedDetail;
   if (!detail) return;
@@ -343,11 +357,13 @@ function renderSelectedDetail({ scrollTopic = true } = {}) {
   `).join('');
   scheduleSelectedTopicLinkScroll();
   const openDetails = new Set(Array.from(els.messages.querySelectorAll('details[data-detail-key][open]')).map((node) => node.dataset.detailKey));
+  const tableScrollPositions = captureTableScrollPositions();
   els.messages.classList.toggle('hide-tools', !els.showTools.checked);
   els.messages.innerHTML = detail.activeEntries.map((entry) => renderEntry(entry, detail.entries)).join('');
   for (const node of els.messages.querySelectorAll('details[data-detail-key]')) {
     if (openDetails.has(node.dataset.detailKey)) node.open = true;
   }
+  restoreTableScrollPositions(tableScrollPositions);
   if (scrollTopic) requestAnimationFrame(scrollSelectedTopicIntoView);
 }
 

@@ -121,6 +121,7 @@ OpenCode support is best-effort and fail-soft. If the DB, `sqlite3`, or expected
 - **Patches/todos**: `apply_patch`/patch blocks and `todowrite` arrays are rendered best-effort.
 - **Copy prompt**: user messages get a small copy button for reusing prompts in new sessions.
 - **Code blocks**: fenced assistant markdown code blocks get a small copy button.
+- **Markdown tables**: assistant pipe tables render as scrollable tables and keep horizontal scroll position across auto-refresh.
 
 ## Bookmarks And Tags
 

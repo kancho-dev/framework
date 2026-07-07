@@ -190,6 +190,13 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 .markdown-body em { color: #b5cea8; }
 .markdown-body a { color: var(--accent); text-decoration-color: rgba(156,220,254,.5); text-underline-offset: 2px; }
 .markdown-body hr { height: 1px; margin: 16px 0; border: 0; background: linear-gradient(90deg, transparent, rgba(156,220,254,.65), rgba(199,146,234,.5), transparent); }
+.markdown-table-wrap { margin: 10px 0 14px; overflow-x: auto; border: 1px solid rgba(156,220,254,.2); border-radius: 10px; background: rgba(0,0,0,.18); }
+.markdown-body table { width: 100%; min-width: max-content; border-collapse: collapse; font-size: 12px; }
+.markdown-body th, .markdown-body td { padding: 7px 10px; border: 1px solid rgba(255,255,255,.08); vertical-align: top; text-align: left; }
+.markdown-body th { color: var(--accent); background: linear-gradient(180deg, rgba(156,220,254,.12), rgba(156,220,254,.05)); font-weight: 700; }
+.markdown-body tr:nth-child(even) td { background: rgba(255,255,255,.025); }
+.markdown-body .align-center { text-align: center; }
+.markdown-body .align-right { text-align: right; }
 .code-block { margin: 10px 0 14px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: rgba(0,0,0,.22); }
 .code-block-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; color: var(--muted); background: rgba(255,255,255,.04); font-size: 11px; }
 .code-block-header button { padding: 2px 8px; font-size: 11px; }

@@ -1,6 +1,6 @@
 # Portable Agent Framework
 
-![Version](https://img.shields.io/badge/version-0.15.1-blue)
+![Version](https://img.shields.io/badge/version-0.15.2-blue)
 
 A minimal, agent-agnostic framework for keeping AI-assisted software development coherent across sessions, tasks, projects, and tools.
 

@@ -16,9 +16,61 @@ function renderMarkdownInline(text) {
   return html;
 }
 
-function renderMarkdownBlock(block) {
+function splitMarkdownTableRow(line) {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  const cells = [];
+  let cell = '';
+  let inCode = false;
+  for (const char of trimmed) {
+    if (char === '`') inCode = !inCode;
+    if (char === '|' && !inCode) {
+      cells.push(cell.trim());
+      cell = '';
+    } else {
+      cell += char;
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function parseMarkdownTableSeparator(line) {
+  const cells = splitMarkdownTableRow(line);
+  if (cells.length < 2) return null;
+  const alignments = [];
+  for (const cell of cells) {
+    const marker = cell.replace(/\s+/g, '');
+    if (!/^:?-{3,}:?$/.test(marker)) return null;
+    alignments.push(marker.startsWith(':') && marker.endsWith(':') ? 'center' : marker.endsWith(':') ? 'right' : 'left');
+  }
+  return alignments;
+}
+
+function renderMarkdownTable(lines, tableKey = '') {
+  if (lines.length < 2 || !lines[0].includes('|') || !lines[1].includes('|')) return '';
+  const header = splitMarkdownTableRow(lines[0]);
+  const alignments = parseMarkdownTableSeparator(lines[1]);
+  if (!alignments || header.length < 2 || header.length !== alignments.length) return '';
+  const bodyLines = lines.slice(2);
+  if (!bodyLines.every((line) => line.includes('|'))) return '';
+  const renderCell = (tag, value, index) => `<${tag} class="align-${alignments[index] || 'left'}">${renderMarkdownInline(value || '')}</${tag}>`;
+  const normalizeRow = (line) => {
+    const cells = splitMarkdownTableRow(line);
+    return Array.from({ length: header.length }, (_, index) => cells[index] || '');
+  };
+  const thead = `<thead><tr>${header.map((cell, index) => renderCell('th', cell, index)).join('')}</tr></thead>`;
+  const tbody = bodyLines.length
+    ? `<tbody>${bodyLines.map((line) => `<tr>${normalizeRow(line).map((cell, index) => renderCell('td', cell, index)).join('')}</tr>`).join('')}</tbody>`
+    : '';
+  const keyAttr = tableKey ? ` data-table-key="${escapeHtml(tableKey)}"` : '';
+  return `<div class="markdown-table-wrap"${keyAttr}><table>${thead}${tbody}</table></div>`;
+}
+
+function renderMarkdownBlock(block, tableKey = '') {
   const lines = block.split('\n');
   if (/^\s*(?:-{3,}|_{3,}|\*{3,})\s*$/.test(block)) return '<hr>';
+  const table = renderMarkdownTable(lines, tableKey);
+  if (table) return table;
   const heading = block.match(/^(#{1,6})\s+(.+)$/);
   if (heading) {
     const level = Math.min(6, heading[1].length + 1);
@@ -36,23 +88,24 @@ function renderMarkdownBlock(block) {
   return `<p>${lines.map(renderMarkdownInline).join('<br>')}</p>`;
 }
 
-function renderMarkdown(text) {
+function renderMarkdown(text, keyBase = '') {
+  let tableIndex = 0;
   return text
     .trim()
     .split(/\n{2,}/)
     .filter((block) => block.trim())
-    .map((block) => renderMarkdownBlock(block.trim()))
+    .map((block) => renderMarkdownBlock(block.trim(), keyBase ? `${keyBase}:table:${tableIndex++}` : ''))
     .join('');
 }
 
-function renderAssistantText(text) {
+function renderAssistantText(text, keyBase = '') {
   const parts = [];
   const pattern = /```([^\n`]*)\n([\s\S]*?)```/g;
   let lastIndex = 0;
   let match;
   while ((match = pattern.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      const markdown = renderMarkdown(text.slice(lastIndex, match.index));
+      const markdown = renderMarkdown(text.slice(lastIndex, match.index), `${keyBase}:md:${parts.length}`);
       if (markdown) parts.push(`<div class="assistant-block markdown-body">${markdown}</div>`);
     }
     const language = match[1].trim();
@@ -66,7 +119,7 @@ function renderAssistantText(text) {
     lastIndex = pattern.lastIndex;
   }
   if (lastIndex < text.length) {
-    const markdown = renderMarkdown(text.slice(lastIndex));
+    const markdown = renderMarkdown(text.slice(lastIndex), `${keyBase}:md:${parts.length}`);
     if (markdown) parts.push(`<div class="assistant-block markdown-body">${markdown}</div>`);
   }
   return parts.join('');
@@ -202,8 +255,8 @@ export function renderEntry(entry, allEntries) {
   if (entry.type === 'message' && role === 'assistant') {
     const blocks = Array.isArray(entry.message.content) ? entry.message.content : [];
     const hasText = blocks.some((block) => block.type === 'text' && block.text?.trim());
-    const html = blocks.map((block) => {
-      if (block.type === 'text') return renderAssistantText(block.text || '');
+    const html = blocks.map((block, index) => {
+      if (block.type === 'text') return renderAssistantText(block.text || '', `entry:${entry.id}:block:${index}`);
       if (block.type === 'thinking') return `<details class="thinking"${detailKeyAttr(`thinking:${entry.id}`)}><summary>thinking</summary><pre>${escapeHtml(block.thinking)}</pre></details>`;
       if (block.type === 'toolCall') return renderToolCall(block, allEntries);
       if (block.type === 'patch') return renderPatchBlock(block);
