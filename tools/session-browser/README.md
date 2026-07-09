@@ -2,7 +2,7 @@
 
 A local, read-only browser for AI coding-agent sessions.
 
-Use it to quickly find, skim, and restore past Pi and OpenCode coding sessions for the current workspace.
+Use it to quickly find, skim, and restore past Pi, OpenCode, and Codex coding sessions for the current workspace.
 
 ## Quick Start
 
@@ -24,6 +24,7 @@ Useful one-liners:
 ```bash
 SESSION_SOURCES=pi npm start
 SESSION_SOURCES=opencode npm start
+SESSION_SOURCES=codex npm start
 WORKSPACE_ROOT=/path/to/workspace npm start
 PORT=8790 npm start
 ```
@@ -33,10 +34,10 @@ The tool helps you:
 - browse sessions by prompt, cwd, origin, source, recency, token pressure, bookmarks, and tags;
 - bookmark important sessions and add simple manual tags that persist locally;
 - skim conversations, topic anchors, assistant answers, and tool actions;
-- copy restore commands back into Pi or OpenCode;
+- copy restore commands back into Pi, OpenCode, or Codex;
 - inspect patches, edits, todos, and copyable assistant code blocks.
 
-Everything stays local. The server reads session data and does not modify Pi or OpenCode session stores.
+Everything stays local. The server reads session data and does not modify Pi, OpenCode, or Codex session stores.
 
 ## Requirements
 
@@ -51,11 +52,13 @@ No npm install is needed for the current dependency-free tool.
 | --- | --- |
 | `PORT` | HTTP port. Default: `8787`. |
 | `WORKSPACE_ROOT` | Workspace to show sessions for. Default: nearest parent containing `AGENTS.md`, otherwise current directory. |
-| `SESSION_SOURCES` | Comma-separated sources. Default: `pi,opencode`. Use `pi` or `opencode` to isolate one source. |
+| `SESSION_SOURCES` | Comma-separated sources. Default: `pi,opencode,codex`. Use `pi`, `opencode`, or `codex` to isolate one source. |
 | `PI_SESSION_ROOT` | Pi JSONL session root. |
 | `SESSION_ROOT` | Backward-compatible alias for `PI_SESSION_ROOT`. |
 | `OPENCODE_DB` | Exact OpenCode SQLite database path. |
 | `OPENCODE_DATA_DIR` | OpenCode data directory. Default DB becomes `$OPENCODE_DATA_DIR/opencode.db`. Also used for diff sidecar files. |
+| `CODEX_HOME` | Codex state directory. Default: `~/.codex`. |
+| `CODEX_SESSION_ROOT` | Codex rollout JSONL root. Default: `$CODEX_HOME/sessions`. |
 | `SESSION_BROWSER_OPENCODE_LIMIT` | Maximum OpenCode sessions to list after workspace filtering. Default: `500`. |
 | `SESSION_BROWSER_METADATA` | Local JSON sidecar file for bookmarks and tags. Default: `$WORKSPACE_ROOT/.tools-config/session-browser/metadata.json`. |
 
@@ -69,6 +72,12 @@ Default OpenCode database:
 
 ```text
 ~/.local/share/opencode/opencode.db
+```
+
+Default Codex session root:
+
+```text
+~/.codex/sessions
 ```
 
 ## Supported Sources
@@ -101,6 +110,18 @@ opencode --session '<session-id>' '<cwd>'
 
 OpenCode support is best-effort and fail-soft. If the DB, `sqlite3`, or expected schema is unavailable, Pi sessions can still load.
 
+### Codex
+
+The Codex adapter reads local rollout JSONL files under `CODEX_SESSION_ROOT` and filters them to the configured `WORKSPACE_ROOT` using recorded cwd metadata.
+
+Restore command copied by the UI:
+
+```bash
+codex resume '<session-id>'
+```
+
+Codex support is best-effort and fail-soft. It renders user/assistant text and generic tool calls from observed rollout events. `~/.codex/session_index.jsonl` may list only currently indexed sessions, so rollout JSONL files are treated as the browsing source of truth.
+
 ## UI Guide
 
 - **Search**: filter by prompt, cwd, name, id, path, or tag.
@@ -125,7 +146,7 @@ OpenCode support is best-effort and fail-soft. If the DB, `sqlite3`, or expected
 
 ## Bookmarks And Tags
 
-Bookmarks and tags are an Operator-curated local layer. They do not change Pi JSONL files or the OpenCode SQLite database.
+Bookmarks and tags are an Operator-curated local layer. They do not change Pi JSONL files, the OpenCode SQLite database, or Codex rollout files.
 
 By default the metadata is stored in the workspace-local private tools config directory:
 
@@ -152,6 +173,10 @@ The file shape is intentionally simple and private/local. Older metadata files u
     "opencode:session-id": {
       "bookmarked": false,
       "tags": ["research"]
+    },
+    "codex:session-id": {
+      "bookmarked": false,
+      "tags": ["codex"]
     }
   }
 }
@@ -197,7 +222,7 @@ Instead, the UI shows **token pressure**: the largest observed non-cache-read to
 - OpenCode patch/todo rendering is best-effort.
 - No remote access, auth, cloud sync, upload, or sharing behavior is included.
 - Bookmark/tag metadata is local-only and manual; no auto-tagging or sync is included.
-- No mutation of Pi or OpenCode session data is supported.
+- No mutation of Pi, OpenCode, or Codex session data is supported.
 - OpenCode listing is capped by `SESSION_BROWSER_OPENCODE_LIMIT` after workspace filtering; large-session pagination is not implemented yet.
 - Token pressure is a triage signal, not exact context percentage.
 - Cost is omitted unless a future adapter can provide trustworthy source-derived values.

@@ -13,7 +13,9 @@ const PORT = parsePort(process.env.PORT || '8787');
 const PI_SESSION_ROOT = resolve(process.env.SESSION_ROOT || process.env.PI_SESSION_ROOT || join(process.env.PI_CODING_AGENT_DIR || join(homedir(), '.pi', 'agent'), 'sessions'));
 const OPENCODE_DATA_DIR = resolve(process.env.OPENCODE_DATA_DIR || join(homedir(), '.local', 'share', 'opencode'));
 const OPENCODE_DB = resolve(process.env.OPENCODE_DB || join(OPENCODE_DATA_DIR, 'opencode.db'));
-const ENABLED_SOURCES = new Set(String(process.env.SESSION_SOURCES || 'pi,opencode').split(',').map((source) => source.trim().toLowerCase()).filter(Boolean));
+const CODEX_HOME = resolve(process.env.CODEX_HOME || join(homedir(), '.codex'));
+const CODEX_SESSION_ROOT = resolve(process.env.CODEX_SESSION_ROOT || join(CODEX_HOME, 'sessions'));
+const ENABLED_SOURCES = new Set(String(process.env.SESSION_SOURCES || 'pi,opencode,codex').split(',').map((source) => source.trim().toLowerCase()).filter(Boolean));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
 const SHARED_WEB_DIR = join(TOOL_DIR, '..', 'shared-web');
 const DEFAULT_WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
@@ -42,7 +44,8 @@ function parsePositiveInteger(value, name) {
 
 function safeSourceError(error) {
   const message = safeError(error);
-  if (message.includes('ENOENT') || message.includes('sqlite3')) return 'sqlite3 unavailable or OpenCode database cannot be read';
+  if (message.includes('sqlite3')) return 'sqlite3 unavailable or OpenCode database cannot be read';
+  if (message.includes('ENOENT')) return 'source path cannot be read';
   if (message.includes('no such table')) return 'unexpected OpenCode database schema';
   return message.split('\n')[0].slice(0, 220);
 }
@@ -351,9 +354,11 @@ function opencodeRef(sessionId) {
 function sessionKey(sessionOrPath, source = null) {
   if (typeof sessionOrPath === 'string') {
     if (isOpenCodeRef(sessionOrPath)) return sessionOrPath;
+    if (isCodexRef(sessionOrPath)) return sessionOrPath;
     return `pi:${resolve(sessionOrPath)}`;
   }
   if (sessionOrPath?.source === 'opencode') return opencodeRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^opencode:/, ''));
+  if (sessionOrPath?.source === 'codex') return codexRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^codex:/, ''));
   return `pi:${resolve(sessionOrPath?.path || '')}`;
 }
 
@@ -422,6 +427,14 @@ async function updateSessionMetadata(ctx, path, patch) {
 
 function isOpenCodeRef(ref) {
   return typeof ref === 'string' && ref.startsWith('opencode:');
+}
+
+function codexRef(sessionId) {
+  return `codex:${sessionId}`;
+}
+
+function isCodexRef(ref) {
+  return typeof ref === 'string' && ref.startsWith('codex:');
 }
 
 function timestampFromMs(value) {
@@ -581,6 +594,213 @@ function openCodeUsage(messages, parts) {
     stats.tokenPressure.total = Math.max(stats.tokenPressure.total, input + output + cacheWrite);
   }
   return stats;
+}
+
+function codexPayload(entry) {
+  return entry?.payload || {};
+}
+
+function codexSessionIdFromFile(file) {
+  return basename(file, '.jsonl').match(/([0-9a-f]{8}-[0-9a-f-]{27,})/)?.[1] || basename(file, '.jsonl');
+}
+
+function codexTextFromContent(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((block) => block?.text || block?.input_text || block?.output_text || '')
+    .filter(Boolean)
+    .join('\n');
+}
+
+function codexContentBlocks(content) {
+  const text = codexTextFromContent(content);
+  return text ? [{ type: 'text', text }] : [];
+}
+
+function parseCodexArguments(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return { input: String(value) };
+  }
+}
+
+function codexUsageFromTokenCount(payload) {
+  const usage = payload?.info?.last_token_usage || {};
+  const inputTotal = Number(usage.input_tokens || 0);
+  const cacheRead = Number(usage.cached_input_tokens || 0);
+  const input = Math.max(0, inputTotal - cacheRead);
+  const output = Number(usage.output_tokens || 0);
+  return {
+    input,
+    output,
+    cacheRead,
+    cacheWrite: 0,
+    total: input + output + cacheRead,
+  };
+}
+
+function summarizeCodexSession(file, fileStat, parsed) {
+  const meta = codexPayload(parsed.find((entry) => entry?.type === 'session_meta'));
+  const contexts = parsed.filter((entry) => entry?.type === 'turn_context').map(codexPayload);
+  const cwd = meta.cwd || [...contexts].reverse().find((ctx) => ctx.cwd)?.cwd || '';
+  const id = meta.session_id || meta.id || codexSessionIdFromFile(file);
+  const messagePayloads = parsed.filter((entry) => entry?.type === 'response_item' && codexPayload(entry).type === 'message').map((entry) => ({ timestamp: entry.timestamp, ...codexPayload(entry) }));
+  const userMessages = messagePayloads.filter((message) => message.role === 'user');
+  const assistantMessages = messagePayloads.filter((message) => message.role === 'assistant');
+  const toolCalls = parsed.filter((entry) => entry?.type === 'response_item' && ['function_call', 'custom_tool_call'].includes(codexPayload(entry).type));
+  const tokenCounts = parsed.filter((entry) => entry?.type === 'event_msg' && codexPayload(entry).type === 'token_count');
+  const tokens = emptyUsage();
+  for (const entry of tokenCounts) {
+    const usage = codexUsageFromTokenCount(codexPayload(entry));
+    tokens.tokens.input += usage.input;
+    tokens.tokens.output += usage.output;
+    tokens.tokens.cacheRead += usage.cacheRead;
+    tokens.tokens.cacheWrite += usage.cacheWrite;
+    tokens.tokens.total += usage.total;
+    tokens.tokenPressure.total = Math.max(tokens.tokenPressure.total, usage.input + usage.output);
+  }
+  const timestamps = parsed.map((entry) => entry?.timestamp).filter(Boolean).sort((a, b) => new Date(b) - new Date(a));
+  const model = [...contexts].reverse().find((ctx) => ctx.model)?.model || '';
+  return {
+    id,
+    source: 'codex',
+    path: codexRef(id),
+    cwd,
+    name: '',
+    modelLabel: model,
+    model: { source: 'codex', provider: meta.model_provider || '', model, variant: '' },
+    firstPrompt: truncate(codexTextFromContent(userMessages[0]?.content)),
+    createdAt: meta.timestamp || timestamps.at(-1) || fileStat.birthtime?.toISOString(),
+    updatedAt: timestamps[0] || fileStat.mtime?.toISOString(),
+    leafId: null,
+    messageCount: messagePayloads.filter((message) => ['user', 'assistant'].includes(message.role)).length,
+    userMessageCount: userMessages.length,
+    assistantMessageCount: assistantMessages.filter((message) => codexTextFromContent(message.content).trim()).length,
+    assistantRawMessageCount: assistantMessages.length,
+    toolMessageCount: toolCalls.length,
+    toolResultCount: parsed.filter((entry) => entry?.type === 'response_item' && ['function_call_output', 'custom_tool_call_output'].includes(codexPayload(entry).type)).length,
+    toolCallCount: toolCalls.length,
+    toolNames: Array.from(new Set(toolCalls.map((entry) => codexPayload(entry).name || 'tool'))).sort(),
+    tokens: tokens.tokens,
+    tokenPressure: tokens.tokenPressure,
+  };
+}
+
+function codexEntries(parsed) {
+  const entries = [];
+  let counter = 0;
+  for (const entry of parsed) {
+    const payload = codexPayload(entry);
+    const id = payload.id || payload.call_id || `codex-entry-${counter++}`;
+    if (entry.type === 'turn_context' && payload.model) {
+      entries.push({
+        id: `model-${counter++}`,
+        type: 'model_change',
+        timestamp: entry.timestamp,
+        source: 'codex',
+        provider: '',
+        modelId: payload.model,
+        modelLabel: payload.model,
+        synthetic: true,
+      });
+      continue;
+    }
+    if (entry.type !== 'response_item') continue;
+    if (payload.type === 'message' && ['user', 'assistant'].includes(payload.role)) {
+      entries.push({
+        id,
+        type: 'message',
+        timestamp: entry.timestamp,
+        source: 'codex',
+        message: {
+          role: payload.role,
+          content: codexContentBlocks(payload.content),
+        },
+      });
+    } else if (['function_call', 'custom_tool_call'].includes(payload.type)) {
+      entries.push({
+        id,
+        type: 'message',
+        timestamp: entry.timestamp,
+        source: 'codex',
+        message: {
+          role: 'assistant',
+          content: [{
+            type: 'toolCall',
+            id: payload.call_id || payload.id || id,
+            name: payload.name || payload.tool || 'tool',
+            arguments: parseCodexArguments(payload.arguments || payload.input),
+            result: '',
+          }],
+        },
+      });
+    } else if (['function_call_output', 'custom_tool_call_output'].includes(payload.type)) {
+      entries.push({
+        id,
+        type: 'message',
+        timestamp: entry.timestamp,
+        source: 'codex',
+        message: {
+          role: 'toolResult',
+          toolCallId: payload.call_id,
+          content: [{ type: 'text', text: typeof payload.output === 'string' ? payload.output : JSON.stringify(payload.output ?? '', null, 2) }],
+        },
+      });
+    } else if (payload.type === 'reasoning') {
+      const summary = Array.isArray(payload.summary) ? codexTextFromContent(payload.summary) : '';
+      if (summary.trim()) {
+        entries.push({
+          id,
+          type: 'message',
+          timestamp: entry.timestamp,
+          source: 'codex',
+          message: { role: 'assistant', content: [{ type: 'thinking', thinking: summary }] },
+        });
+      }
+    }
+  }
+  return entries;
+}
+
+async function loadCodexFile(file) {
+  const [fileStat, content] = await Promise.all([stat(file), readFile(file, 'utf8')]);
+  const parsed = parseJsonl(content);
+  const summary = summarizeCodexSession(file, fileStat, parsed);
+  const entries = codexEntries(parsed);
+  const activeEntries = entries;
+  const topicAnchors = activeEntries
+    .filter((entry) => entry?.type === 'message' && entry.message?.role === 'user')
+    .map((entry, index) => ({
+      id: entry.id,
+      timestamp: entry.timestamp,
+      title: truncate(textFromContent(entry.message.content), 80) || `User prompt ${index + 1}`,
+      depth: index === 0 ? 'first-prompt' : 'user-prompt',
+    }));
+  return { ...summary, entries, activeEntries, topicAnchors };
+}
+
+async function listCodexSessions(ctx) {
+  const files = await walkJsonlFiles(CODEX_SESSION_ROOT);
+  const settled = await Promise.allSettled(files.map((file) => loadCodexFile(file)));
+  return settled
+    .filter((result) => result.status === 'fulfilled')
+    .map((result) => result.value)
+    .filter((session) => isUnderRoot(session.cwd, ctx.workspaceRoot))
+    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+}
+
+async function loadCodexSession(ctx, ref) {
+  const sessionId = ref.replace(/^codex:/, '');
+  const files = await walkJsonlFiles(CODEX_SESSION_ROOT);
+  for (const file of files) {
+    const detail = await loadCodexFile(file);
+    if (detail.id === sessionId) return detail;
+  }
+  throw new Error('Codex session not found');
 }
 
 async function loadOpenCodeRows(sessionId = null) {
@@ -851,18 +1071,17 @@ function sessionDashboardSummary(sessions) {
 
 async function listSessions(ctx) {
   const { metadata, error: metadataError } = await readMetadata(ctx);
-  const results = await Promise.allSettled([
-    sourceEnabled('pi')
-      ? withTimeout(listPiSessions(ctx), 'pi source', SOURCE_TIMEOUT_MS)
-      : [],
-    sourceEnabled('opencode')
-      ? withTimeout(listOpenCodeSessions(ctx), 'opencode source', SOURCE_TIMEOUT_MS)
-      : [],
-  ]);
+  const sources = [
+    ['pi', () => listPiSessions(ctx)],
+    ['opencode', () => listOpenCodeSessions(ctx)],
+    ['codex', () => listCodexSessions(ctx)],
+  ];
+  const enabledSources = sources.filter(([source]) => sourceEnabled(source));
+  const results = await Promise.allSettled(enabledSources.map(([source, list]) => withTimeout(list(), `${source} source`, SOURCE_TIMEOUT_MS)));
   const sourceErrors = [];
   const sessions = [];
   for (const [index, result] of results.entries()) {
-    const source = index === 0 ? 'pi' : 'opencode';
+    const source = enabledSources[index][0];
     if (result.status === 'fulfilled') sessions.push(...result.value);
     else sourceErrors.push(sourceError(source, result.reason));
   }
@@ -872,6 +1091,7 @@ async function listSessions(ctx) {
 
 function isAllowedSessionPath(ctx, candidate) {
   if (isOpenCodeRef(candidate)) return true;
+  if (isCodexRef(candidate)) return true;
   const resolved = resolve(candidate);
   return isUnderRoot(resolved, PI_SESSION_ROOT);
 }
@@ -902,7 +1122,7 @@ export function createSessionBrowserHandler({ basePath = '/', cockpit = null, wo
           sendJson(res, 400, { error: 'Invalid session path' });
           return true;
         }
-        const session = isOpenCodeRef(path) ? await loadOpenCodeSession(ctx, path) : await loadSessionFile(path);
+        const session = isOpenCodeRef(path) ? await loadOpenCodeSession(ctx, path) : isCodexRef(path) ? await loadCodexSession(ctx, path) : await loadSessionFile(path);
         if (!isUnderRoot(session.cwd, ctx.workspaceRoot)) {
           sendJson(res, 404, { error: 'Session is outside the current workspace root' });
           return true;

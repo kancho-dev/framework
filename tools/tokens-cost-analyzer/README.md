@@ -1,6 +1,6 @@
 # Tokens / Cost Analyzer Prototype
 
-Experimental read-only local prototype for normalizing Pi and OpenCode session token/cost data and showing it as a visual local web report.
+Experimental read-only local prototype for normalizing Pi, OpenCode, and Codex session token/cost data and showing it as a visual local web report.
 
 This tool is an alpha cost-visibility aid, not invoice-grade billing, provider reconciliation, or a recommended/default workflow for every framework workspace. Treat the output as local planning evidence with explicit uncertainty labels.
 
@@ -35,3 +35,7 @@ The analyzer includes a bundled Pi-derived pricing table at `data/pi-pricing.jso
 Subscription comparisons are warning-only when currencies differ from token estimate currency. Token estimates are USD pricing-table estimates; manually normalize subscription records to USD before treating token and subscription totals as directly comparable.
 
 The prototype intentionally avoids context-window percentages and invoice-grade cost claims. Recorded native costs, source-derived token totals, pricing-table estimates, and unknowns are separate fields in `normalized.json` and visible in the UI. Cockpit integration should be opt-in for selected workspaces; do not promote the analyzer as a default enabled tool until the workflow has broader validation.
+
+Codex support reads local rollout JSONL files from `CODEX_SESSION_ROOT` or `$CODEX_HOME/sessions`. It uses `event_msg.token_count.info.last_token_usage` records and splits `cached_input_tokens` out of `input_tokens` so cached tokens are not double-counted. `total_token_usage` is cumulative and is not used for per-record accounting.
+
+Observed local Codex rollout records do not expose cache-write tokens or native recorded cost. The analyzer estimates Codex cost from input, output, and cache-read tokens only, without repeating cache-write warnings on every Codex record.

@@ -178,6 +178,7 @@ function matches(session, query) {
 function sourceLabel(source) {
   if (source === 'pi') return 'Pi';
   if (source === 'opencode') return 'OpenCode';
+  if (source === 'codex') return 'Codex';
   return source || 'unknown';
 }
 

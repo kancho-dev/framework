@@ -22,6 +22,7 @@ export async function copyText(text) {
 export function restoreCommand(detail) {
   if (detail.source === 'pi') return `pi --session ${shellQuote(detail.path)}`;
   if (detail.source === 'opencode') return `opencode --session ${shellQuote(detail.id)} ${shellQuote(detail.cwd || '.')}`;
+  if (detail.source === 'codex') return `codex resume ${shellQuote(detail.id)}`;
   return '';
 }
 

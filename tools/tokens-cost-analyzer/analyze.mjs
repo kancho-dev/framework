@@ -14,6 +14,7 @@ const workspaceRoot = resolve(args.workspace || process.env.WORKSPACE_ROOT || pr
 const outDir = resolve(args.out || join(workspaceRoot, '.tools-config', 'tokens-cost-analyzer'));
 const piRoot = resolve(args.piRoot || process.env.PI_SESSION_ROOT || join(homedir(), '.pi', 'agent', 'sessions'));
 const opencodeDb = resolve(args.opencodeDb || process.env.OPENCODE_DB || join(homedir(), '.local', 'share', 'opencode', 'opencode.db'));
+const codexRoot = resolve(args.codexRoot || process.env.CODEX_SESSION_ROOT || join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'sessions'));
 const pricingPath = resolve(args.pricing || join(outDir, 'pricing.json'));
 const bundledPricingPath = fileURLToPath(new URL('./data/pi-pricing.json', import.meta.url));
 const limit = Number(args.limit || 200);
@@ -22,13 +23,17 @@ const pricing = await loadPricing(pricingPath, bundledPricingPath);
 const records = [];
 const warnings = [];
 
-if (args.source !== 'opencode') {
+if (sourceRequested(args.source, 'pi')) {
   try { records.push(...await readPiRecords({ piRoot, workspaceRoot, pricing, limit })); }
   catch (error) { warnings.push({ source: 'pi', warning: safeError(error) }); }
 }
-if (args.source !== 'pi') {
+if (sourceRequested(args.source, 'opencode')) {
   try { records.push(...await readOpenCodeRecords({ opencodeDb, workspaceRoot, pricing, limit })); }
   catch (error) { warnings.push({ source: 'opencode', warning: safeError(error) }); }
+}
+if (sourceRequested(args.source, 'codex')) {
+  try { records.push(...await readCodexRecords({ codexRoot, workspaceRoot, pricing, limit })); }
+  catch (error) { warnings.push({ source: 'codex', warning: safeError(error) }); }
 }
 
 records.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
@@ -49,8 +54,12 @@ function parseArgs(argv) {
 }
 
 function help() {
-  console.log(`Usage: node analyze.mjs [--workspace PATH] [--out DIR] [--pricing FILE] [--source pi|opencode] [--limit N]\n\nOutputs normalized.json and report.md. Defaults write to .tools-config/tokens-cost-analyzer/.`);
+  console.log(`Usage: node analyze.mjs [--workspace PATH] [--out DIR] [--pricing FILE] [--source pi|opencode|codex] [--limit N]\n\nOutputs normalized.json and report.md. Defaults write to .tools-config/tokens-cost-analyzer/.`);
   process.exit(0);
+}
+
+function sourceRequested(requested, source) {
+  return !requested || requested === source;
 }
 
 async function loadPricing(path, bundledPath) {
@@ -221,11 +230,90 @@ function openCodeSessionRecord(row, pricing) {
   });
 }
 
-function buildRecord({ source, sessionId, messageId = null, sessionRef, sessionBrowserPath, sessionTopicId = null, timestamp, provider, model, variant, modelLabel, tokens, recordedCost, rawFieldRefs, calculationMethod, pricing }) {
+async function readCodexRecords({ codexRoot, workspaceRoot, pricing, limit }) {
+  const files = (await walkJsonlFiles(codexRoot)).sort((a, b) => a.localeCompare(b)).slice(-(Number(limit) || 200));
+  const records = [];
+  for (const sessionPath of files) {
+    const lines = (await readFile(sessionPath, 'utf8')).split(/\r?\n/).filter(Boolean);
+    let sessionMeta = {};
+    let latestCwd = '';
+    let latestModel = null;
+    let latestUserMessageId = null;
+    const sessionId = codexSessionIdFromFile(sessionPath);
+    for (let index = 0; index < lines.length; index += 1) {
+      const entry = JSON.parse(lines[index]);
+      const payload = entry.payload || {};
+      if (entry.type === 'session_meta') {
+        sessionMeta = payload;
+        latestCwd = payload.cwd || latestCwd;
+        continue;
+      }
+      if (entry.type === 'turn_context') {
+        latestCwd = payload.cwd || latestCwd;
+        latestModel = payload.model || latestModel;
+        continue;
+      }
+      if (entry.type === 'response_item' && payload.type === 'message' && payload.role === 'user') {
+        latestUserMessageId = payload.id || `codex-entry-${index}`;
+        continue;
+      }
+      if (entry.type !== 'event_msg' || payload.type !== 'token_count') continue;
+      if (!isUnderRoot(latestCwd || sessionMeta.cwd, workspaceRoot)) continue;
+      const rawUsage = payload.info?.last_token_usage || {};
+      if (!hasCodexTokenUsage(rawUsage)) continue;
+      const usage = normalizeCodexTokenUsage(rawUsage);
+      records.push(buildRecord({
+        source: 'codex',
+        sessionId: sessionMeta.session_id || sessionMeta.id || sessionId,
+        messageId: `token-count-${index}`,
+        sessionRef: redactHome(sessionPath),
+        sessionBrowserPath: codexRef(sessionMeta.session_id || sessionMeta.id || sessionId),
+        sessionTopicId: latestUserMessageId,
+        timestamp: entry.timestamp || payload.timestamp || sessionMeta.timestamp,
+        provider: sessionMeta.model_provider || null,
+        model: latestModel,
+        variant: null,
+        modelLabel: latestModel || null,
+        tokens: usage.tokens,
+        recordedCost: null,
+        rawFieldRefs: {
+          model: 'turn_context.model',
+          provider: 'session_meta.model_provider',
+          tokens: 'event_msg.token_count.info.last_token_usage.{input_tokens,cached_input_tokens,output_tokens,total_tokens}',
+          cost: 'not recorded in observed Codex rollout token_count events',
+        },
+        calculationMethod: 'Codex token_count events expose cumulative and last-turn usage; analyzer records use last_token_usage only and split cached_input_tokens out of input_tokens to avoid double counting.',
+        omittedTokenWarnings: ['cacheWrite'],
+        pricing,
+      }));
+    }
+  }
+  return records;
+}
+
+function normalizeCodexTokenUsage(usage) {
+  const inputTotal = knownNumber(usage.input_tokens);
+  const cacheRead = knownNumber(usage.cached_input_tokens);
+  const output = knownNumber(usage.output_tokens);
+  const input = inputTotal == null ? null : Math.max(0, inputTotal - (cacheRead || 0));
+  return {
+    tokens: {
+      input,
+      output,
+      cacheRead,
+      cacheWrite: null,
+    },
+  };
+}
+function hasCodexTokenUsage(usage) {
+  return ['input_tokens', 'cached_input_tokens', 'output_tokens'].some((key) => knownNumber(usage[key]) != null);
+}
+
+function buildRecord({ source, sessionId, messageId = null, sessionRef, sessionBrowserPath, sessionTopicId = null, timestamp, provider, model, variant, modelLabel, tokens, recordedCost, rawFieldRefs, calculationMethod, omittedTokenWarnings = [], pricing }) {
   const normalizedTokens = normalizeTokens(tokens);
   const displayModel = modelLabel || modelLabelFromParts({ source, provider, model, variant }) || model;
   const price = findPrice(pricing, provider, model, displayModel);
-  const estimate = estimateCost(normalizedTokens, price);
+  const estimate = estimateCost(normalizedTokens, price, { omittedTokenWarnings });
   const totalTokens = sumKnown(normalizedTokens.input, normalizedTokens.output, normalizedTokens.cacheRead, normalizedTokens.cacheWrite);
   return {
     source,
@@ -258,13 +346,17 @@ function normalizeTokens(tokens) {
   return Object.fromEntries(Object.entries(tokens).map(([key, value]) => [key, { value: value ?? null, class: value == null ? 'unknown' : 'recorded' }]));
 }
 
-function estimateCost(tokens, price) {
+function estimateCost(tokens, price, options = {}) {
   const warnings = [];
+  const omittedTokenWarnings = new Set(options.omittedTokenWarnings || []);
   if (!price) return { cost: null, class: 'unknown', warnings: ['unpriced model'] };
   let cost = 0;
   for (const [field, priceField] of [['input', 'input'], ['output', 'output'], ['cacheRead', 'cacheRead'], ['cacheWrite', 'cacheWrite']]) {
     const value = tokens[field].value;
-    if (value == null) { warnings.push(`unknown ${field} tokens`); continue; }
+    if (value == null) {
+      if (!omittedTokenWarnings.has(field)) warnings.push(`unknown ${field} tokens`);
+      continue;
+    }
     if (price[priceField] == null) { if (value > 0) warnings.push(`unpriced ${field} tokens`); continue; }
     cost += (value / 1_000_000) * Number(price[priceField]);
   }
@@ -371,6 +463,29 @@ async function piSessionFilesInScope(piRoot, workspaceRoot) {
   }
   return files;
 }
+async function walkJsonlFiles(dir, files = []) {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if (files.length === 0) throw error;
+    return files;
+  }
+  await Promise.all(entries.map(async (entry) => {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) await walkJsonlFiles(full, files);
+    else if (entry.isFile() && entry.name.endsWith('.jsonl')) files.push(full);
+  }));
+  return files;
+}
+function isUnderRoot(candidate, root) {
+  if (!candidate) return false;
+  const resolvedCandidate = resolve(candidate);
+  const resolvedRoot = resolve(root);
+  return resolvedCandidate === resolvedRoot || resolvedCandidate.startsWith(`${resolvedRoot}/`);
+}
+function codexRef(sessionId) { return `codex:${sessionId}`; }
+function codexSessionIdFromFile(file) { return basename(file, '.jsonl').match(/([0-9a-f]{8}-[0-9a-f-]{27,})/)?.[1] || basename(file, '.jsonl'); }
 function encodePiWorkspace(path) { return `-${resolve(path).replace(/\//g, '-')}--`; }
 function knownNumber(value) { return Number.isFinite(Number(value)) ? Number(value) : null; }
 function sumKnown(...values) { const known = values.filter((v) => v.value != null); return { known: known.length > 0, value: known.reduce((s, v) => s + v.value, 0) }; }
