@@ -25,7 +25,7 @@ async function load(refresh) {
     state.data = await res.json();
     window.FrameworkWorkspaceBadge?.set(workspaceEl, { root: state.data.workspaceRoot, tooltipPrefix: 'Workspace', workspaceFilter: tokenAnalyzerWorkspaceFilter });
     render(state.data);
-    statusEl.textContent = `Generated ${formatDateTime(state.data.generatedAt)} · ${state.data.workspaceRoot}`;
+    statusEl.textContent = `Generated ${formatDateTime(state.data.generatedAt)} · ${analysisLabel(state.data.analysis)} · ${state.data.workspaceRoot}`;
   } catch (error) {
     statusEl.textContent = `Error: ${error.message}`;
   }
@@ -108,5 +108,10 @@ function renderDrivers(selector, drivers) {
   }).join('');
 }
 
+function analysisLabel(analysis) {
+  if (analysis?.mode === 'limited') return `limited to latest ${analysis.limit} sessions/files per source`;
+  if (analysis?.mode === 'full-history') return 'full-history';
+  return 'analysis scope unknown';
+}
 function metric(label, value, note) { return `<article class="metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`; }
 function height(value, max) { return Math.max(value > 0 ? 3 : 0, (Number(value) || 0) / max * 220); }

@@ -9,6 +9,13 @@ import { promisify } from 'node:util';
 import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel } from '../shared-web/model-normalization.mjs';
 
 const execFileAsync = promisify(execFile);
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.on('uncaughtException', (error) => {
+    console.error(`Error: ${safeError(error)}`);
+    console.error('Run with --help for usage.');
+    process.exit(1);
+  });
+}
 const args = parseArgs(process.argv.slice(2));
 const workspaceRoot = resolve(args.workspace || process.env.WORKSPACE_ROOT || process.cwd());
 const outDir = resolve(args.out || join(workspaceRoot, '.tools-config', 'tokens-cost-analyzer'));
@@ -17,7 +24,8 @@ const opencodeDb = resolve(args.opencodeDb || process.env.OPENCODE_DB || join(ho
 const codexRoot = resolve(args.codexRoot || process.env.CODEX_SESSION_ROOT || join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'sessions'));
 const pricingPath = resolve(args.pricing || join(outDir, 'pricing.json'));
 const bundledPricingPath = fileURLToPath(new URL('./data/pi-pricing.json', import.meta.url));
-const limit = Number(args.limit || 200);
+const limit = parseLimit(args.limit);
+const analysis = { mode: limit == null ? 'full-history' : 'limited', limit, limitScope: 'recent sessions/files per source' };
 
 const pricing = await loadPricing(pricingPath, bundledPricingPath);
 const records = [];
@@ -38,8 +46,8 @@ if (sourceRequested(args.source, 'codex')) {
 
 records.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
 await mkdir(outDir, { recursive: true });
-await writeFile(join(outDir, 'normalized.json'), JSON.stringify({ generatedAt: new Date().toISOString(), workspaceRoot, pricingPath, pricingSources: pricing.pricingSources || [], warnings, records }, null, 2));
-await writeFile(join(outDir, 'report.md'), renderReport(records, warnings));
+await writeFile(join(outDir, 'normalized.json'), JSON.stringify({ generatedAt: new Date().toISOString(), workspaceRoot, analysis, pricingPath, pricingSources: pricing.pricingSources || [], warnings, records }, null, 2));
+await writeFile(join(outDir, 'report.md'), renderReport(records, warnings, analysis));
 console.log(`Wrote ${records.length} records to ${outDir}`);
 
 function parseArgs(argv) {
@@ -48,18 +56,33 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--help') help();
     if (!arg.startsWith('--')) throw new Error(`Unexpected argument: ${arg}`);
-    opts[arg.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = argv[++i];
+    const key = arg.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    const value = argv[i + 1];
+    if (value == null || value.startsWith('--')) throw new Error(`${arg} requires a value`);
+    opts[key] = value;
+    i += 1;
   }
   return opts;
 }
 
 function help() {
-  console.log(`Usage: node analyze.mjs [--workspace PATH] [--out DIR] [--pricing FILE] [--source pi|opencode|codex] [--limit N]\n\nOutputs normalized.json and report.md. Defaults write to .tools-config/tokens-cost-analyzer/.`);
+  console.log(`Usage: node analyze.mjs [--workspace PATH] [--out DIR] [--pricing FILE] [--source pi|opencode|codex] [--limit N|all]\n\nOutputs normalized.json and report.md. Defaults write to .tools-config/tokens-cost-analyzer/. By default all in-scope sessions/files are analyzed; use --limit for a bounded recent sessions/files slice per source, not a record/message limit.`);
   process.exit(0);
 }
 
 function sourceRequested(requested, source) {
   return !requested || requested === source;
+}
+
+function parseLimit(value) {
+  if (value == null || value === '' || String(value).toLowerCase() === 'all') return null;
+  const limit = Number(value);
+  if (!Number.isInteger(limit) || limit < 1) throw new Error('--limit must be a positive integer or all');
+  return limit;
+}
+
+function applyRecentLimit(items, limit) {
+  return limit == null ? items : items.slice(-limit);
 }
 
 async function loadPricing(path, bundledPath) {
@@ -80,7 +103,7 @@ async function loadPricing(path, bundledPath) {
 }
 
 async function readPiRecords({ piRoot, workspaceRoot, pricing, limit }) {
-  const files = (await piSessionFilesInScope(piRoot, workspaceRoot)).sort((a, b) => a.localeCompare(b)).slice(-(Number(limit) || 200));
+  const files = applyRecentLimit((await piSessionFilesInScope(piRoot, workspaceRoot)).sort((a, b) => a.localeCompare(b)), limit);
   const records = [];
   for (const sessionPath of files) {
     const file = basename(sessionPath);
@@ -136,7 +159,8 @@ async function readPiRecords({ piRoot, workspaceRoot, pricing, limit }) {
 
 async function readOpenCodeRecords({ opencodeDb, workspaceRoot, pricing, limit }) {
   const rootPrefix = `${workspaceRoot.replace(/\/+$/, '')}/%`;
-  const sql = `select id,directory,path,time_created,model,cost,tokens_input,tokens_output,tokens_cache_read,tokens_cache_write from session where directory=${sqlString(workspaceRoot)} or directory like ${sqlString(rootPrefix)} or path=${sqlString(workspaceRoot)} or path like ${sqlString(rootPrefix)} order by time_updated desc limit ${Number(limit) || 200}`;
+  const limitClause = limit == null ? '' : ` limit ${limit}`;
+  const sql = `select id,directory,path,time_created,model,cost,tokens_input,tokens_output,tokens_cache_read,tokens_cache_write from session where directory=${sqlString(workspaceRoot)} or directory like ${sqlString(rootPrefix)} or path=${sqlString(workspaceRoot)} or path like ${sqlString(rootPrefix)} order by time_updated desc${limitClause}`;
   const { stdout } = await execFileAsync('sqlite3', ['-readonly', '-json', opencodeDb, sql], { maxBuffer: 20 * 1024 * 1024 });
   const sessions = stdout.trim() ? JSON.parse(stdout) : [];
   if (!sessions.length) return [];
@@ -153,50 +177,60 @@ function hasOpenCodeAggregateUsageEvidence(session) {
 }
 
 async function readOpenCodeMessageRecords(opencodeDb, sessions, pricing) {
-  const sessionIds = sessions.map((session) => session.id);
   const sessionById = new Map(sessions.map((session) => [session.id, session]));
-  const sql = `select session_id as sessionId,id,time_created,data from message where session_id in (${sessionIds.map(sqlString).join(',')}) and json_extract(data,'$.role') in ('user','assistant') order by session_id,time_created,id`;
-  const { stdout } = await execFileAsync('sqlite3', ['-readonly', '-json', opencodeDb, sql], { maxBuffer: 50 * 1024 * 1024 });
-  const rows = stdout.trim() ? JSON.parse(stdout) : [];
   const latestUserBySession = new Map();
   const records = [];
-  for (const row of rows) {
-    const data = parseJson(row.data);
-    if (data.role === 'user') {
-      latestUserBySession.set(row.sessionId, row.id);
-      continue;
+  for (const batch of chunks(sessions.map((session) => session.id), 250)) {
+    const sql = `select session_id as sessionId,id,time_created,json_extract(data,'$.role') as role,json_extract(data,'$.tokens') as tokens,json_extract(data,'$.cost') as cost,json_extract(data,'$.providerID') as providerID,json_extract(data,'$.modelID') as modelID,json_extract(data,'$.model') as model,json_extract(data,'$.variant') as variant,json_extract(data,'$.time.created') as dataTimeCreated from message where session_id in (${batch.map(sqlString).join(',')}) and json_extract(data,'$.role') in ('user','assistant') order by session_id,time_created,id`;
+    const { stdout } = await execFileAsync('sqlite3', ['-readonly', '-json', opencodeDb, sql], { maxBuffer: 50 * 1024 * 1024 });
+    const rows = stdout.trim() ? JSON.parse(stdout) : [];
+    for (const row of rows) {
+      const data = {
+        role: row.role,
+        tokens: parseJson(row.tokens),
+        cost: row.cost,
+        providerID: row.providerID,
+        modelID: row.modelID,
+        model: row.model,
+        variant: row.variant,
+        time: { created: row.dataTimeCreated },
+      };
+      if (data.role === 'user') {
+        latestUserBySession.set(row.sessionId, row.id);
+        continue;
+      }
+      const tokens = data.tokens || {};
+      if (!tokens || Object.keys(tokens).length === 0) continue;
+      const modelParts = openCodeMessageModelParts({ data });
+      const session = sessionById.get(row.sessionId) || {};
+      records.push(buildRecord({
+        source: 'opencode',
+        sessionId: row.sessionId,
+        messageId: row.id,
+        sessionRef: `opencode.db:message/${row.id}`,
+        sessionBrowserPath: `opencode:${row.sessionId}`,
+        sessionTopicId: latestUserBySession.get(row.sessionId) || null,
+        timestamp: isoFromMs(row.time_created || data.time?.created || session.time_created),
+        provider: modelParts.provider || null,
+        model: modelParts.model || null,
+        variant: modelParts.variant || null,
+        modelLabel: modelLabelFromParts(modelParts) || null,
+        tokens: {
+          input: knownNumber(tokens.input ?? tokens.prompt),
+          output: knownNumber(tokens.output ?? tokens.completion),
+          cacheRead: knownNumber(tokens.cacheRead ?? tokens.cache_read ?? tokens.cache?.read),
+          cacheWrite: knownNumber(tokens.cacheWrite ?? tokens.cache_write ?? tokens.cache?.write),
+        },
+        recordedCost: Number(data.cost) > 0 ? Number(data.cost) : null,
+        rawFieldRefs: {
+          model: 'message.data.{providerID,modelID,variant}',
+          tokens: 'message.data.tokens.{input,output,cache.read,cache.write}',
+          cost: 'message.data.cost',
+        },
+        calculationMethod: 'OpenCode assistant-message token usage is recorded per response; session aggregate rows are used only when message-level usage is unavailable.',
+        pricing,
+      }));
     }
-    const tokens = data.tokens || {};
-    if (!tokens || Object.keys(tokens).length === 0) continue;
-    const modelParts = openCodeMessageModelParts({ data });
-    const session = sessionById.get(row.sessionId) || {};
-    records.push(buildRecord({
-      source: 'opencode',
-      sessionId: row.sessionId,
-      messageId: row.id,
-      sessionRef: `opencode.db:message/${row.id}`,
-      sessionBrowserPath: `opencode:${row.sessionId}`,
-      sessionTopicId: latestUserBySession.get(row.sessionId) || null,
-      timestamp: isoFromMs(row.time_created || data.time?.created || session.time_created),
-      provider: modelParts.provider || null,
-      model: modelParts.model || null,
-      variant: modelParts.variant || null,
-      modelLabel: modelLabelFromParts(modelParts) || null,
-      tokens: {
-        input: knownNumber(tokens.input ?? tokens.prompt),
-        output: knownNumber(tokens.output ?? tokens.completion),
-        cacheRead: knownNumber(tokens.cacheRead ?? tokens.cache_read ?? tokens.cache?.read),
-        cacheWrite: knownNumber(tokens.cacheWrite ?? tokens.cache_write ?? tokens.cache?.write),
-      },
-      recordedCost: Number(data.cost) > 0 ? Number(data.cost) : null,
-      rawFieldRefs: {
-        model: 'message.data.{providerID,modelID,variant}',
-        tokens: 'message.data.tokens.{input,output,cache.read,cache.write}',
-        cost: 'message.data.cost',
-      },
-      calculationMethod: 'OpenCode assistant-message token usage is recorded per response; session aggregate rows are used only when message-level usage is unavailable.',
-      pricing,
-    }));
   }
   return records;
 }
@@ -231,7 +265,7 @@ function openCodeSessionRecord(row, pricing) {
 }
 
 async function readCodexRecords({ codexRoot, workspaceRoot, pricing, limit }) {
-  const files = (await walkJsonlFiles(codexRoot)).sort((a, b) => a.localeCompare(b)).slice(-(Number(limit) || 200));
+  const files = applyRecentLimit((await walkJsonlFiles(codexRoot)).sort((a, b) => a.localeCompare(b)), limit);
   const records = [];
   for (const sessionPath of files) {
     const lines = (await readFile(sessionPath, 'utf8')).split(/\r?\n/).filter(Boolean);
@@ -382,13 +416,13 @@ function confidence(recordedCost, estimate, tokens) {
   return 'unknown';
 }
 
-function renderReport(records, warnings) {
+function renderReport(records, warnings, analysis) {
   const totalTokens = records.reduce((sum, r) => sum + (r.totalTokens || 0), 0);
   const recordedCost = records.reduce((sum, r) => sum + (r.recordedCost || 0), 0);
   const estimatedCost = records.reduce((sum, r) => sum + (r.estimatedCost || 0), 0);
   const unknownCost = records.filter((r) => r.estimatedCost == null && r.recordedCost == null).length;
   const recordWarnings = warningSummary(records);
-  return [`# Tokens / Cost Analyzer Report`, '', `Generated: ${new Date().toISOString()}`, '', '## Summary', '', `- Records: ${records.length}`, `- Source-derived total tokens: ${totalTokens}`, `- Recorded native cost total: ${money(recordedCost)}`, `- Estimated cost total: ${money(estimatedCost)}`, `- Records with unknown/unpriced cost: ${unknownCost}`, '', '## Warnings', '', ...(warnings.length ? warnings.map((w) => `- ${w.source}: ${w.warning}`) : []), ...(recordWarnings.length ? recordWarnings.map((w) => `- ${w}`) : []), ...(!warnings.length && !recordWarnings.length ? ['- None'] : []), '', '## By Model', '', table(groupBy(records, (r) => r.modelLabel || r.model || 'unknown-model')), '', '## By Day', '', table(groupBy(records, (r) => r.date || 'unknown-date')), '', '## Top Drivers — Sessions', '', ...sessionDrivers(records).slice(0, 10).map((r) => `- ${r.date || 'unknown'} ${r.source} ${r.modelLabel || r.model || 'unknown-model'} records=${r.recordCount} tokens=${r.totalTokens ?? 'unknown'} recorded=${money(r.recordedCost)} estimated=${money(r.estimatedCost)} confidence=${r.confidence}${sessionBrowserMarkdownLink(r)}`), '', '## Top Drivers — Prompts / Messages', '', ...records.slice().sort(compareTopDrivers).slice(0, 10).map((r) => `- ${r.date || 'unknown'} ${r.source} ${r.modelLabel || r.model || 'unknown-model'} tokens=${r.totalTokens ?? 'unknown'} recorded=${money(r.recordedCost)} estimated=${money(r.estimatedCost)} confidence=${r.confidence}${sessionBrowserMarkdownLink(r)}`), '', 'Costs are estimates unless marked recorded in `normalized.json`. Missing values are unknown, not zero.', ''].join('\n');
+  return [`# Tokens / Cost Analyzer Report`, '', `Generated: ${new Date().toISOString()}`, `Analysis: ${analysis.mode === 'limited' ? `limited to latest ${analysis.limit} sessions/files per source` : 'full-history'}`, '', '## Summary', '', `- Records: ${records.length}`, `- Source-derived total tokens: ${totalTokens}`, `- Recorded native cost total: ${money(recordedCost)}`, `- Estimated cost total: ${money(estimatedCost)}`, `- Records with unknown/unpriced cost: ${unknownCost}`, '', '## Warnings', '', ...(warnings.length ? warnings.map((w) => `- ${w.source}: ${w.warning}`) : []), ...(recordWarnings.length ? recordWarnings.map((w) => `- ${w}`) : []), ...(!warnings.length && !recordWarnings.length ? ['- None'] : []), '', '## By Model', '', table(groupBy(records, (r) => r.modelLabel || r.model || 'unknown-model')), '', '## By Day', '', table(groupBy(records, (r) => r.date || 'unknown-date')), '', '## Top Drivers — Sessions', '', ...sessionDrivers(records).slice(0, 10).map((r) => `- ${r.date || 'unknown'} ${r.source} ${r.modelLabel || r.model || 'unknown-model'} records=${r.recordCount} tokens=${r.totalTokens ?? 'unknown'} recorded=${money(r.recordedCost)} estimated=${money(r.estimatedCost)} confidence=${r.confidence}${sessionBrowserMarkdownLink(r)}`), '', '## Top Drivers — Prompts / Messages', '', ...records.slice().sort(compareTopDrivers).slice(0, 10).map((r) => `- ${r.date || 'unknown'} ${r.source} ${r.modelLabel || r.model || 'unknown-model'} tokens=${r.totalTokens ?? 'unknown'} recorded=${money(r.recordedCost)} estimated=${money(r.estimatedCost)} confidence=${r.confidence}${sessionBrowserMarkdownLink(r)}`), '', 'Costs are estimates unless marked recorded in `normalized.json`. Missing values are unknown, not zero.', ''].join('\n');
 }
 
 function warningSummary(records) {
@@ -451,8 +485,13 @@ function table(rows) {
   return lines.join('\n');
 }
 
+function chunks(items, size) {
+  const result = [];
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
+  return result;
+}
 function stripModelVariant(value) { return value ? String(value).replace(/:[^/:]+$/, '') : null; }
-function parseJson(value) { try { return JSON.parse(value); } catch { return {}; } }
+function parseJson(value) { if (value && typeof value === 'object') return value; try { return JSON.parse(value); } catch { return {}; } }
 async function piSessionFilesInScope(piRoot, workspaceRoot) {
   const exact = encodePiWorkspace(workspaceRoot);
   const prefix = exact.slice(0, -2);

@@ -14,12 +14,14 @@ const PORT = Number(process.env.TOKENS_COST_ANALYZER_PORT || process.env.PORT ||
 const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
 const OUTPUT_DIR = resolve(process.env.TOKENS_COST_ANALYZER_OUT || join(WORKSPACE_ROOT, '.tools-config', 'tokens-cost-analyzer'));
 const BASE_PATH = normalizeBasePath(process.env.BASE_PATH || '');
+const ANALYSIS_LIMIT = parseAnalysisLimit(process.env.TOKENS_COST_ANALYZER_LIMIT);
 
 export function createTokensCostAnalyzerHandler(options = {}) {
   const workspaceRoot = resolve(options.workspaceRoot || WORKSPACE_ROOT);
   const outputDir = resolve(options.outputDir || join(workspaceRoot, '.tools-config', 'tokens-cost-analyzer'));
   const basePath = normalizeBasePath(options.basePath || '');
   const cockpit = options.cockpit || { tools: [] };
+  const analysisLimit = Object.hasOwn(options, 'analysisLimit') ? options.analysisLimit : ANALYSIS_LIMIT;
   return async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost');
     if (basePath && url.pathname === basePath) {
@@ -30,7 +32,7 @@ export function createTokensCostAnalyzerHandler(options = {}) {
     const pathname = stripBasePath(url.pathname, basePath);
     if (pathname === null) return false;
     try {
-      if (pathname === '/api/report') { sendJson(res, 200, await loadReport({ workspaceRoot, outputDir, refresh: url.searchParams.get('refresh') === '1' })); return true; }
+      if (pathname === '/api/report') { sendJson(res, 200, await loadReport({ workspaceRoot, outputDir, refresh: url.searchParams.get('refresh') === '1', analysisLimit })); return true; }
       if (pathname.startsWith('/shared/')) { await serveStaticPath(res, SHARED_WEB_DIR, pathname.replace('/shared', '')); return true; }
       if (pathname === '/') {
         const html = await readStaticText(PUBLIC_DIR, '/index.html');
@@ -53,14 +55,25 @@ export function createTokensCostAnalyzerHandler(options = {}) {
   };
 }
 
-async function loadReport({ workspaceRoot, outputDir, refresh }) {
+async function loadReport({ workspaceRoot, outputDir, refresh, analysisLimit }) {
   const normalizedPath = join(outputDir, 'normalized.json');
   if (refresh || !(await exists(normalizedPath))) {
-    await execFileAsync(process.execPath, [join(TOOL_DIR, 'analyze.mjs'), '--workspace', workspaceRoot, '--out', outputDir], { maxBuffer: 1024 * 1024 * 20 });
+    const analyzeArgs = [join(TOOL_DIR, 'analyze.mjs'), '--workspace', workspaceRoot, '--out', outputDir];
+    if (analysisLimit) analyzeArgs.push('--limit', analysisLimit);
+    await execFileAsync(process.execPath, analyzeArgs, { maxBuffer: 1024 * 1024 * 20 });
   }
   const normalized = JSON.parse(await readFile(normalizedPath, 'utf8'));
   const subscriptions = await readSubscriptions(join(outputDir, 'subscriptions.json'));
   return summarize(normalized, subscriptions);
+}
+
+function parseAnalysisLimit(value) {
+  if (value == null || value === '') return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === 'all') return 'all';
+  const limit = Number(normalized);
+  if (!Number.isInteger(limit) || limit < 1) throw new Error('TOKENS_COST_ANALYZER_LIMIT must be a positive integer or all');
+  return String(limit);
 }
 
 async function readSubscriptions(path) {
@@ -99,6 +112,7 @@ function summarize(normalized, subscriptions) {
   return {
     generatedAt: normalized.generatedAt,
     workspaceRoot: normalized.workspaceRoot,
+    analysis: normalized.analysis || { mode: 'unknown', limit: null, limitScope: 'unknown' },
     totals: {
       records: records.length,
       tokens: sum(records, 'totalTokens'),
@@ -107,7 +121,7 @@ function summarize(normalized, subscriptions) {
       unknownCostRecords: records.filter((r) => r.recordedCost == null && r.estimatedCost == null).length,
       subscriptionCost: subscriptions.total,
     },
-    warnings: warnings(normalized.warnings || [], records, subscriptions),
+    warnings: warnings(normalized.warnings || [], records, subscriptions, normalized.analysis),
     byModel: rows(group(records, (r) => r.modelLabel || r.model || 'unknown-model')),
     bySource: rows(group(records, (r) => r.source || 'unknown-source')),
     monthly,
@@ -171,8 +185,9 @@ function sessionDrivers(records) {
 }
 
 function rows(map) { return [...map.entries()].map(([key, records]) => ({ key, records: records.length, tokens: sum(records, 'totalTokens'), recordedCost: round(sum(records, 'recordedCost')), estimatedCost: round(sum(records, 'estimatedCost')), unknown: records.filter((r) => r.recordedCost == null && r.estimatedCost == null).length })).sort((a, b) => b.tokens - a.tokens); }
-function warnings(adapterWarnings, records, subscriptions) {
+function warnings(adapterWarnings, records, subscriptions, analysis = null) {
   const result = adapterWarnings.map((w) => `${w.source}: ${w.warning}`);
+  if (analysis?.mode === 'limited') result.push(`Analysis is limited to the latest ${analysis.limit} sessions/files per source; totals are not full-history.`);
   const unknown = records.filter((r) => r.recordedCost == null && r.estimatedCost == null).length;
   if (unknown) result.push(`${unknown} records have unknown/unpriced cost`);
   const unpriced = records.filter((r) => (r.warnings || []).includes('unpriced model')).length;

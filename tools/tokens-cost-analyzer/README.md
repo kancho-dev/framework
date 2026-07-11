@@ -15,6 +15,10 @@ CLI-only analysis is also available:
 node tools/tokens-cost-analyzer/analyze.mjs --workspace "$PWD"
 ```
 
+By default the analyzer reads all in-scope local sessions/files. For a faster recent-only CLI run, pass `--limit N` (or `--limit all` to be explicit about the default full-history behavior). `--limit N` limits recent sessions/files per source, not emitted records/messages.
+
+Browser Refresh also rebuilds full-history analysis by default. To make server/Cockpit refreshes bounded, launch the tool or Cockpit with `TOKENS_COST_ANALYZER_LIMIT=N`; use `TOKENS_COST_ANALYZER_LIMIT=all` to be explicit about full-history refresh. Limited reports show a trust flag and generated metadata so they are not mistaken for full-history totals.
+
 By default it writes private generated output to:
 
 ```text
