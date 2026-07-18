@@ -4,7 +4,8 @@ import { unique, sortTasks } from './task-utils.js';
 import { restoreFilters, persistFilters, resetFilters, renderStatusFilters, matches, fillSelect } from './filters.js';
 import { captureBoardScroll, restoreBoardScroll, renderBoard, showSelectedTaskInBoard as revealSelectedTaskInBoard, scrollSelectedCardIntoView, shouldRevealRestoredSelection } from './board.js';
 import { captureDetailFocus, isEditingAutocompleteInput, restoreDetailFocus, renderDetail, attachDetailAutocompletes, continuePrompt } from './detail.js';
-import { fetchTasks, saveMetadata } from './api.js';
+import { fetchTasks, saveMetadata, saveSteeringNotes } from './api.js';
+import { editSteeringDraft, savedSteeringDraft } from './steering-notes.js';
 import { addRelationPatch, currentTags, relationInput, removeRelationPatch, taskKeyFromRelationInput } from './relations.js';
 
 window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
@@ -235,6 +236,46 @@ function removeRelation(form, label, relatedKey) {
   if (!patch) return;
   saveMetadataPatch(form, patch).catch((error) => { els.status.textContent = error.message; });
 }
+
+els.steeringNotesDisclosure.addEventListener('toggle', () => {
+  if (state.selectedKey) state.steeringOpen[state.selectedKey] = els.steeringNotesDisclosure.open;
+});
+
+els.steeringNotes.addEventListener('input', (event) => {
+  if (event.target.name !== 'steeringNotes') return;
+  const form = event.target.closest('.steering-notes-editor');
+  state.steeringDrafts[form.dataset.key] = editSteeringDraft(state.steeringDrafts[form.dataset.key], event.target.value);
+  form.querySelector('.save-steering').disabled = false;
+  const status = form.querySelector('.steering-state');
+  status.className = 'steering-state dirty';
+  status.textContent = 'Unsaved draft.';
+});
+
+async function persistSteeringNotes(form, content) {
+  const key = form.dataset.key;
+  const draft = state.steeringDrafts[key];
+  try {
+    const note = await saveSteeringNotes(key, content, draft.revision);
+    state.steeringDrafts[key] = savedSteeringDraft(note);
+    state.steeringOpen[key] = Boolean(note.content.trim());
+    render({ preserveScroll: true });
+  } catch (error) {
+    draft.state = error.status === 409 ? 'conflict' : 'error';
+    draft.message = error.message;
+    render({ preserveScroll: true });
+  }
+}
+
+els.steeringNotes.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const form = event.target.closest('.steering-notes-editor');
+  persistSteeringNotes(form, form.elements.steeringNotes.value);
+});
+els.steeringNotes.addEventListener('click', (event) => {
+  const clear = event.target.closest('.clear-steering');
+  if (!clear) return;
+  persistSteeringNotes(clear.closest('.steering-notes-editor'), '');
+});
 
 els.detailMeta.addEventListener('submit', (event) => {
   event.preventDefault();

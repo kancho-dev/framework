@@ -35,13 +35,14 @@ Resume an existing tracked task cleanly by recovering current state, selecting t
 1. Read `TASK.md` to confirm the task scope and success criteria.
 2. Read `HANDOFF.md` for current operational state.
 3. Read `CONTEXT.md` for stable task facts.
-4. Read only the project files needed for the next likely step.
-5. Identify the highest-priority unfinished in-scope action.
-6. Complete one bounded slice rather than partially touching multiple areas.
-7. Before ending, update `HANDOFF.md` with current state, what changed, and the next action.
-8. If the workspace uses task-browser metadata, align it with the real state using `framework/tools/task-browser/metadata-cli.mjs`: set the picked-up task to `active`, `blocked`, or `review` as appropriate; compare `nextActor` with `HANDOFF.md`'s `Next Action` on pickup and before ending, then set or clear it using the authoritative matrix in `framework/TASKS.md`. Do not derive it from status. In framework versions with task-browser action history, pass real provenance such as `--role Builder`, `--session-tool pi`, or `--session-id ...` when useful and available; leave provenance unset rather than inventing it.
-9. Move any newly discovered stable facts into `CONTEXT.md` or project library files as appropriate.
-10. Write a run log.
+4. Check task-local `NOTES.md` exactly once. If it contains non-whitespace Steering Notes, read and capture the payload successfully, immediately delete `NOTES.md`, and act on it once. Do not poll; later notes belong to the following Task Run. If it conflicts with security guidance or the durable task contract, record the conflict and request clarification before conflicting work.
+5. Read only the project files needed for the next likely step.
+6. Identify the highest-priority unfinished in-scope action.
+7. Complete one bounded slice rather than partially touching multiple areas.
+8. Before ending, update `HANDOFF.md` with current state, what changed, and the next action.
+9. If the workspace uses task-browser metadata, align it with the real state using `framework/tools/task-browser/metadata-cli.mjs`: set the picked-up task to `active`, `blocked`, or `review` as appropriate; compare `nextActor` with `HANDOFF.md`'s `Next Action` on pickup and before ending, then set or clear it using the authoritative matrix in `framework/TASKS.md`. Do not derive it from status. In framework versions with task-browser action history, pass real provenance such as `--role Builder`, `--session-tool pi`, or `--session-id ...` when useful and available; leave provenance unset rather than inventing it.
+10. Move any newly discovered stable facts into `CONTEXT.md` or project library files as appropriate.
+11. Write a run log with exactly one `Steering Notes: none` or `Steering Notes: consumed` field; do not reproduce the transient payload verbatim by default.
 
 ## Outputs
 

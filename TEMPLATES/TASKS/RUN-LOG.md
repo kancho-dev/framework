@@ -1,5 +1,7 @@
 # [Task Name] — YYYY-MM-DD HH:MM
 
+Steering Notes: [none / consumed]
+
 ## What I Did
 
 [Short factual summary]

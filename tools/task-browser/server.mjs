@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appendHistoryEvent, applyBrowserPatch, applyRelationshipPatch, buildHistoryEvent, changedTaskKeys, deriveBlocks, findWorkspaceRoot, historyPathFor, metadataPathFor, readHistory, readMetadata, snapshotTasks, STATUSES, syncMetadataTasks, writeMetadata } from './metadata-helpers.mjs';
@@ -14,6 +15,7 @@ const DEFAULT_METADATA_PATH = metadataPathFor(DEFAULT_WORKSPACE_ROOT);
 const DEFAULT_HISTORY_PATH = historyPathFor(DEFAULT_WORKSPACE_ROOT, DEFAULT_METADATA_PATH);
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
+const STEERING_NOTES_MAX_BYTES = 16_000;
 function parsePort(value) {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid PORT: ${value}`);
@@ -32,14 +34,15 @@ async function discoverTasks(ctx) {
       const taskPath = join(taskDir, 'TASK.md');
       if (!(await exists(taskPath))) continue;
       const handoffPath = join(taskDir, 'HANDOFF.md');
-      const [taskText, handoffText, contextText, runs, handoffStat] = await Promise.all([
+      const [taskText, handoffText, contextText, steeringNotes, runs, handoffStat] = await Promise.all([
         readFile(taskPath, 'utf8').catch(() => ''),
         readFile(handoffPath, 'utf8').catch(() => ''),
         readFile(join(taskDir, 'CONTEXT.md'), 'utf8').catch(() => ''),
+        readSteeringNotes(taskDir),
         summarizeRuns(ctx, join(taskDir, 'runs')),
         stat(handoffPath).catch(() => null),
       ]);
-      tasks.push(summarizeTask(ctx, projectEntry.name, taskEntry.name, taskDir, taskText, handoffText, contextText, runs, handoffStat));
+      tasks.push(summarizeTask(ctx, projectEntry.name, taskEntry.name, taskDir, taskText, handoffText, contextText, steeringNotes, runs, handoffStat));
     }
   }
   return tasks.sort((a, b) => a.key.localeCompare(b.key));
@@ -49,7 +52,50 @@ async function safeReadDir(path) {
   try { return await readdir(path, { withFileTypes: true }); } catch { return []; }
 }
 
-function summarizeTask(ctx, project, slug, taskDir, taskText, handoffText, contextText, runs, handoffStat) {
+function steeringNotesRevision(content) {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+async function readSteeringNotes(taskDir) {
+  const content = await readFile(join(taskDir, 'NOTES.md'), 'utf8').catch((error) => {
+    if (error?.code === 'ENOENT') return '';
+    throw error;
+  });
+  return { content, revision: steeringNotesRevision(content) };
+}
+
+async function replaceSteeringNotes(taskDir, content) {
+  const target = join(taskDir, 'NOTES.md');
+  if (content === '') {
+    await unlink(target).catch((error) => { if (error?.code !== 'ENOENT') throw error; });
+    return;
+  }
+  const temporary = join(taskDir, `.NOTES.md.${process.pid}.${randomUUID()}.tmp`);
+  await writeFile(temporary, content, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+  try { await rename(temporary, target); }
+  catch (error) {
+    await unlink(temporary).catch(() => {});
+    throw error;
+  }
+}
+
+async function updateSteeringNotes(ctx, key, body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.content !== 'string' || typeof body.revision !== 'string') {
+    throw Object.assign(new Error('Invalid Steering Notes payload'), { statusCode: 400 });
+  }
+  if (Buffer.byteLength(body.content, 'utf8') > STEERING_NOTES_MAX_BYTES) throw Object.assign(new Error('Steering Notes payload is too large'), { statusCode: 413 });
+  const task = (await discoverTasks(ctx)).find((item) => item.key === key);
+  if (!task) throw Object.assign(new Error('Unknown task'), { statusCode: 404 });
+  const taskDir = resolve(ctx.workspaceRoot, task.path);
+  const expectedDir = resolve(ctx.workspaceRoot, 'projects', task.project, 'work', task.slug);
+  if (taskDir !== expectedDir || !taskDir.startsWith(`${resolve(ctx.workspaceRoot, 'projects')}/`)) throw Object.assign(new Error('Unsafe task path'), { statusCode: 400 });
+  const current = await readSteeringNotes(taskDir);
+  if (current.revision !== body.revision) throw Object.assign(new Error('Steering Notes changed or were consumed; refresh before saving'), { statusCode: 409 });
+  await replaceSteeringNotes(taskDir, body.content);
+  return readSteeringNotes(taskDir);
+}
+
+function summarizeTask(ctx, project, slug, taskDir, taskText, handoffText, contextText, steeringNotes, runs, handoffStat) {
   const relPath = relativePath(ctx, taskDir);
   const title = firstHeading(taskText) || slug;
   const latestRunAt = runTimestamp(runs[0]?.file) || handoffStat?.mtime?.toISOString() || null;
@@ -65,6 +111,8 @@ function summarizeTask(ctx, project, slug, taskDir, taskText, handoffText, conte
     handoff: sectionText(handoffText, 'Current State') || excerpt(handoffText, 900),
     context: excerpt(contextText.replace(/^# .+$/m, '').trim(), 900),
     latestRunAt,
+    steeringNotes,
+    hasPendingSteeringNotes: Boolean(steeringNotes.content.trim()),
     hasRunLogs: runs.length > 0,
     runs,
     files: {
@@ -237,6 +285,15 @@ export function createTaskBrowserHandler({ basePath = '/', cockpit = null, works
       }
       if (pathname === '/api/summary') {
         sendJson(res, 200, await taskSummaryPayload(ctx));
+        return true;
+      }
+      if (pathname === '/api/steering-notes' && req.method === 'PUT') {
+        const body = await readJsonBody(req);
+        if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.key !== 'string' || !body.key) {
+          sendJson(res, 400, { error: 'Missing task key' });
+          return true;
+        }
+        sendJson(res, 200, { steeringNotes: await updateSteeringNotes(ctx, body.key, body) });
         return true;
       }
       if (pathname === '/api/task-metadata' && req.method === 'PATCH') {

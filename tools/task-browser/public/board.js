@@ -5,6 +5,7 @@ import { sortTasks } from './task-utils.js';
 import { matches } from './filters.js';
 import { metaPill, labelPill, projectPill } from './pills.js';
 import { nextActorBadge } from './next-actor.js';
+import { pendingSteeringIndicator } from './steering-notes.js';
 
 export function captureBoardScroll() {
   return { left: els.board.scrollLeft, top: els.board.scrollTop, columns: columnScrollPositions() };
@@ -32,7 +33,8 @@ function renderCard(task) {
   const meta = task.metadata || {};
   const active = task.key === state.selectedKey ? ' active' : '';
   const tags = (meta.tags || []).slice(0, 4).map((tag) => labelPill(tag)).join('');
-  return `<button class="task-card${active}" draggable="true" data-key="${escapeHtml(task.key)}"><div class="card-top"><span class="card-identity"><span class="display-id">${escapeHtml(meta.displayId)}</span>${nextActorBadge(meta.nextActor)}</span>${projectPill(task.project)}</div><strong>${escapeHtml(task.title)}</strong><p>${escapeHtml(task.nextSteps || task.handoff || task.purpose || 'No handoff summary.')}</p><div class="card-meta">${metaPill('priority', meta.priority, `priority ${meta.priority}`)}${metaPill('type', meta.type, 'type')}${tags}</div></button>`;
+  const steering = pendingSteeringIndicator(task.hasPendingSteeringNotes);
+  return `<button class="task-card${active}" draggable="true" data-key="${escapeHtml(task.key)}"><div class="card-top"><span class="card-identity"><span class="display-id">${escapeHtml(meta.displayId)}</span>${nextActorBadge(meta.nextActor)}${steering}</span>${projectPill(task.project)}</div><strong>${escapeHtml(task.title)}</strong><p>${escapeHtml(task.nextSteps || task.handoff || task.purpose || 'No handoff summary.')}</p><div class="card-meta">${metaPill('priority', meta.priority, `priority ${meta.priority}`)}${metaPill('type', meta.type, 'type')}${tags}</div></button>`;
 }
 
 export function showSelectedTaskInBoard() {

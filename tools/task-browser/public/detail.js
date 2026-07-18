@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { unique, displayNumber } from './task-utils.js';
 import { matches } from './filters.js';
 import { editableMetaPill, editableNextActorPill, labelPill, projectPill } from './pills.js';
+import { isSteeringNotesInput, steeringDisclosureOpen, syncSteeringDraft } from './steering-notes.js';
 
 export function captureDetailFocus() {
   const active = document.activeElement;
@@ -14,6 +15,7 @@ export function captureDetailFocus() {
 
 export function isEditingAutocompleteInput() {
   const active = document.activeElement;
+  if (isSteeringNotesInput(active?.name)) return true;
   return Boolean(active?.closest?.('.inline-metadata-editor') && (active.name === 'newTag' || String(active.name || '').startsWith('relation-')));
 }
 
@@ -34,6 +36,10 @@ export function renderDetail(task) {
   const primaryMeta = [editableMetaPill('status', meta.status, state.statuses, `status ${meta.status}`), editableMetaPill('priority', meta.priority, state.priorities, `priority ${meta.priority}`), editableMetaPill('type', meta.type, typeOptions(meta.type), 'type'), editableNextActorPill(meta.nextActor)].join('');
   const filterNotice = matches(task) ? '' : '<div class="detail-notice">Selected task is hidden by current board filters. <button type="button" class="show-selected-in-board">Show in board</button></div>';
   els.detailMeta.innerHTML = `<form class="inline-metadata-editor" data-key="${escapeHtml(task.key)}">${filterNotice}<div class="meta-line primary-meta-line"><div>${primaryMeta}</div><label class="order-editor">Order <input name="order" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(meta.order ?? '')}"></label></div>${renderTagEditor(meta.tags || [])}${renderRelationsAndAction(meta, task)}</form>`;
+  els.steeringNotes.innerHTML = renderSteeringNotes(task);
+  const draft = state.steeringDrafts[task.key];
+  els.steeringNotesDisclosure.open = steeringDisclosureOpen({ preference: state.steeringOpen[task.key], pending: task.hasPendingSteeringNotes, dirty: draft?.dirty });
+  els.steeringNotesDisclosure.querySelector('.steering-summary-state').textContent = task.hasPendingSteeringNotes ? 'Pending for next run' : 'No note pending';
   els.resumeFiles.innerHTML = Object.entries(task.files).map(([label, path]) => `<li><strong>${escapeHtml(label)}</strong>: <code>${escapeHtml(path)}</code></li>`).join('');
   els.detailHandoff.textContent = task.handoff || 'No current-state summary found.';
   els.detailPurpose.textContent = task.purpose || 'No purpose section found.';
@@ -42,6 +48,17 @@ export function renderDetail(task) {
   els.detailContext.textContent = task.context || 'No context excerpt found.';
   els.detailRuns.innerHTML = renderRuns(task.runs || []);
   els.detailHistory.innerHTML = renderHistory(task.metadataHistory || []);
+}
+
+function renderSteeringNotes(task) {
+  const draft = syncSteeringDraft(state.steeringDrafts, task);
+  const disabled = draft.dirty ? '' : ' disabled';
+  const status = draft.message || (draft.state === 'saved' ? 'Saved guidance is pending.' : 'No guidance is pending.');
+  return `<form class="steering-notes-editor" data-key="${escapeHtml(task.key)}">
+    <label for="steering-notes-input">Guidance for the next Task Run</label>
+    <textarea id="steering-notes-input" name="steeringNotes" maxlength="16000" rows="5">${escapeHtml(draft.content)}</textarea>
+    <div class="steering-actions"><button type="submit" class="save-steering"${disabled}>Save</button><button type="button" class="clear-steering"${draft.content ? '' : ' disabled'}>Clear</button><span class="steering-state ${escapeHtml(draft.state)}" role="status" aria-live="polite">${escapeHtml(status)}</span></div>
+  </form>`;
 }
 
 function typeOptions(current) {

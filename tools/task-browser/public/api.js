@@ -7,6 +7,22 @@ export async function fetchTasks() {
   return res.json();
 }
 
+export async function saveSteeringNotes(key, content, revision) {
+  const res = await fetch('api/steering-notes', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, content, revision }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.error || `Steering Notes save failed: ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
+  const task = state.tasks.find((item) => item.key === key);
+  if (task) {
+    task.steeringNotes = data.steeringNotes;
+    task.hasPendingSteeringNotes = Boolean(data.steeringNotes.content.trim());
+  }
+  return data.steeringNotes;
+}
+
 export async function saveMetadata(key, patch) {
   const res = await fetch('api/task-metadata', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, metadata: patch }) });
   const data = await res.json().catch(() => ({}));

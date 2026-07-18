@@ -15,6 +15,8 @@ export const els = {
   detailKey: document.querySelector('#detail-key'),
   detailTitle: document.querySelector('#detail-title'),
   detailMeta: document.querySelector('#detail-meta'),
+  steeringNotes: document.querySelector('#steering-notes'),
+  steeringNotesDisclosure: document.querySelector('#steering-notes-disclosure'),
   resumeFiles: document.querySelector('#resume-files'),
   detailHandoff: document.querySelector('#detail-handoff'),
   detailPurpose: document.querySelector('#detail-purpose'),

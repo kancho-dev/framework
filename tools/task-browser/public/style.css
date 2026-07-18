@@ -4,6 +4,7 @@ body { margin:0; background:var(--bg); color:var(--text); font:13px/1.5 ui-monos
 button,input,select { font:inherit; }
 button { background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px 10px; cursor:pointer; }
 button:hover { border-color:var(--accent); }
+button:disabled { opacity:.45; cursor:not-allowed; }
 .compact-action { height:28px; padding:4px 10px; border-radius:9px; background:rgba(66,72,96,.48); border-color:#3a4053; font-size:12px; }
 #app { min-height:100vh; }
 .tasks-pane { background:var(--panel); height:100vh; overflow:hidden; display:flex; flex-direction:column; transition:padding-right .16s ease; }
@@ -58,6 +59,8 @@ h1,h2,h3,p { margin:0; } h1{font-size:20px; display:flex; align-items:center; ga
 .next-actor-badge.operator svg path { stroke:none; }
 .next-actor-badge.agent svg rect { fill:none; }
 .next-actor-badge.agent svg path { fill:none; }
+.steering-pending { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border:1px solid rgba(242,204,96,.4); border-radius:7px; color:var(--warning); background:rgba(242,204,96,.08); }
+.steering-pending svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:1.3; stroke-linecap:round; stroke-linejoin:round; }
 .task-card:focus-visible .next-actor-badge::after { content:attr(aria-label); position:absolute; left:0; top:calc(100% + 5px); z-index:3; width:max-content; max-width:190px; padding:4px 7px; border:1px solid var(--border); border-radius:7px; color:var(--text); background:var(--bg); box-shadow:0 6px 18px rgba(0,0,0,.28); font-size:10px; font-weight:400; line-height:1.3; }
 .card-meta,.meta-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .meta-pill { display:inline-flex; align-items:center; overflow:hidden; height:22px; border:1px solid rgba(156,220,254,.28); border-radius:8px; font-size:10px; line-height:22px; background:rgba(156,220,254,.08); vertical-align:middle; padding:0; }
@@ -135,6 +138,22 @@ h1,h2,h3,p { margin:0; } h1{font-size:20px; display:flex; align-items:center; ga
 .detail-body { display:grid; gap:14px; padding:18px; }
 .detail-body section { border:1px solid var(--border); background:var(--panel); border-radius:14px; padding:16px; }
 .detail-body h3 { margin-bottom:10px; }
+.steering-section { border-color:rgba(242,204,96,.3) !important; background:linear-gradient(135deg, rgba(242,204,96,.07), var(--panel) 52%) !important; }
+.steering-section summary { display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; font-size:12px; font-weight:700; cursor:pointer; list-style:none; }
+.steering-section summary::-webkit-details-marker { display:none; }
+.steering-section summary::before { content:'›'; color:var(--warning); font-size:18px; line-height:1; transition:transform .12s ease; }
+.steering-section details[open] summary::before { transform:rotate(90deg); }
+.steering-summary-state { margin-left:auto; color:var(--dim); font-size:9px; font-weight:400; letter-spacing:.03em; }
+.steering-section details[open] > .compact { margin-top:9px; }
+.steering-notes-editor { display:grid; gap:8px; margin-top:10px; }
+.steering-notes-editor label { color:var(--text); font-size:11px; font-weight:700; }
+.steering-notes-editor textarea { width:100%; resize:vertical; min-height:92px; padding:10px; border:1px solid var(--border); border-radius:10px; background:var(--bg); color:var(--text); font:inherit; }
+.steering-notes-editor textarea:focus { outline:0; border-color:var(--accent); box-shadow:0 0 0 2px rgba(156,220,254,.1); }
+.steering-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.steering-state { margin-left:auto; color:var(--muted); font-size:10px; }
+.steering-state.dirty,.steering-state.conflict { color:var(--warning); }
+.steering-state.error { color:var(--error); }
+.steering-state.saved { color:var(--success); }
 .detail-body p, li { color:var(--muted); white-space:pre-wrap; }
 .compact { padding:1px 0; font-size:10px; }
 .run-timeline { position:relative; display:grid; gap:0; padding-left:14px; }

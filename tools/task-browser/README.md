@@ -131,7 +131,13 @@ The detail drawer can edit common metadata fields directly:
 - tags through add/remove controls with shared capped-height autocomplete suggestions from existing task tags;
 - optional order through a small numeric input.
 
-Edits call the local `PATCH /api/task-metadata` endpoint and write only task-browser metadata. They do not silently edit `TASK.md`, `HANDOFF.md`, `CONTEXT.md`, or run logs.
+Metadata edits call the local `PATCH /api/task-metadata` endpoint and write only task-browser metadata. They do not silently edit `TASK.md`, `HANDOFF.md`, `CONTEXT.md`, or run logs.
+
+## Steering Notes
+
+The detail drawer also exposes the selected discovered task's optional `NOTES.md` as **Steering Notes**: one transient instruction for the next Task Run. Explicit Save and Clear actions use a constrained `PUT /api/steering-notes` endpoint; Clear deletes the file. A card indicator appears only while non-whitespace guidance is pending. Dirty drafts survive board refresh, and revision conflicts prevent a stale editor from overwriting a note changed or consumed elsewhere.
+
+Steering Notes are not live messaging: an Agent checks once at task-run start, immediately deletes `NOTES.md` after capturing a non-empty payload, and does not poll. Saving does not change status or `nextActor`. Note content is never copied into task-browser metadata or history. See framework `TASKS.md` for authorship, one-shot consumption, conflict-authority, and run-log rules. Workspace `OPERATOR-NOTES.md` is a separate durable Operator-maintained list.
 
 Dragging a card to another status column changes only that task's task-browser metadata `status`; it never infers or rewrites `nextActor`. The target column is highlighted while dragging. Same-column drag reordering is deferred; a future implementation should show a clear between-card insertion target and update only the minimal `order` values needed.
 
@@ -201,4 +207,4 @@ For existing-workspace upgrades from older metadata paths, use `MIGRATIONS.md` a
 
 ## Safety And Privacy
 
-The tool is local-only and reads task markdown from the configured workspace. It writes only the task-browser metadata JSON file and metadata history JSONL file. Task names, paths, tags, relationships, timing, provenance, and handoff text can reveal private work details; do not commit `.tools-config/task-browser/tasks.json` or `.tools-config/task-browser/task-history.jsonl` unless that workspace state is intended to be shared.
+The tool is local-only and reads task markdown from the configured workspace. It writes task-browser metadata/history and, only through the Steering Notes endpoint, safely replaces or deletes `NOTES.md` inside a currently discovered canonical task directory. Task keys, payload type and size, canonical confinement, and stale revisions are validated server-side; the payload is not logged or copied to metadata/history. Task names, note contents, paths, tags, relationships, timing, provenance, and handoff text can reveal private work details. Protect task files, and do not commit `.tools-config/task-browser/tasks.json` or `.tools-config/task-browser/task-history.jsonl` unless that workspace state is intended to be shared.

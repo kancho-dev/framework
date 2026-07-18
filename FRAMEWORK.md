@@ -51,6 +51,9 @@ Run = Base + Role + Skills + Context
 2. `framework/SECURITY.md`
 3. the role file for the run under `framework/ROLES/`
 4. task files under `projects/[name]/work/[task-slug]/`
+   - check task-local `NOTES.md` exactly once when task work starts;
+   - if it contains non-whitespace Steering Notes, read the payload successfully, immediately delete `NOTES.md`, and act on the captured payload once;
+   - do not poll during the run; notes saved afterward belong to the following Task Run.
 5. relevant project `library/` files
 6. selected reference docs, skills, and optional memory only when needed
 

@@ -8,6 +8,8 @@ export const state = {
   selectedStatuses: new Set(),
   tagDrafts: {},
   relationDrafts: {},
+  steeringDrafts: {},
+  steeringOpen: {},
   relationEditorOpen: false,
   revealSelectedInBoard: false,
 };

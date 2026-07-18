@@ -40,13 +40,13 @@
 
 1. Read `HANDOFF.md`.
 2. Read `CONTEXT.md`.
-3. If `NOTES.md` exists, read it early and treat it as transient next-run guidance.
+3. Check `NOTES.md` exactly once at task-run start. If it contains non-whitespace Steering Notes, read and capture the payload successfully, immediately delete `NOTES.md`, and act on it once; do not poll during the run.
 4. Read relevant project files in `projects/[name]/project/`.
 5. Continue the highest-priority incomplete work in scope.
 6. Before ending, update `HANDOFF.md`.
 7. Move stable facts into `CONTEXT.md` if needed.
-8. If `NOTES.md` was used, clear or consume it during the run and move anything still important into durable files.
-9. Write a run log in `runs/`.
+8. Move only lasting Steering Notes effects into durable files; conflicting scope, constraints, or security guidance require durable capture and Operator clarification before conflicting work.
+9. Write a run log in `runs/` with `Steering Notes: none` or `Steering Notes: consumed`.
 
 ## Success Criteria
 

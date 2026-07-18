@@ -84,18 +84,22 @@ Append-only run logs for task sessions and meaningful reviews.
 
 Tasks may contain extra working files such as analysis notes, design drafts, migration comparisons, or larger exploratory material. Use this for task-local work that is too substantial for transient notes and not ready for durable project `library/` files.
 
-### Optional `NOTES.md`
+### Optional `NOTES.md` — Steering Notes
 
-Transient next-run inbox for short-lived steering such as Operator nudges or review bounce notes.
+Task-local `NOTES.md` is the portable store for one transient **Steering Notes** payload for the next Task Run. It is distinct from durable task files, task-browser workflow metadata, and workspace **Operator Notes** in `OPERATOR-NOTES.md`.
 
-If used:
+At the start of every Task Run, check `NOTES.md` exactly once. Missing, empty, and whitespace-only files mean no payload. If it is non-empty:
 
-1. read it at the start;
-2. act on it during the run;
-3. clear or consume it;
-4. move anything still important into durable files.
+1. read and capture the payload successfully;
+2. immediately delete `NOTES.md`;
+3. act on the captured payload once;
+4. promote only lasting decisions or outcomes into authoritative task, project, or workspace files.
 
-Do not use task `NOTES.md` for long-term knowledge or as a substitute for workspace `OPERATOR-NOTES.md`.
+Do not poll during an active run. Steering Notes saved after the check remain pending for the following run; redirect an active session through that session or stop/restart outside this mechanism.
+
+The Operator may author Steering Notes, and a coordinating Overseer may author them for a separate next Task Run. Builders and Oracles must use `HANDOFF.md` and run logs for routine implementation and review handoff. Steering Notes may clarify, narrow, or reprioritize work within the durable task contract, but cannot override security guidance, `TASK.md`, or established constraints. On conflict, capture and clear the payload, record the conflict durably, and request Operator clarification before conflicting work.
+
+Every task run log records exactly one compact field: `Steering Notes: none` or `Steering Notes: consumed`. Do not copy transient contents verbatim by default; when relevant, summarize their effect and durable destination.
 
 ## Task Directory Naming
 
