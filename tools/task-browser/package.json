@@ -1,10 +1,11 @@
 {
   "name": "agent-task-browser",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "metadata": "node metadata-cli.mjs"
+    "metadata": "node metadata-cli.mjs",
+    "test": "node --test metadata-helpers.test.mjs metadata-cli.test.mjs server.test.mjs public/next-actor.test.mjs"
   }
 }

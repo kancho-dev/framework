@@ -50,13 +50,29 @@ h1,h2,h3,p { margin:0; } h1{font-size:20px; display:flex; align-items:center; ga
 .task-card > strong { display:block; margin-bottom:6px; }
 .task-card p { color:var(--muted); font-size:11px; margin-bottom:8px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 .card-top { display:flex; justify-content:space-between; align-items:center; gap:8px; color:var(--muted); font-size:11px; margin-bottom:6px; }
+.card-identity { display:inline-flex; align-items:center; gap:5px; min-width:0; }
 .display-id { color:var(--bg); background:var(--accent); border-radius:999px; padding:1px 7px; font-weight:700; }
+.next-actor-badge { position:relative; display:inline-flex; align-items:center; justify-content:center; flex:0 0 20px; width:20px; height:20px; border:1px solid rgba(156,220,254,.34); border-radius:7px; color:var(--accent); background:rgba(156,220,254,.08); }
+.next-actor-badge.operator { color:var(--warning); border-color:rgba(242,204,96,.4); background:rgba(242,204,96,.08); }
+.next-actor-badge svg { width:13px; height:13px; fill:currentColor; stroke:currentColor; stroke-width:1.3; stroke-linecap:round; stroke-linejoin:round; }
+.next-actor-badge.operator svg path { stroke:none; }
+.next-actor-badge.agent svg rect { fill:none; }
+.next-actor-badge.agent svg path { fill:none; }
+.task-card:focus-visible .next-actor-badge::after { content:attr(aria-label); position:absolute; left:0; top:calc(100% + 5px); z-index:3; width:max-content; max-width:190px; padding:4px 7px; border:1px solid var(--border); border-radius:7px; color:var(--text); background:var(--bg); box-shadow:0 6px 18px rgba(0,0,0,.28); font-size:10px; font-weight:400; line-height:1.3; }
 .card-meta,.meta-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .meta-pill { display:inline-flex; align-items:center; overflow:hidden; height:22px; border:1px solid rgba(156,220,254,.28); border-radius:8px; font-size:10px; line-height:22px; background:rgba(156,220,254,.08); vertical-align:middle; padding:0; }
 .meta-pill span { display:block; width:22px; height:20px; color:var(--muted); background:rgba(0,0,0,.18); padding:0; font-size:11px; line-height:20px; text-align:center; }
 .meta-pill strong,.meta-pill select { display:block; height:20px; color:var(--accent); padding:0 7px; font-weight:700; line-height:20px; }
 .meta-pill select { max-width:130px; min-width:0; border:0; border-radius:0; background:var(--bg); color:var(--text); font-size:10px; appearance:none; cursor:pointer; outline:0; }
 .meta-pill option { background:var(--bg); color:var(--text); }
+.next-actor-editor { border-color:rgba(156,220,254,.34); }
+.next-actor-editor select { max-width:170px; }
+.next-actor-editor.operator { border-color:rgba(242,204,96,.4); background:rgba(242,204,96,.08); }
+.next-actor-editor .next-actor-editor-icon svg { width:13px; height:13px; margin:3px auto; fill:currentColor; stroke:currentColor; stroke-width:1.3; stroke-linecap:round; stroke-linejoin:round; }
+.next-actor-editor.operator .next-actor-editor-icon { color:var(--warning); }
+.next-actor-editor.agent .next-actor-editor-icon { color:var(--accent); }
+.next-actor-editor.operator svg path { stroke:none; }
+.next-actor-editor.agent svg rect,.next-actor-editor.agent svg path { fill:none; }
 .meta-pill.status.active { border-color:rgba(126,231,135,.45); background:rgba(126,231,135,.08); }
 .meta-pill.status.active strong { color:var(--success); }
 .meta-pill.status.review { border-color:rgba(198,120,221,.45); background:rgba(198,120,221,.08); }

@@ -173,12 +173,26 @@ Task markdown remains the source of truth. Task-browser metadata and metadata hi
 
 When task-browser is used, agents should keep metadata aligned before ending meaningful tracked-task work:
 
-- creation: initialize `status`, `priority`, `type`, useful `tags`, and known relationships;
-- pickup: set `status: active` when the task becomes the current target;
+- creation: initialize `status`, `priority`, `type`, useful `tags`, known relationships, and `nextActor` from the concrete next action;
+- pickup: set `status: active` when the task becomes the current target, then compare `nextActor` with `HANDOFF.md`'s `Next Action`;
 - review handoff: set `status: review`; set it back to `active` on bounce;
 - pause/block: use `paused` for deferral, `blocked` for concrete blockers, and put generic blocker details in task markdown;
 - relationships: store `parent`, `children`, `related`, and `blockedBy` as canonical task keys; `blockedBy` should point only at existing task blockers;
 - closure: set `status: done` only after task files record acceptance or closure.
+
+`nextActor` records who must take the next meaningful action for the task to advance. It is nullable workflow metadata, not task status, ownership, assignment, or a substitute for the narrative `HANDOFF.md` next action. Use this authoritative decision matrix:
+
+| Situation | `nextActor` |
+| --- | --- |
+| Task is ready for Agent implementation, research, or planning, or Agent work continues | `agent` |
+| Task awaits an Operator decision, input, approval, review, or manual action | `operator` |
+| Task is handed to an Oracle for review | `agent` |
+| Task is handed to the Operator for review or acceptance | `operator` |
+| Oracle bounces work back to a Builder | `agent` |
+| A concrete blocker can be resolved by the Operator or an Agent | whichever actor must resolve it |
+| Work is paused, done, externally blocked, parked without a concrete action, or has no actionable Operator/Agent step | `null` |
+
+At creation, use `agent` when the task is ready for Agent work, `operator` when explicit Operator action is required, and `null` otherwise. On pickup and whenever `HANDOFF.md`'s narrative next action changes the responsible actor, align `nextActor`. Before ending meaningful tracked-task work, compare the two again and set or clear the field. Do not infer or change `nextActor` merely because `status` changed; lifecycle and action responsibility are orthogonal.
 
 Use `tools/task-browser/metadata-cli.mjs` as the preferred non-interactive way to inspect or update metadata. It accepts display IDs such as `#32` and canonical keys such as `agent-framework/task-slug`, but stores relationships as canonical keys. In framework versions with task-browser action history, CLI writes append local `.tools-config/task-browser/task-history.jsonl` events by default for actual durable metadata changes. Agents may pass real provenance when useful, such as `--role Builder`, `--session-tool pi`, or `--session-id ...`; leave role/session details unset rather than inventing them. See `tools/task-browser/README.md` for detailed history behavior and privacy notes.
 

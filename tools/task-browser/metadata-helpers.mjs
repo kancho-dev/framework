@@ -3,10 +3,11 @@ import { dirname, join, resolve } from 'node:path';
 
 export const STATUSES = ['planned', 'active', 'blocked', 'review', 'paused', 'done'];
 export const PRIORITIES = ['urgent', 'high', 'normal', 'low'];
+export const NEXT_ACTORS = ['operator', 'agent'];
 export const ARRAY_FIELDS = new Set(['tags', 'blockedBy', 'children', 'related']);
 export const RELATION_FIELDS = new Set(['blockedBy', 'children', 'related']);
 export const IDENTITY_FIELDS = new Set(['displayId', 'project', 'slug', 'path']);
-export const HISTORY_FIELDS = ['status', 'priority', 'type', 'tags', 'order', 'parent', 'children', 'blockedBy', 'related'];
+export const HISTORY_FIELDS = ['status', 'priority', 'type', 'nextActor', 'tags', 'order', 'parent', 'children', 'blockedBy', 'related'];
 export const RELATIONSHIP_FIELDS = new Set(['parent', 'children', 'blockedBy', 'related']);
 
 export async function exists(path) { try { await stat(path); return true; } catch { return false; } }
@@ -40,12 +41,20 @@ export async function readMetadata(path, { allowMissing = false } = {}) {
 }
 
 export function normalizeMetadata(parsed) {
+  const tasks = parsed?.tasks && typeof parsed.tasks === 'object' && !Array.isArray(parsed.tasks)
+    ? Object.fromEntries(Object.entries(parsed.tasks).map(([key, task]) => [key, normalizeStoredNextActor(task)]))
+    : {};
   return {
     ...(parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}),
     version: 1,
     nextDisplayNumber: Number.isInteger(parsed?.nextDisplayNumber) ? parsed.nextDisplayNumber : 1,
-    tasks: parsed?.tasks && typeof parsed.tasks === 'object' && !Array.isArray(parsed.tasks) ? parsed.tasks : {},
+    tasks,
   };
+}
+
+function normalizeStoredNextActor(task) {
+  if (!task || typeof task !== 'object' || Array.isArray(task)) return task;
+  return { ...task, nextActor: NEXT_ACTORS.includes(task.nextActor) ? task.nextActor : null };
 }
 
 export async function writeMetadata(path, metadata) {
@@ -131,6 +140,7 @@ export function normalizeTask(task, existing = {}, { inferType } = {}) {
     status: STATUSES.includes(task.status) ? task.status : 'planned',
     priority: PRIORITIES.includes(task.priority) ? task.priority : 'normal',
     type: typeof task.type === 'string' && task.type.trim() ? task.type.trim() : inferType?.(task) || 'implementation',
+    nextActor: NEXT_ACTORS.includes(task.nextActor) ? task.nextActor : null,
     blockedBy: cleanArray(task.blockedBy),
     parent: typeof task.parent === 'string' && task.parent.trim() ? task.parent.trim() : null,
     children: cleanArray(task.children),
@@ -184,6 +194,7 @@ export function applyOptions(metadata, key, opts) {
     if (field === 'status') task.status = requireOne(value, STATUSES, 'status');
     else if (field === 'priority') task.priority = requireOne(value, PRIORITIES, 'priority');
     else if (field === 'type') task.type = String(value).trim() || fail('type must be non-empty');
+    else if (field === 'nextActor') task.nextActor = requireOne(value, NEXT_ACTORS, 'nextActor');
     else if (field === 'order') task.order = parseOrder(value);
     else if (RELATIONSHIP_FIELDS.has(field)) relationPatch[field] = value;
     else if (field === 'tags') task.tags = split(value);
@@ -284,9 +295,16 @@ export function applyBrowserPatch(current, patch) {
   if ('status' in patch) next.status = valid(patch.status, STATUSES, current.status || 'planned');
   if ('priority' in patch) next.priority = valid(patch.priority, PRIORITIES, current.priority || 'normal');
   if ('type' in patch) next.type = typeof patch.type === 'string' && patch.type.trim() ? patch.type.trim() : current.type;
+  if ('nextActor' in patch) next.nextActor = normalizeNextActorPatch(patch.nextActor);
   if ('tags' in patch) next.tags = cleanArray(patch.tags);
   if ('order' in patch) next.order = parseOrder(patch.order);
   return next;
+}
+
+export function normalizeNextActorPatch(value) {
+  if (value === null || value === '') return null;
+  if (NEXT_ACTORS.includes(value)) return value;
+  throw Object.assign(new Error(`nextActor must be one of: ${NEXT_ACTORS.join(', ')}, or null`), { statusCode: 400 });
 }
 
 export function fieldName(name) { return name.replace(/-([a-z])/g, (_, c) => c.toUpperCase()); }

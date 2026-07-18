@@ -3,7 +3,7 @@ import { els } from './dom-elements.js';
 import { state } from './state.js';
 import { unique, displayNumber } from './task-utils.js';
 import { matches } from './filters.js';
-import { editableMetaPill, labelPill, projectPill } from './pills.js';
+import { editableMetaPill, editableNextActorPill, labelPill, projectPill } from './pills.js';
 
 export function captureDetailFocus() {
   const active = document.activeElement;
@@ -31,7 +31,7 @@ export function renderDetail(task) {
   const meta = task.metadata || {};
   els.detailKey.innerHTML = `<span class="display-id">${escapeHtml(meta.displayId)}</span>${projectPill(task.project)}<span>${escapeHtml(task.slug)}</span>`;
   els.detailTitle.textContent = task.title;
-  const primaryMeta = [editableMetaPill('status', meta.status, state.statuses, `status ${meta.status}`), editableMetaPill('priority', meta.priority, state.priorities, `priority ${meta.priority}`), editableMetaPill('type', meta.type, typeOptions(meta.type), 'type')].join('');
+  const primaryMeta = [editableMetaPill('status', meta.status, state.statuses, `status ${meta.status}`), editableMetaPill('priority', meta.priority, state.priorities, `priority ${meta.priority}`), editableMetaPill('type', meta.type, typeOptions(meta.type), 'type'), editableNextActorPill(meta.nextActor)].join('');
   const filterNotice = matches(task) ? '' : '<div class="detail-notice">Selected task is hidden by current board filters. <button type="button" class="show-selected-in-board">Show in board</button></div>';
   els.detailMeta.innerHTML = `<form class="inline-metadata-editor" data-key="${escapeHtml(task.key)}">${filterNotice}<div class="meta-line primary-meta-line"><div>${primaryMeta}</div><label class="order-editor">Order <input name="order" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(meta.order ?? '')}"></label></div>${renderTagEditor(meta.tags || [])}${renderRelationsAndAction(meta, task)}</form>`;
   els.resumeFiles.innerHTML = Object.entries(task.files).map(([label, path]) => `<li><strong>${escapeHtml(label)}</strong>: <code>${escapeHtml(path)}</code></li>`).join('');

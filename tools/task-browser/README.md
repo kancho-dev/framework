@@ -40,7 +40,8 @@ No npm install is needed for the current dependency-free tool.
 - search by display ID, project/slug/key, title, and tags;
 - project and priority filters;
 - task detail drawer with Purpose, Next steps, Run timeline, Current state, Success/Acceptance, Resume files, Context, and Metadata history; Next steps are read from `HANDOFF.md` `## Next Action` with `## Next Steps` fallback;
-- editable status, priority, type, tags, and optional positive-integer order metadata;
+- editable status, priority, type, next actor, tags, and optional positive-integer order metadata;
+- an icon-only person/robot badge beside each task display ID when Operator/Agent action is next;
 - relationship metadata (`blockedBy`, derived `blocks`, `parent`, `children`, `related`) when present, with links to known tasks;
 - cross-column drag/drop to change task status;
 - a copyable generic task-pickup prompt with subtle hover/focus preview.
@@ -89,6 +90,7 @@ Example shape:
       "status": "active",
       "priority": "high",
       "type": "implementation",
+      "nextActor": "agent",
       "blockedBy": [],
       "parent": null,
       "children": [],
@@ -100,7 +102,9 @@ Example shape:
 }
 ```
 
-Task Browser metadata owns UI/workflow fields: `displayId`, `status`, `priority`, `type`, `blockedBy`, `parent`, `children`, `related`, `tags`, and optional positive-integer `order`.
+Task Browser metadata owns UI/workflow fields: `displayId`, `status`, `priority`, `type`, nullable `nextActor`, `blockedBy`, `parent`, `children`, `related`, `tags`, and optional positive-integer `order`.
+
+`nextActor` is `operator`, `agent`, or `null` and answers who must take the next meaningful action for the task to advance. It is not task status, ownership, an assignee, or the narrative next action. The board renders set values as accessible icon-only person/robot badges beside the display ID; unset tasks have no badge. Framework `TASKS.md` is the authoritative source for scenario-based update rules.
 
 Framework task files remain the source of truth for purpose, scope, acceptance criteria, narrative handoff/current state, stable context, and run evidence.
 
@@ -112,7 +116,7 @@ Task Browser writes an append-only local JSONL history for durable task-browser 
 .tools-config/task-browser/task-history.jsonl
 ```
 
-Each event records the task key/display ID, timestamp, source, best-effort provenance, and before/after values for changed durable metadata fields: `status`, `priority`, `type`, `tags`, `order`, `parent`, `children`, `blockedBy`, and `related`. Identity/discovery refresh fields such as `displayId`, `project`, `slug`, `path`, and `missing` are not logged as action history.
+Each event records the task key/display ID, timestamp, source, best-effort provenance, and before/after values for changed durable metadata fields: `status`, `priority`, `type`, `nextActor`, `tags`, `order`, `parent`, `children`, `blockedBy`, and `related`. Identity/discovery refresh fields such as `displayId`, `project`, `slug`, `path`, and `missing` are not logged as action history.
 
 Browser edits and drag/drop writes default to `actor: "operator"`, `source: "browser"`, and null role/session fields. CLI writes default to `actor: "agent"`, `source: "metadata-cli"`, and null role/session fields unless explicitly provided. This is provenance for local handoff, not authentication or a compliance-grade audit trail.
 
@@ -122,14 +126,14 @@ No-op writes where normalized before/after metadata values are identical do not 
 
 The detail drawer can edit common metadata fields directly:
 
-- status, priority, and type through compact pill selects;
+- status, priority, type, and nullable next actor through compact pill selects;
 - board filter selects through shared capped-height listbox styling;
 - tags through add/remove controls with shared capped-height autocomplete suggestions from existing task tags;
 - optional order through a small numeric input.
 
 Edits call the local `PATCH /api/task-metadata` endpoint and write only task-browser metadata. They do not silently edit `TASK.md`, `HANDOFF.md`, `CONTEXT.md`, or run logs.
 
-Dragging a card to another status column changes only that task's task-browser metadata `status`. The target column is highlighted while dragging. Same-column drag reordering is deferred; a future implementation should show a clear between-card insertion target and update only the minimal `order` values needed.
+Dragging a card to another status column changes only that task's task-browser metadata `status`; it never infers or rewrites `nextActor`. The target column is highlighted while dragging. Same-column drag reordering is deferred; a future implementation should show a clear between-card insertion target and update only the minimal `order` values needed.
 
 ## Relationships
 
@@ -147,6 +151,8 @@ node tools/task-browser/metadata-cli.mjs get '#32'
 node tools/task-browser/metadata-cli.mjs key '#32'
 node tools/task-browser/metadata-cli.mjs init agent-framework/task-browser-metadata-guidance-rules --status planned --priority high --type documentation
 node tools/task-browser/metadata-cli.mjs set '#32' --status review --priority high --tags task-browser,metadata-guidance
+node tools/task-browser/metadata-cli.mjs set '#32' --next-actor agent --role Builder --session-tool pi
+node tools/task-browser/metadata-cli.mjs clear '#32' --next-actor
 node tools/task-browser/metadata-cli.mjs set '#32' --status review --role Builder --session-tool pi --session-id pi-session-id
 node tools/task-browser/metadata-cli.mjs history '#32' --limit 10
 node tools/task-browser/metadata-cli.mjs clear '#32' --order
@@ -157,13 +163,13 @@ node tools/task-browser/metadata-cli.mjs set-parent '#32' agent-framework/task-b
 
 The CLI accepts display IDs and canonical task keys for task references. Relationship fields are stored as canonical task keys so browser relationship links remain reliable. Parent/child commands maintain reciprocal `parent`/`children` metadata from either side, and `related` commands maintain symmetric links. `blockedBy` is for existing task blockers only; generic blockers should be explained in `HANDOFF.md`, `CONTEXT.md`, or run logs while metadata uses `status: blocked`. The inverse `blocks` relationship is derived from other tasks' `blockedBy` metadata instead of stored separately.
 
-Supported CLI metadata fields are `status`, `priority`, `type`, `order`, `parent`, `tags`, `blockedBy`, `children`, and `related`. Identity fields such as `displayId`, `project`, `slug`, and `path` are preserved. Write commands accept optional provenance flags `--actor`, `--role`, `--session-tool`, `--session-id`, and `--note`; agents should pass real role/session details when useful and available rather than inventing them.
+Supported CLI metadata fields are `status`, `priority`, `type`, `nextActor`, `order`, `parent`, `tags`, `blockedBy`, `children`, and `related`. Use `set --next-actor operator|agent` to assign responsibility and `clear --next-actor` to store `null`. CLI `get` and `list` expose the normalized value. Identity fields such as `displayId`, `project`, `slug`, and `path` are preserved. Write commands accept optional provenance flags `--actor`, `--role`, `--session-tool`, `--session-id`, and `--note`; agents should pass real role/session details when useful and available rather than inventing them.
 
 ## Metadata Hygiene Guidance
 
 Use task-browser metadata only when the workspace has adopted task-browser, such as when `.tools-config/task-browser/tasks.json` exists or the Operator/current task says the board is used. Do not require this metadata in workspaces that are not using task-browser, and do not commit `.tools-config/task-browser/tasks.json` unless sharing local board state is intentional.
 
-Scenario rules:
+Lifecycle scenario rules:
 
 - task creation: initialize metadata for the discovered task, usually `planned` unless work starts immediately;
 - pickup: set `status: active` for the current target;
@@ -171,6 +177,8 @@ Scenario rules:
 - pause/block: use `paused` for deferral and `blocked` for a real blocker; use `blockedBy` only when another existing task is the blocker;
 - relationships: use `parent`, `children`, and `related` for task splits and peer follow-ups; document execution-relevant relationships in task markdown too;
 - closure: metadata may aid discovery, but task markdown and run logs remain the closure record.
+
+For `nextActor` creation, pickup, review, bounce, blocker, pause, and closure decisions, follow the single authoritative matrix in framework `TASKS.md`. Before ending meaningful task work, keep the field aligned with `HANDOFF.md`'s narrative next action and clear it when no Operator/Agent step is currently actionable.
 
 ## Guidance And Future Work
 

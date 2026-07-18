@@ -39,7 +39,7 @@ Resume an existing tracked task cleanly by recovering current state, selecting t
 5. Identify the highest-priority unfinished in-scope action.
 6. Complete one bounded slice rather than partially touching multiple areas.
 7. Before ending, update `HANDOFF.md` with current state, what changed, and the next action.
-8. If the workspace uses task-browser metadata, align the task's metadata with the real state using `framework/tools/task-browser/metadata-cli.mjs`; for example set the picked-up task to `active`, `blocked`, or `review` as appropriate. In framework versions with task-browser action history, pass real provenance such as `--role Builder`, `--session-tool pi`, or `--session-id ...` when useful and available; leave provenance unset rather than inventing it.
+8. If the workspace uses task-browser metadata, align it with the real state using `framework/tools/task-browser/metadata-cli.mjs`: set the picked-up task to `active`, `blocked`, or `review` as appropriate; compare `nextActor` with `HANDOFF.md`'s `Next Action` on pickup and before ending, then set or clear it using the authoritative matrix in `framework/TASKS.md`. Do not derive it from status. In framework versions with task-browser action history, pass real provenance such as `--role Builder`, `--session-tool pi`, or `--session-id ...` when useful and available; leave provenance unset rather than inventing it.
 9. Move any newly discovered stable facts into `CONTEXT.md` or project library files as appropriate.
 10. Write a run log.
 

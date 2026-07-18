@@ -60,7 +60,7 @@ async function list(ctx, opts) {
   if (opts.status) rows = rows.filter(([, t]) => split(opts.status).includes(t.status));
   if (opts.priority) rows = rows.filter(([, t]) => split(opts.priority).includes(t.priority));
   if (opts.blocked) rows = rows.filter(([, t]) => cleanArray(t.blockedBy).length > 0);
-  return rows.map(([key, t]) => ({ displayId: t.displayId, key, status: t.status, priority: t.priority, type: t.type, tags: cleanArray(t.tags) }));
+  return rows.map(([key, t]) => ({ displayId: t.displayId, key, status: t.status, priority: t.priority, type: t.type, nextActor: t.nextActor ?? null, tags: cleanArray(t.tags) }));
 }
 
 async function setTask(ctx, ref, opts) {
@@ -78,7 +78,7 @@ async function clearTask(ctx, ref, opts) {
   const beforeTasks = snapshotTasks(ctx.metadata);
   for (const flag of opts._) {
     const field = fieldName(flag.replace(/^--/, ''));
-    if (field === 'order') task[field] = null;
+    if (field === 'order' || field === 'nextActor') task[field] = null;
     else if (field === 'parent') setParentRelation(ctx.metadata, key, null);
     else if (field === 'children') setChildrenRelation(ctx.metadata, key, []);
     else if (field === 'related' || field === 'blockedBy') applyRelationshipPatch(ctx.metadata, key, { [field]: [] });
