@@ -4,23 +4,10 @@ argument-hint: "[product|design|slice] [idea]"
 ---
 Use the framework from this workspace as Overseer.
 
-Invoke the `slc-product-concept` skill. Read only the framework-required base files and the smallest relevant workspace/project/task context needed for this request. Load reference docs such as `WORKSPACE.md`, `TASKS.md`, or `SKILLS.md` only if they are needed.
+Invoke the `slc-product-concept` skill; it is the authoritative source for mode semantics, procedure, completion checks, validation, and output shape. Read only the framework-required base files and the smallest relevant workspace/project/task context.
 
 Request: $ARGUMENTS
 
-Interpret the request as one of these modes when possible:
-- product/tool concept: shape a user-facing product, tool, or prototype idea;
-- design/architecture spec: shape a narrow complete design decision or architecture slice;
-- implementation slice: scope the smallest lovable, complete implementation change with appropriate docs/tests/polish.
+Treat an initial `product`, `design`, or `slice` argument as the requested mode. Otherwise infer the most likely mode and state the assumption. Ask one concise question only when ambiguity would materially change the result.
 
-If the mode is unclear, choose the most likely mode from the request and state the assumption. Ask a concise question only when the ambiguity blocks useful SLC shaping.
-
-Return:
-- a concise SLC concept artifact;
-- must-have, later, and out-of-scope boundaries;
-- the chosen form of love;
-- key risks/assumptions;
-- validation plan;
-- recommended next task or implementation slice with acceptance criteria when useful.
-
-Do not create or edit files unless the user asks for a durable artifact/task or the current framework/task context already requires it. If creating implementation tasks or changing code/docs, follow the framework task and engineering rules.
+Do not create or edit files unless the user requests a durable artifact/task or current framework/task context requires it. For implementation or documentation changes, follow the framework task and engineering rules.

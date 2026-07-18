@@ -7,88 +7,117 @@ description: "Shape a product, design, or implementation idea as Simple, Lovable
 
 ## Purpose
 
-Shape a product, tool, design, architecture, or implementation idea using the SLC principle: Simple, Lovable, and Complete.
+Shape a product/tool concept, design/architecture specification, or implementation slice as Simple, Lovable, and Complete (SLC). Use this before execution to define a narrow v1 that is valuable on its own, not an unfinished fragment of a larger promise.
 
-Use this as a lightweight alternative to an MVP-style plan when the goal is to define a small slice that feels complete and valuable instead of an incomplete or embarrassing fragment.
+Keep the workflow lightweight. The result is a concise shaping artifact, not automatically a PRD, architecture document, or implementation plan.
 
 ## When To Use
 
-- exploring a new product, tool, or prototype idea before implementation
-- turning a vague idea into a crisp first product slice
-- shaping a design or architecture proposal into a narrow complete spec
-- scoping an implementation slice that should be useful on its own
-- preparing a task that should create a concept, PRD, design note, or first-slice plan
-- evaluating whether an idea is too broad for one coherent first release
+- exploring a product, tool, or prototype idea
+- narrowing a design or architecture decision into a complete specification
+- scoping a useful, reviewable implementation change
+- testing whether a proposed first release or slice is coherent and bounded
 
 ## Recommended Roles
 
 - Overseer for concept shaping and task scoping
-- Builder when drafting the concept artifact or implementation slice
-- Oracle when reviewing whether the concept is truly SLC
+- Builder for shaping an implementation slice or writing a durable artifact
+- Oracle for a separate review when the result will guide meaningful execution
 
 ## Required Inputs
 
-- Operator's idea, problem statement, design question, or implementation goal
-- target users/audience, if known
-- relevant project/workspace constraints
-- known examples, references, or prior attempts when available
-- intended output location, such as a task file, project `library/` artifact, or concise chat summary
+- the idea, problem, design question, or implementation goal
+- the intended audience and job, if known
+- relevant constraints and prior decisions
+- the intended output location, if a durable artifact was requested
 
-## SLC Meaning
+Do not invent missing product, design, or scope decisions. State a reasonable assumption when it is safe to proceed; ask the Operator when ambiguity would materially change the slice.
 
-- **Simple:** small enough to build, explain, and validate quickly. It does not claim to do more than it does.
-- **Lovable:** gives users a genuine reason to want it, through delight, sharp positioning, emotional connection, workflow fit, transparency, identity, speed, craft, or another form of love.
-- **Complete:** accomplishes a coherent job inside a deliberately narrow scope. Users get v1 of something simple, not v0.1 of something broken.
+## Modes And SLC Meaning
 
-SLC does not mean unfinished, cheap, or minimal at the expense of usefulness. A strong SLC is delightful and useful on day one within its narrow scope. If no further investment happens, it should still provide value as a modest complete product, design, or implementation slice.
+Choose one mode. The audience is the person whose experience determines whether the slice is lovable and complete.
 
-## Steps
+| Mode | Audience and job | Simple | Lovable | Complete | Appropriate validation evidence |
+|---|---|---|---|---|---|
+| **Product/tool concept** | A target user trying to accomplish a user-facing job | One short end-to-end workflow, narrow audience, and modest promise | A specific reason to choose or enjoy it, such as workflow fit, speed, trust, identity, delight, or craft | The promised job works from entry to useful outcome even if no v2 ships | Preliminary proxies such as observed workflows, prototype/demo feedback, and adoption intent can de-risk the concept; ultimate product learning comes from real target customers using the released product and demonstrating that its value and source of love matter |
+| **Design/architecture specification** | Implementers, maintainers, reviewers, or integrators who must understand and use a decision | One bounded decision or interface with only the context needed to apply it | Clear ergonomics, reduced downstream complexity, strong defaults, inspectability, or another concrete benefit for that audience | Material interfaces, behavior, tradeoffs, failure cases, and excluded complexity are resolved enough for downstream work without guessing | Review or spikes that test interface clarity, tradeoffs, feasibility, failure handling, maintainability, and downstream complexity |
+| **Implementation slice** | Users or developers who will use, operate, review, or maintain the change | The smallest shippable behavior change with a focused diff | A noticeable outcome such as smoother workflow, clearer feedback, safer behavior, faster operation, or better developer ergonomics | Behavior, relevant edge cases, tests, docs, and polish needed for this bounded promise ship together | Working behavior plus mode-appropriate tests, manual checks, docs/build checks, reviewability, and evidence of the claimed user or developer outcome |
 
-1. Clarify the core user and job-to-be-done.
-2. Write the idea in one sentence.
-3. Decide which mode fits the request:
-   - **Product/tool concept:** define the user-facing workflow and why someone would choose it.
-   - **Design/architecture spec:** define the narrow decision, quality bar, interfaces, tradeoffs, and what complexity is intentionally excluded.
-   - **Implementation slice:** define the smallest shippable change that is useful, reviewable, and complete with docs/tests/polish appropriate to the slice.
-4. Define the SLC slice:
-   - what is the smallest complete workflow, decision, or job?
-   - what makes it lovable or compelling, not merely functional?
-   - which form of love does this concept choose, such as elegant UX, emotional connection, workflow fit, transparency, identity, speed, or craft?
-   - what complexity is intentionally excluded?
-   - would this still be valuable if no v2 ever ships?
-5. Separate the concept into:
-   - must-have for the first complete slice;
-   - nice later;
-   - explicitly out of scope.
-6. Identify the riskiest assumptions:
-   - user value risk;
-   - love/delight risk;
-   - usability risk;
-   - technical/design risk;
-   - scope risk.
-7. Propose a validation path:
-   - demo, prototype, mock, design review, manual workflow, or small implementation;
-   - what evidence would make the concept worth continuing?
-8. Produce a concise concept artifact using this shape, adapting headings to the selected mode:
+Across all modes:
+
+- **Simple** means deliberately narrow and easy to explain, execute, and validate.
+- **Lovable** means one or more explicit sources of value or affinity for the mode's audience, not generic polish.
+- **Complete** means the narrow promise stands alone. It is v1 of something simple, not v0.1 of something broken.
+
+## Procedure
+
+### 1. Frame The Request
+
+Identify the mode, audience, job, constraints, and desired artifact. Write the idea in one sentence. Load only the project/task context needed to avoid contradicting known decisions.
+
+**Complete when:** the artifact names one mode, one primary audience, one bounded job or decision, and any material unknown is either an explicit assumption or an Operator question.
+
+### 2. Define The Narrow Promise
+
+State the smallest workflow, decision, or behavior that could stand on its own. Name the source(s) of love and why they matter to the audience. Explain what makes the promise complete if no follow-up ever ships.
+
+**Complete when:** a reader can describe the narrow promise, its source(s) of love, and its standalone useful outcome without relying on a future phase.
+
+### 3. Draw The Boundary
+
+Classify every material capability, behavior, interface, decision, and relevant quality requirement raised by the request or required by the narrow promise:
+
+- **Must have:** required for this promise to be useful, lovable, and complete.
+- **Later:** potentially valuable but not required for this promise.
+- **Out of scope:** deliberately excluded from this concept or slice.
+
+Resolve contradictions between the promise and its boundary by shrinking the promise or restoring a required item. Do not silently omit difficult parts.
+
+**Complete when:** every material item raised by the request is accounted for exactly once, must-haves form an end-to-end whole, and removing any remaining must-have would break the stated promise, source of love, or completeness.
+
+### 4. Surface Risks And Assumptions
+
+List only uncertainties that could invalidate the audience, value, source of love, scope, usability, design, or feasibility. Convert unresolved Operator decisions into questions rather than guesses.
+
+**Complete when:** each listed risk could change the slice or continuation decision, and no known material uncertainty is hidden in confident prose.
+
+### 5. Choose Validation Evidence
+
+Choose the cheapest credible evidence for the selected mode using the mode table. State what will be examined and what result would support continuing, revising, or stopping. A deliverable (for example, a mock or test suite) is not evidence until its relevant observation or result is defined. For product/tool concepts, label proxy evidence as preliminary and state how real target-customer use of the released product will provide the ultimate learning.
+
+**Complete when:** the plan names a mode-appropriate method, the evidence sought, and a decision threshold tied to the narrow promise and source of love.
+
+### 6. Produce And Persist The Artifact
+
+Use the compact output shape below. Adapt labels to the mode, but do not add parallel sections that restate love, scope, or completion. Save durable project knowledge in the relevant project `library/` or task directory only when requested or required by current task context.
+
+**Complete when:** the artifact is concise, internally consistent, understandable without private references, and stored or returned in the requested place.
+
+### 7. Recommend Follow-Up Only When Useful
+
+If execution should follow, recommend the smallest next task and include acceptance criteria derived from Must Have and the validation evidence. Use `next-best-actions` when prioritization among multiple follow-ups is needed. Meaningful execution should use the appropriate task flow and separate Oracle review where warranted.
+
+**Complete when:** the recommendation is directly executable without expanding the SLC boundary, or the artifact explicitly says that no follow-up is yet justified.
+
+## Output Shape
 
 ```markdown
-# [Product/Feature/Design Name] — SLC Concept
+# [Name] — SLC [Concept | Design | Slice]
 
 ## One-Sentence Idea
 
-## Target User / Job
+## Mode, Audience, And Job
 
-## Mode
+## Narrow Promise
 
-Product/tool concept, design/architecture spec, or implementation slice.
+### Simple
 
-## Simple
+### Source(s) Of Love
+What creates value or affinity, and why it matters to this audience.
 
-## Lovable
+### Complete
 
-## Complete
-
-## First Slice
+## Boundary
 
 ### Must Have
 
@@ -96,54 +125,44 @@ Product/tool concept, design/architecture spec, or implementation slice.
 
 ### Out Of Scope
 
-## Why Users Would Love It
+## Key Risks / Assumptions / Open Questions
 
-## Chosen Form Of Love
-
-## Key Risks / Assumptions
-
-## Validation Plan
+## Validation Evidence
+Method, evidence sought, and continue/revise/stop threshold.
 
 ## Next Task Recommendation
+Only when useful; include acceptance criteria.
 ```
 
-9. If the concept creates durable project knowledge, save or summarize it in the relevant project `library/` or task directory.
-10. If implementation should follow, recommend the smallest next task with acceptance criteria.
+## Final Check
 
-## Outputs
+Before returning the artifact, verify:
 
-- a concise SLC concept artifact
-- explicit first-slice must-have/later/out-of-scope boundaries
-- clear reason users would love the narrow slice
-- risk/assumption list
-- validation plan
-- recommended next task, when appropriate
+- the selected mode's Simple, Lovable, Complete, audience, and validation meanings were applied;
+- the narrow promise remains useful if no v2 ships;
+- every material request item appears in Must Have, Later, Out of Scope, or an explicit open question;
+- the source(s) of love and why they matter appear in one authoritative section;
+- validation seeks evidence rather than merely naming an activity;
+- unresolved Operator decisions were not invented;
+- the artifact stayed proportionate to a lightweight shaping workflow.
 
-## Stop Conditions
+## Pitfalls
 
-- the first slice is small, lovable, and complete as an end-to-end experience, design decision, or implementation change
-- the concept explains why users would choose or enjoy it despite narrow scope
-- excluded complexity is explicit
-- the next validation or implementation step is clear
-- unresolved Operator decisions are listed as questions rather than guessed
+- calling an incomplete feature fragment SLC
+- removing the source of love to make the slice smaller
+- using polish to disguise an incomplete core workflow or unresolved design
+- treating design approval alone as customer evidence, or tests alone as evidence of customer value
+- turning the artifact into a heavyweight requirements or architecture process
+- depending on private or unavailable references
 
-## Pitfalls / Anti-Patterns
+## Reference
 
-- calling an incomplete feature fragment “SLC”
-- making the slice simple by removing the part that makes it lovable
-- making it lovable with polish while the core workflow remains incomplete
-- turning the skill into a heavyweight PRD process
-- confusing a broad architecture vision with a complete narrow design slice
-- depending on private/local reference files that future agents cannot access
+- [SLC: Simple, Lovable, Complete](https://longform.asmartbear.com/slc/)
 
-## References
-
-- Original article: [SLC: Simple, Lovable, Complete](https://longform.asmartbear.com/slc/)
-
-The skill should remain usable without external access.
+This skill remains usable without external access.
 
 ## Related Files / Tools
 
-- task `TASK.md`, `HANDOFF.md`, `CONTEXT.md` when concept work happens inside a task
-- project `library/` files when the concept becomes durable project knowledge
-- `framework/SKILLS/next-best-actions/SKILL.md` for choosing follow-up work
+- task `TASK.md`, `HANDOFF.md`, and `CONTEXT.md` for task-scoped work
+- project `library/` for durable project knowledge
+- `framework/SKILLS/next-best-actions/SKILL.md` when follow-up prioritization is needed
