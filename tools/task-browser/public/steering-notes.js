@@ -3,7 +3,8 @@ export function isSteeringNotesInput(name) {
 }
 
 export function steeringDisclosureOpen({ preference, pending, dirty }) {
-  return preference === undefined ? Boolean(pending || dirty) : Boolean(preference || dirty);
+  if (!pending && !dirty) return false;
+  return preference === undefined ? true : Boolean(preference || dirty);
 }
 
 export function syncSteeringDraft(drafts, task) {
