@@ -19,6 +19,14 @@ async function fixture() {
   return { root, metadataPath, historyPath };
 }
 
+async function addTask(ctx, slug, metadata) {
+  const taskDir = join(ctx.root, 'projects', 'demo', 'work', slug);
+  await mkdir(join(taskDir, 'runs'), { recursive: true });
+  await writeFile(join(taskDir, 'TASK.md'), `# ${slug}\n\n## Purpose\nSummary fixture.\n`);
+  await writeFile(join(taskDir, 'HANDOFF.md'), '# Handoff\n\n## Next Action\nContinue.\n');
+  await writeFile(join(taskDir, 'CONTEXT.md'), '# Context\n');
+  return [`demo/${slug}`, { displayId: metadata.displayId, project: 'demo', slug, path: `projects/demo/work/${slug}`, type: 'implementation', ...metadata }];
+}
 
 async function withServer(ctx, run) {
   const server = createServer(createTaskBrowserHandler({ workspaceRoot: ctx.root, metadataPath: ctx.metadataPath, historyPath: ctx.historyPath }));
@@ -75,6 +83,32 @@ test('Steering Notes API rejects unknown, traversal-like, invalid, and oversized
   });
 });
 
+test('summary groups, filters, and deterministically orders actionable next actors', async () => {
+  const ctx = await fixture();
+  const entries = [
+    await addTask(ctx, 'operator-blocked', { displayId: '#2', status: 'blocked', priority: 'normal', nextActor: 'operator', order: 9 }),
+    await addTask(ctx, 'operator-review', { displayId: '#3', status: 'review', priority: 'urgent', nextActor: 'operator', order: 2 }),
+    await addTask(ctx, 'operator-planned', { displayId: '#4', status: 'planned', priority: 'high', nextActor: 'operator', order: 1 }),
+    await addTask(ctx, 'agent-active', { displayId: '#5', status: 'active', priority: 'normal', nextActor: 'agent' }),
+    await addTask(ctx, 'stale-paused', { displayId: '#6', status: 'paused', priority: 'urgent', nextActor: 'operator' }),
+    await addTask(ctx, 'stale-done', { displayId: '#7', status: 'done', priority: 'urgent', nextActor: 'agent' }),
+    await addTask(ctx, 'unknown-actor', { displayId: '#8', status: 'active', priority: 'urgent', nextActor: 'builder' }),
+  ];
+  const stored = JSON.parse(await readFile(ctx.metadataPath, 'utf8'));
+  stored.nextDisplayNumber = 9;
+  for (const [key, metadata] of entries) stored.tasks[key] = metadata;
+  await writeFile(ctx.metadataPath, `${JSON.stringify(stored)}\n`);
+
+  await withServer(ctx, async (base) => {
+    const summary = await (await fetch(`${base}/api/summary`)).json();
+    assert.deepEqual(summary.nextActors.counts, { operator: 3, agent: 1 });
+    assert.deepEqual(summary.nextActors.operatorTasks.map((task) => task.key), [
+      'demo/operator-blocked',
+      'demo/operator-review',
+      'demo/operator-planned',
+    ]);
+  });
+});
 
 test('browser API persists and clears nextActor, rejects invalid values, and skips no-op history', async () => {
   const ctx = await fixture();

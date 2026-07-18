@@ -128,7 +128,17 @@ function addWidget(type) {
 function renderDashboard() {
   const layout = state.editing ? state.editLayout : state.layout;
   dashboardEl.innerHTML = layout.map(renderWidget).join('') + (state.editing ? renderAddCard(layout) : '');
+  requestAnimationFrame(updateOverflowTooltips);
 }
+
+function updateOverflowTooltips() {
+  for (const title of dashboardEl.querySelectorAll('.task-list strong[data-full-title]')) {
+    if (title.scrollWidth > title.clientWidth) title.title = title.dataset.fullTitle;
+    else title.removeAttribute('title');
+  }
+}
+
+window.addEventListener('resize', updateOverflowTooltips);
 
 function renderWidget(widget, index) {
   const content = renderWidgetContent(widget.type);
@@ -171,8 +181,26 @@ function renderTaskCounts(summary) {
 }
 
 function renderPriorityTasks(summary) {
-  const tasks = summary.topPriorityTasks || [];
-  return `<p class="kicker">recovery queue</p><h3>Needs attention</h3>${tasks.length ? `<ol class="task-list">${tasks.map((task) => `<li><a href="${escapeHtml(taskUrl({ selectTask: task.key }))}"><strong>${escapeHtml(task.title)}</strong><span>${escapeHtml(task.status)} · ${escapeHtml(task.priority)}</span></a></li>`).join('')}</ol>` : '<p class="empty">No active, blocked, or review tasks found.</p>'}`;
+  const nextActors = summary?.nextActors || {};
+  const counts = nextActors.counts || {};
+  const operatorCount = counts.operator || 0;
+  const agentCount = counts.agent || 0;
+  const tasks = Array.isArray(nextActors.operatorTasks) ? nextActors.operatorTasks : [];
+  const operatorSummary = operatorCount
+    ? `<div class="attention-count"><div><strong>${operatorCount}</strong>${actorIcon('operator')}</div><span>${operatorCount === 1 ? 'task needs you' : 'tasks need you'}</span></div>`
+    : `<div class="attention-count calm"><div><strong>0</strong>${actorIcon('operator')}</div><span>No tasks need you</span></div>`;
+  const taskList = tasks.length
+    ? `<ol class="task-list">${tasks.map((task) => `<li><a href="${escapeHtml(taskUrl({ selectTask: task.key }))}"><strong data-full-title="${escapeHtml(task.title)}">${escapeHtml(task.title)}</strong><span>${escapeHtml(task.status)} · ${escapeHtml(task.priority)}</span></a></li>`).join('')}</ol>`
+    : '<p class="empty attention-empty">You are clear for now.</p>';
+  return `<p class="kicker">operator attention</p><h3>Needs attention</h3><div class="attention-layout"><div>${operatorSummary}<p class="agent-ready">${actorIcon('agent')}<span><strong>${agentCount}</strong> ready for Agent</span></p></div>${taskList}</div>`;
+}
+
+function actorIcon(actor) {
+  const label = actor === 'operator' ? 'Operator' : 'Agent';
+  const icon = actor === 'operator'
+    ? '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5" r="2.5"/><path d="M3.5 14c.2-3 1.7-4.5 4.5-4.5s4.3 1.5 4.5 4.5z"/></svg>'
+    : '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="4" width="10" height="8" rx="2"/><path d="M8 1.5V4M1.5 7.5H3m10 0h1.5M6 10.25h4"/><circle cx="6" cy="7.5" r=".8"/><circle cx="10" cy="7.5" r=".8"/></svg>';
+  return `<span class="actor-icon ${actor}" role="img" aria-label="${label}" title="${label}">${icon}</span>`;
 }
 
 function renderSession(title, session) {

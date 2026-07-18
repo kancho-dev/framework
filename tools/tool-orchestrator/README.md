@@ -23,7 +23,9 @@ Mounted tools:
 
 ## Cockpit Widget Dashboard
 
-The Cockpit home surface is a local-first widget dashboard. It ships a default layout without writing workspace files. The first dashboard customization writes selected-workspace config to:
+The Cockpit home surface is a local-first widget dashboard. It ships a default layout without writing workspace files. Its wide `Needs attention` widget leads with the selected-workspace Operator count and up to three linked Operator tasks, with the Agent-ready count as secondary context. A calm zero state means no actionable task currently names the Operator; Task Browser owns inclusion and ordering through its summary API.
+
+The first dashboard customization writes selected-workspace config to:
 
 ```text
 $WORKSPACE_ROOT/.tools-config/tool-orchestrator/dashboard.json

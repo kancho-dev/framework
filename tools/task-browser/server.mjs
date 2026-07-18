@@ -236,7 +236,22 @@ function taskDashboardSummary(discovered, metadata) {
   }) : null;
   const topPriorityTasks = sortedAttentionTasks.slice(0, 3).map(compactTask);
   const topTasksByStatus = Object.fromEntries(['active', 'blocked', 'review'].map((status) => [status, compactTask(sortedAttentionTasks.find((task) => task.metadata.status === status))]));
-  return { counts, topPriorityTasks, topTasksByStatus };
+  const actionableStatuses = new Set(['planned', 'active', 'blocked', 'review']);
+  const nextActorTasks = tasks
+    .filter((task) => actionableStatuses.has(task.metadata.status) && ['operator', 'agent'].includes(task.metadata.nextActor))
+    .sort((a, b) => (statusRank[a.metadata.status] ?? 3) - (statusRank[b.metadata.status] ?? 3)
+      || ((priorityRank[a.metadata.priority] ?? 4) - (priorityRank[b.metadata.priority] ?? 4))
+      || ((a.metadata.order ?? Number.MAX_SAFE_INTEGER) - (b.metadata.order ?? Number.MAX_SAFE_INTEGER))
+      || (a.index - b.index)
+      || a.title.localeCompare(b.title)
+      || a.key.localeCompare(b.key));
+  const nextActorCounts = { operator: 0, agent: 0 };
+  for (const task of nextActorTasks) nextActorCounts[task.metadata.nextActor] += 1;
+  const nextActors = {
+    counts: nextActorCounts,
+    operatorTasks: nextActorTasks.filter((task) => task.metadata.nextActor === 'operator').slice(0, 3).map(compactTask),
+  };
+  return { counts, topPriorityTasks, topTasksByStatus, nextActors };
 }
 
 async function taskSummaryPayload(ctx) {

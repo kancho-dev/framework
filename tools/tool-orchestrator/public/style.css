@@ -143,9 +143,26 @@ button:hover, .button:hover, .ghost:hover { transform: translateY(-1px); border-
 .count.disabled { opacity: .55; cursor: default; pointer-events: none; }
 .count strong { display: block; font-size: 34px; line-height: 1; }
 .count span, .mini-tool small { display: block; color: var(--muted); font-size: 12px; margin-top: 6px; }
-.task-list { display: grid; gap: 10px; margin: 16px 0 0; padding: 0; list-style: none; }
-.task-list a { display: flex; justify-content: space-between; gap: 14px; border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; color: var(--text); background: rgb(255 255 255 / 0.04); text-decoration: none; transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease; }
-.task-list span { color: var(--muted); white-space: nowrap; }
+.task-list { display: grid; gap: 10px; min-width: 0; margin: 16px 0 0; padding: 0; list-style: none; }
+.task-list li { min-width: 0; }
+.task-list a { display: flex; justify-content: space-between; gap: 14px; width: 100%; min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; color: var(--text); background: rgb(255 255 255 / 0.04); text-decoration: none; transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease; }
+.task-list strong { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-list span { flex: 0 0 auto; color: var(--muted); white-space: nowrap; }
+.attention-layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 22px; align-items: start; min-width: 0; margin-top: 14px; }
+.attention-layout > * { min-width: 0; }
+.attention-layout .task-list { margin-top: 0; }
+.attention-count > div { display: grid; grid-template-columns: auto 28px; align-items: end; justify-content: start; gap: 9px; }
+.attention-count > div > strong { color: var(--gold); font-size: 66px; line-height: .85; letter-spacing: -.07em; }
+.attention-count > span { display: block; margin-top: 9px; color: #dbe5f4; font-weight: 750; }
+.attention-count.calm > div > strong { color: var(--good); }
+.actor-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid rgb(242 204 96 / .4); border-radius: 8px; color: var(--gold); background: rgb(242 204 96 / .08); }
+.actor-icon.agent { color: var(--good); border-color: rgb(126 231 135 / .4); background: rgb(126 231 135 / .08); }
+.actor-icon svg { width: 15px; height: 15px; fill: currentColor; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.actor-icon.operator svg path { stroke: none; }
+.actor-icon.agent svg rect, .actor-icon.agent svg path { fill: none; }
+.agent-ready { display: flex; align-items: center; gap: 7px; margin: 15px 0 0; font-size: 12px; }
+.agent-ready strong { color: var(--good); }
+.attention-empty { align-self: center; margin: 0; }
 .tools-widget { display: grid; grid-template-columns: minmax(0, calc((var(--tool-count, 1) * 176px) + ((var(--tool-count, 1) - 1) * 12px))) minmax(180px, 260px); gap: 18px; align-items: center; }
 .mini-tools { display: grid; grid-template-columns: repeat(auto-fit, 164px); gap: 12px; margin-top: 16px; justify-content: start; }
 .mini-tool { display: grid; gap: 8px; align-content: center; width: 164px; min-height: 112px; }
@@ -207,4 +224,5 @@ h3 { margin: 0; font-size: 24px; letter-spacing: -0.035em; }
   .widget-orbit { order: -1; }
   .widget.wide { grid-column: span 1; }
   .task-list a { flex-direction: column; }
+  .attention-layout { grid-template-columns: minmax(0, 1fr); }
 }
