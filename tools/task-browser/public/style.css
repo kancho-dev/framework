@@ -52,7 +52,7 @@ h1,h2,h3,p { margin:0; } h1{font-size:20px; display:flex; align-items:center; ga
 .card-top { display:flex; justify-content:space-between; align-items:center; gap:8px; color:var(--muted); font-size:11px; margin-bottom:6px; }
 .card-identity { display:inline-flex; align-items:center; gap:5px; min-width:0; }
 .display-id { color:var(--bg); background:var(--accent); border-radius:999px; padding:1px 7px; font-weight:700; }
-.next-actor-badge { position:relative; display:inline-flex; align-items:center; justify-content:center; flex:0 0 20px; width:20px; height:20px; border:1px solid rgba(156,220,254,.34); border-radius:7px; color:var(--accent); background:rgba(156,220,254,.08); }
+.next-actor-badge { position:relative; display:inline-flex; align-items:center; justify-content:center; flex:0 0 20px; width:20px; height:20px; border:1px solid rgba(126,231,135,.4); border-radius:7px; color:var(--success); background:rgba(126,231,135,.08); }
 .next-actor-badge.operator { color:var(--warning); border-color:rgba(242,204,96,.4); background:rgba(242,204,96,.08); }
 .next-actor-badge svg { width:13px; height:13px; fill:currentColor; stroke:currentColor; stroke-width:1.3; stroke-linecap:round; stroke-linejoin:round; }
 .next-actor-badge.operator svg path { stroke:none; }
@@ -70,7 +70,8 @@ h1,h2,h3,p { margin:0; } h1{font-size:20px; display:flex; align-items:center; ga
 .next-actor-editor.operator { border-color:rgba(242,204,96,.4); background:rgba(242,204,96,.08); }
 .next-actor-editor .next-actor-editor-icon svg { width:13px; height:13px; margin:3px auto; fill:currentColor; stroke:currentColor; stroke-width:1.3; stroke-linecap:round; stroke-linejoin:round; }
 .next-actor-editor.operator .next-actor-editor-icon { color:var(--warning); }
-.next-actor-editor.agent .next-actor-editor-icon { color:var(--accent); }
+.next-actor-editor.agent { border-color:rgba(126,231,135,.4); background:rgba(126,231,135,.08); }
+.next-actor-editor.agent .next-actor-editor-icon { color:var(--success); }
 .next-actor-editor.operator svg path { stroke:none; }
 .next-actor-editor.agent svg rect,.next-actor-editor.agent svg path { fill:none; }
 .meta-pill.status.active { border-color:rgba(126,231,135,.45); background:rgba(126,231,135,.08); }
