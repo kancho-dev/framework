@@ -1,77 +1,59 @@
 ---
 name: task-pickup
-description: "Resume an existing task cleanly by recovering current state, selecting the next bounded step, and preparing a clear handoff for the following run."
+description: "Pick up an existing tracked task by recovering its authoritative state and choosing one bounded next action."
 ---
 
 # Skill: Task Pickup
 
-## Purpose
+## Outcome
 
-Resume an existing tracked task cleanly by recovering current state, selecting the next bounded step, and preparing a clear handoff for the following run.
+Recover a tracked task without guessing, then complete or hand off one bounded action.
 
-## When To Use
+## Entry Contract
 
-- continuing work under `projects/[name]/work/[task-slug]/`
-- delegated implementation sessions
-- resuming work after interruption or context loss
+`FRAMEWORK.md` selects the primary role before this skill runs. Confirm that exactly one selected role is loaded; if not, stop and resolve the role through the framework bootstrap before reading any role file.
 
-## Recommended Roles
+Use the selected role throughout pickup:
 
-- Builder
-- Historian
-- Oracle, when the task is review-focused
+- **Builder:** choose an implementation or bounded documentation slice.
+- **Oracle:** choose an independent review against the task contract and recorded evidence.
+- **Historian or Overseer:** choose only the coordination action permitted by that role.
 
-## Required Inputs
+Role selection remains owned by `FRAMEWORK.md`; task structure, Steering Notes semantics, review rules, and the `nextActor` matrix remain owned by `TASKS.md`.
 
-- `TASK.md`
-- `HANDOFF.md`
-- `CONTEXT.md`
-- relevant project files
-- optional `NOTES.md` if the task flow adopts it
-- existing files under `runs/` when recent run evidence matters
+## Pickup Sequence
 
-## Steps
+1. **Recover the contract.** Read `TASK.md`, `HANDOFF.md`, and `CONTEXT.md`. Check task-local `NOTES.md` exactly once at task-run start: missing or whitespace-only means no payload; when non-empty, capture it successfully, immediately delete the file, and apply the payload once within the durable task contract. Record a conflict and seek clarification before conflicting work. Read recent `runs/` evidence only when the handoff or selected action depends on it.
+   - Complete when scope, current state, constraints, and the one-time Steering Notes result are known.
+2. **Align pickup state.** When the workspace uses Task Browser, set the task to `active` unless its real state is already `blocked` or `review`. Compare metadata with `HANDOFF.md`; resolve discrepancies from task markdown and use the `TASKS.md` matrix to set or clear `nextActor` independently of status.
+   - Complete when metadata reflects the real lifecycle state and responsible next actor, or Task Browser is not in use.
+3. **Choose one bounded action.** Classify the task's current branch, then choose the highest-priority unfinished action allowed by the selected role:
 
-1. Read `TASK.md` to confirm the task scope and success criteria.
-2. Read `HANDOFF.md` for current operational state.
-3. Read `CONTEXT.md` for stable task facts.
-4. Check task-local `NOTES.md` exactly once. If it contains non-whitespace Steering Notes, read and capture the payload successfully, immediately delete `NOTES.md`, and act on it once. Do not poll; later notes belong to the following Task Run. If it conflicts with security guidance or the durable task contract, record the conflict and request clarification before conflicting work.
-5. Read only the project files needed for the next likely step.
-6. Identify the highest-priority unfinished in-scope action.
-7. Complete one bounded slice rather than partially touching multiple areas.
-8. Before ending, update `HANDOFF.md` with current state, what changed, and the next action.
-9. If the workspace uses task-browser metadata, align it with the real state using `framework/tools/task-browser/metadata-cli.mjs`: set the picked-up task to `active`, `blocked`, or `review` as appropriate; compare `nextActor` with `HANDOFF.md`'s `Next Action` on pickup and before ending, then set or clear it using the authoritative matrix in `framework/TASKS.md`. Do not derive it from status. In framework versions with task-browser action history, pass real provenance such as `--role Builder`, `--session-tool pi`, or `--session-id ...` when useful and available; leave provenance unset rather than inventing it.
-10. Move any newly discovered stable facts into `CONTEXT.md` or project library files as appropriate.
-11. Write a run log with exactly one `Steering Notes: none` or `Steering Notes: consumed` field; do not reproduce the transient payload verbatim by default.
+   | Current branch | Bounded action |
+   | --- | --- |
+   | New or newly initialized task | Establish the first concrete deliverable from `TASK.md`. |
+   | Resumed task | Continue the explicit `HANDOFF.md` next action, unless newer durable state makes it stale. |
+   | Review handoff | As Oracle, independently verify the submitted slice; as another role, prepare the review handoff rather than performing the review. |
+   | Operator-blocked | Record the exact decision or input needed and stop without speculative implementation. |
 
-## Outputs
+   Read only project files required for that action. Escalate when scope, risk, or acceptance criteria remain ambiguous.
+   - Complete when one action has a named deliverable and a checkable finish condition.
+4. **Execute and verify.** Complete only the selected action and run the smallest checks that establish its finish condition. Put newly discovered stable facts in `CONTEXT.md` or project knowledge only when they must survive the run.
+   - Complete when the deliverable is verified or a concrete blocker is evidenced.
+5. **Leave a resumable handoff.** Replace transient buildup in `HANDOFF.md` with current state, the next action, and blockers or watch-outs. Write an append-only run log with exactly one `Steering Notes: none` or `Steering Notes: consumed` field. Align Task Browser status and `nextActor` again; use `review` with Agent next for Oracle handoff, `active` with Agent next after an Oracle bounce, and the authoritative `TASKS.md` matrix for every other case.
+   - Complete when task markdown, run evidence, and optional metadata agree and the next run can proceed without guessing.
 
-- one completed bounded task slice or a clearly documented blocker
-- updated task handoff
-- updated stable task facts when needed
-- task-browser metadata aligned when the workspace uses task-browser
-- a run log entry
+## Pickup Complete When
 
-## Stop Conditions
+- exactly one framework-selected primary role governed the run;
+- `TASK.md`, `HANDOFF.md`, and `CONTEXT.md` were read;
+- `NOTES.md` was checked exactly once and its result is recorded once in the run log;
+- Task Browser status and `nextActor` match the handoff when that tool is in use;
+- one role-appropriate bounded action was completed or concretely blocked;
+- verification evidence and the next action are durable in task files.
 
-- the current slice is complete or a real blocker is documented
-- the next run can continue from files without guessing
+## Companion Routing
 
-## Pitfalls / Anti-Patterns
-
-- skipping `HANDOFF.md`
-- letting `HANDOFF.md` become historical buildup instead of current operational state
-- putting temporary status in `CONTEXT.md`
-- changing scope without updating task state
-- leaving task-browser metadata stale in workspaces that use the task-browser board
-- leaving partial work without recording what remains
-- reading too much irrelevant project code before choosing a step
-
-## Related Files / Tools
-
-- `framework/TASKS.md`
-- `projects/[name]/work/[task-slug]/TASK.md`
-- `projects/[name]/work/[task-slug]/HANDOFF.md`
-- `projects/[name]/work/[task-slug]/CONTEXT.md`
-- `projects/[name]/work/[task-slug]/runs/`
-- `framework/tools/task-browser/metadata-cli.mjs` when task-browser metadata is used
+- Use `review-and-test` when the selected action needs a broader test plan; Oracle independence still requires a separate task run.
+- Use `task-closure` only after acceptance or an explicit pause/closure decision.
+- Consult `TASKS.md` for task-file semantics, Steering Notes conflicts, review verdicts, and the authoritative `nextActor` matrix.
