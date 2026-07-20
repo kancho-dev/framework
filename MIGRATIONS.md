@@ -6,6 +6,29 @@ These notes are version-specific checks, not a permanent setup checklist. Apply 
 
 For the update procedure, use `framework/SKILLS/update-framework/SKILL.md`.
 
+## v0.18.0 — Select Roles Before Loading Role Guidance
+
+This release changes session bootstrap so explicit Operator or workflow role intent is resolved before any role file loads. Existing workspaces whose root agent instructions still require `framework/ROLES/OVERSEER.md` for every main session would otherwise keep loading unnecessary Overseer guidance in explicit Builder, Oracle, or Historian sessions.
+
+### Required checks
+
+1. Merge the updated read-order guidance from `framework/TEMPLATES/WORKSPACE/AGENTS.md` into the workspace root `AGENTS.md`; do not overwrite workspace-specific rules.
+2. Remove any unconditional instruction to read `framework/ROLES/OVERSEER.md` at session startup.
+3. Make root guidance defer to the authoritative role-selection rule in `framework/FRAMEWORK.md`: read framework and security guidance, select the role, then read only the selected role file.
+4. Check mirrored or tool-specific agent entrypoints such as `CLAUDE.md`, native rules files, copied prompts, and workspace-local workflow instructions. Align any entrypoint that still forces Overseer or loads multiple role files.
+5. Verify these local paths after merging:
+   - explicit Builder, Oracle, and Historian sessions load only their selected role file;
+   - a session with no explicit or applicable workflow role falls back to Overseer;
+   - ambiguous multi-role wording asks for resolution before loading role guidance;
+   - task sessions still read task files and check task-local `NOTES.md` exactly once.
+6. Update `framework/CURRENT_VERSION` only after these checks pass.
+
+### Not required
+
+- Do not replace the entire root `AGENTS.md` with the template or remove workspace-specific security, project, state, or tool guidance.
+- Do not add role-selection algorithms to every prompt; prompts and local workflows should declare a role and let `framework/FRAMEWORK.md` perform selection.
+- Existing task directories and role files need no structural migration.
+
 ## v0.14.0 — Default Private Tools Config Directory
 
 This release moves optional browser-tool private metadata/config defaults into workspace-local `.tools-config/` paths:

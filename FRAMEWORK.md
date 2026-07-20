@@ -30,32 +30,40 @@ Run = Base + Role + Skills + Context
 
 ## Read Order
 
-### Main session
+Start every framework-managed session with this common sequence:
 
-1. `framework/FRAMEWORK.md`
-2. `framework/SECURITY.md`
-3. `framework/ROLES/OVERSEER.md`
-4. `ACTIVE-CONTEXT.md`
-5. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise the latest daily brief under `memory/` if any exist
-6. relevant project `library/` files when making project decisions
-7. selected reference docs only when needed:
-   - `framework/WORKSPACE.md` for workspace/project layout and state files
-   - `framework/TASKS.md` for task structure, review loops, and task closure
-   - `framework/SKILLS.md` for skill resolution rules
-8. selected skills only when relevant
-9. optional memory retrieval only when markdown files leave a specific context gap
+1. read `framework/FRAMEWORK.md`;
+2. read `framework/SECURITY.md`;
+3. select one primary role before reading any file under `framework/ROLES/`:
+   1. use the role explicitly named by the Operator or invoking workflow;
+   2. otherwise use the role declared by the applicable workflow or task guidance;
+   3. otherwise fall back to Overseer for an unclassified top-level session;
+4. read only the selected role file.
 
-### Task session
+If explicit or applicable guidance names multiple roles without choosing one, resolve the ambiguity with the Operator before loading role guidance. Read a different role file later only for an explicit, justified role transition, and record that transition in task or workspace state when the run is meaningful.
 
-1. `framework/FRAMEWORK.md`
-2. `framework/SECURITY.md`
-3. the role file for the run under `framework/ROLES/`
-4. task files under `projects/[name]/work/[task-slug]/`
-   - check task-local `NOTES.md` exactly once when task work starts;
-   - if it contains non-whitespace Steering Notes, read the payload successfully, immediately delete `NOTES.md`, and act on the captured payload once;
-   - do not poll during the run; notes saved afterward belong to the following Task Run.
-5. relevant project `library/` files
-6. selected reference docs, skills, and optional memory only when needed
+Then continue with the applicable branch.
+
+### Main-session branch
+
+1. Read `ACTIVE-CONTEXT.md`.
+2. Read today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief under `memory/`, if any.
+3. Read relevant project `library/` files when making project decisions.
+4. Load selected reference docs only when needed:
+   - `framework/WORKSPACE.md` for workspace/project layout and state files;
+   - `framework/TASKS.md` for task structure, review loops, and task closure;
+   - `framework/SKILLS.md` for skill resolution rules.
+5. Load selected skills only when relevant.
+6. Use optional memory retrieval only when markdown files leave a specific context gap.
+
+### Task-session branch
+
+1. Read task files under `projects/[name]/work/[task-slug]/`.
+   - Check task-local `NOTES.md` exactly once when task work starts.
+   - If it contains non-whitespace Steering Notes, read and capture the payload successfully, immediately delete `NOTES.md`, and act on it once.
+   - Do not poll during the run; notes saved afterward belong to the following Task Run.
+2. Read relevant project `library/` files.
+3. Load selected reference docs, skills, and optional memory only when needed.
 
 ### Implementation work
 
@@ -74,7 +82,7 @@ Default roles:
 - `framework/ROLES/ORACLE.md` — review and verification.
 - `framework/ROLES/HISTORIAN.md` — documentation and state hygiene.
 
-The default top-level session role is Overseer.
+Overseer is the fallback only when the role-selection rule above finds no explicit or applicable workflow role.
 
 ## Skills
 

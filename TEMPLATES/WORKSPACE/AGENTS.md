@@ -4,15 +4,9 @@ Operate from the workspace root.
 
 ## Required Read Order
 
-At the start of a main session, read:
-1. `framework/FRAMEWORK.md`
-2. `framework/SECURITY.md`
-3. `framework/ROLES/OVERSEER.md`
-4. `ACTIVE-CONTEXT.md`
-5. today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief file present under `memory/` if any exist
-   - If today's brief does not exist and you later create it, carry forward only important unfinished items from the latest previous brief into a short top section before adding normal entries.
+Read `framework/FRAMEWORK.md` first, then follow its authoritative role-selection rule and applicable session branch.
 
-Before code or documentation implementation changes, also read `framework/ENGINEERING.md`.
+Workspace-specific addition: if today's daily brief does not exist and you later create it, carry forward only important unfinished items from the latest previous brief into a short top section before adding normal entries.
 
 Load skills only when they are relevant to the current run. Check relevant skill indexes before improvising when the prompt names a skill-like workflow, asks to "check skills", or describes a repeatable framework procedure. Use local-capability precedence: project-local skills/commands/instructions, then workspace-custom skills under root `SKILLS/`, then framework skills under `framework/SKILLS/`. See `framework/SKILLS.md` for details.
 
