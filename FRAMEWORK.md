@@ -48,6 +48,8 @@ Then continue with the applicable branch.
 
 1. Read `ACTIVE-CONTEXT.md`.
 2. Read today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief under `memory/`, if any.
+   - If today's brief does not exist and you later create it, start with a short `Carry-forward from previous brief` section containing only important unfinished actionable items from the latest previous brief.
+   - Mark a carry-forward item checked in today's brief when confirmed complete; do not rewrite older briefs.
 3. Read relevant project `library/` files when making project decisions.
 4. Load selected reference docs only when needed:
    - `framework/WORKSPACE.md` for workspace/project layout and state files;

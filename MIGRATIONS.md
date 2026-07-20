@@ -6,28 +6,39 @@ These notes are version-specific checks, not a permanent setup checklist. Apply 
 
 For the update procedure, use `framework/SKILLS/update-framework/SKILL.md`.
 
-## v0.18.0 — Select Roles Before Loading Role Guidance
+## v0.18.0 — Role Bootstrap And Workspace Instruction Boundary
 
-This release changes session bootstrap so explicit Operator or workflow role intent is resolved before any role file loads. Existing workspaces whose root agent instructions still require `framework/ROLES/OVERSEER.md` for every main session would otherwise keep loading unnecessary Overseer guidance in explicit Builder, Oracle, or Historian sessions.
+This release makes `framework/FRAMEWORK.md` authoritative for universal session procedure. It selects explicit Operator or workflow role intent before any role file loads and reduces the workspace `AGENTS.md` template to bootstrap plus genuine workspace configuration and boundaries. Existing workspaces must merge this boundary into their agent instructions to receive the footprint reduction.
 
 ### Required checks
 
-1. Merge the updated read-order guidance from `framework/TEMPLATES/WORKSPACE/AGENTS.md` into the workspace root `AGENTS.md`; do not overwrite workspace-specific rules.
-2. Remove any unconditional instruction to read `framework/ROLES/OVERSEER.md` at session startup.
-3. Make root guidance defer to the authoritative role-selection rule in `framework/FRAMEWORK.md`: read framework and security guidance, select the role, then read only the selected role file.
-4. Check mirrored or tool-specific agent entrypoints such as `CLAUDE.md`, native rules files, copied prompts, and workspace-local workflow instructions. Align any entrypoint that still forces Overseer or loads multiple role files.
-5. Verify these local paths after merging:
+1. Compare the workspace root `AGENTS.md` with `framework/TEMPLATES/WORKSPACE/AGENTS.md`; merge deliberately and preserve all workspace-specific security, project, repository, tool, and exception rules.
+2. Keep one bootstrap pointer: read `framework/FRAMEWORK.md` first and follow its role-selection rule and applicable session branch.
+3. Remove any unconditional instruction to read `framework/ROLES/OVERSEER.md`. Explicit Builder, Oracle, or Historian invocations must load only their selected role; Overseer remains the unclassified fallback.
+4. Remove local copies of universal framework procedure when they do not add a real workspace exception, including repeated:
+   - framework/security/role/session read orders;
+   - skill discovery and precedence rules;
+   - task-file read order and Steering Notes procedure;
+   - standard state-placement rules for active context, fixes, project libraries, and task handoffs;
+   - daily-brief timestamp, append, overwrite-safety, and carry-forward procedure;
+   - conditional Task Browser metadata procedure.
+5. Keep or add genuine workspace configuration, including local source/edit boundaries, `OPERATOR-NOTES.md` usage when enabled, optional-capability configuration, project focus, and local exceptions.
+6. Check mirrored or tool-specific entrypoints such as `CLAUDE.md`, native rules files, copied prompts, and workspace-local workflow instructions. Apply the same ownership boundary without deleting tool-specific or local guidance.
+7. Verify the merged workspace instructions:
    - explicit Builder, Oracle, and Historian sessions load only their selected role file;
    - a session with no explicit or applicable workflow role falls back to Overseer;
    - ambiguous multi-role wording asks for resolution before loading role guidance;
-   - task sessions still read task files and check task-local `NOTES.md` exactly once.
-6. Update `framework/CURRENT_VERSION` only after these checks pass.
+   - task sessions still read task files and check task-local `NOTES.md` exactly once;
+   - relevant skills still resolve through local-capability precedence;
+   - meaningful work still updates the correct state and daily brief;
+   - creating a daily brief carries forward only important unfinished actionable items and never rewrites an older brief.
+8. Update `framework/CURRENT_VERSION` only after these checks pass.
 
 ### Not required
 
-- Do not replace the entire root `AGENTS.md` with the template or remove workspace-specific security, project, state, or tool guidance.
-- Do not add role-selection algorithms to every prompt; prompts and local workflows should declare a role and let `framework/FRAMEWORK.md` perform selection.
-- Existing task directories and role files need no structural migration.
+- Do not replace the entire root `AGENTS.md` with the template or remove workspace-specific guidance merely because it resembles a framework rule.
+- Do not add role-selection or other universal algorithms to every prompt; prompts and local workflows should declare intent and defer to `framework/FRAMEWORK.md`.
+- Existing task directories, role files, state files, and optional-tool metadata need no structural migration for this change.
 
 ## v0.14.0 — Default Private Tools Config Directory
 
