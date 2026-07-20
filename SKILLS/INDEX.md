@@ -8,7 +8,7 @@ For skill precedence, local/project/workspace skill rules, collision handling, a
 |---|---|---|
 | `next-best-actions` | Identify the highest-value next actions from current workspace or project state. | `framework/SKILLS/next-best-actions/SKILL.md` |
 | `slc-product-concept` | Shape a product, design, or implementation idea as Simple, Lovable, and Complete before planning execution. | `framework/SKILLS/slc-product-concept/SKILL.md` |
-| `create-workspace-skill` | Create a workspace-custom skill for a local workflow without changing the reusable framework. | `framework/SKILLS/create-workspace-skill/SKILL.md` |
+| `create-workspace-skill` | Assess, create, or update workspace-custom skills for repeated local workflows. | `framework/SKILLS/create-workspace-skill/SKILL.md` |
 | `task-pickup` | Resume an existing task from task files and choose the next bounded step. | `framework/SKILLS/task-pickup/SKILL.md` |
 | `task-closure` | Close or pause a task cleanly with updated task/project/workspace state. | `framework/SKILLS/task-closure/SKILL.md` |
 | `review-and-test` | Verify work against intended outcomes and acceptance criteria. | `framework/SKILLS/review-and-test/SKILL.md` |
