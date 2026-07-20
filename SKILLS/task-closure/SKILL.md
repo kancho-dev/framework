@@ -1,75 +1,53 @@
 ---
 name: task-closure
-description: "Close or pause a task cleanly by making sure its final state is reflected in task files, project knowledge, and shared workspace logs."
+description: "Reconcile a tracked task after acceptance, deliberate pause, concrete blockage, or wontfix decision."
 ---
 
 # Skill: Task Closure
 
-## Purpose
+## Outcome
 
-Close or pause a tracked task cleanly by making sure its final state is reflected in task files, project knowledge, and shared workspace logs.
+Reconcile one explicit task disposition across authoritative task state, evidence, durable knowledge, workspace state, and optional Task Browser metadata.
 
-## When To Use
+## Entry Contract
 
-- when a task is complete for its intended scope
-- when a task should be paused with a clean handoff
-- after a meaningful implementation or review slice that changes the task status
+`FRAMEWORK.md` selects the primary role before this skill runs. Confirm that exactly one selected role is loaded; if not, resolve the role through the framework bootstrap before reading another role file.
 
-## Recommended Roles
+Use `task-pickup` for implementation, review handoff, or an incomplete/bounced slice. Run closure only when the task has one evidenced disposition: accepted completion, deliberate pause, concrete blockage, or explicit wontfix. Task-file semantics, review independence, Steering Notes, and the `nextActor` matrix remain owned by `TASKS.md`.
 
-- Overseer
-- Historian
+## Reconciliation Sequence
 
-## Required Inputs
+1. **Prove the disposition.** Read `TASK.md`, `HANDOFF.md`, `CONTEXT.md`, and the run evidence needed to test the claimed outcome against scope and acceptance criteria. Classify exactly one branch:
 
-- `projects/[name]/work/[task-slug]/TASK.md`
-- `projects/[name]/work/[task-slug]/HANDOFF.md`
-- `projects/[name]/work/[task-slug]/CONTEXT.md`
-- relevant project library files
-- today's daily brief
+   | Branch | Required evidence | Lifecycle result |
+   | --- | --- | --- |
+   | Complete | Acceptance is recorded and the accepted scope has verification evidence. When Oracle review is required, an `approve` verdict is recorded. | `done` |
+   | Pause | An explicit deferral decision and a resumable condition or trigger are recorded. | `paused` |
+   | Blocked | A concrete unresolved blocker, its evidence, and the actor or external condition that can resolve it are recorded. | `blocked` |
+   | Wontfix | An explicit decision, rationale, and disposition of the intended scope are recorded. | `done` |
 
-## Steps
+   A bounced review, missing acceptance, failed check, partial slice, or vague blocker remains active and returns to `task-pickup`.
+   - Complete when one branch and all of its required evidence are named, or closure has stopped with the missing evidence identified.
+2. **Reconcile task truth.** Replace historical buildup in `HANDOFF.md` with the disposition, evidence summary, and only the next action or resume condition that still applies. Update `CONTEXT.md` only for stable facts. Write an append-only closure run log; preserve the run's required Steering Notes field rather than reconstructing it.
+   - Complete when task markdown states the same disposition, evidence, and actionable remainder without stale next steps.
+3. **Promote durable outcomes.** Update project `library/` files or `FIXES.md` only for knowledge that should outlive the task. Update `ACTIVE-CONTEXT.md` when the disposition changes shared priority, direction, or reported active state. Append a real timed entry to today's daily brief.
+   - Complete when every durable outcome has one authoritative home and the daily brief records this reconciliation.
+4. **Align optional metadata.** When Task Browser is in use, apply the lifecycle result from the branch table. Set `nextActor` independently from status using the `TASKS.md` matrix: clear it for done, paused, external/no-action states; set it only when a concrete Operator or Agent action can advance a blocker. Retain parent, child, and related links; keep `blockedBy` limited to existing concrete task blockers and clear resolved blockers. Pass only real provenance to the metadata CLI.
+   - Complete when metadata matches `HANDOFF.md`, relationship changes are accounted for, and a fresh metadata read shows no contradiction.
+5. **Audit the closure.** Re-read the compact handoff, run evidence, affected shared state, and metadata result. For a complete or wontfix branch, confirm no active next action survives; for pause, confirm the resume condition; for blocked, confirm the resolver and blocker.
+   - Complete when another session can reproduce why this disposition is valid without relying on chat.
 
-1. Confirm whether the task is complete, paused, blocked, or still active.
-2. Update `HANDOFF.md` so it reflects the real current state rather than historical buildup.
-3. Update `CONTEXT.md` only if stable task facts changed.
-4. Move durable findings into project `library/` files or `FIXES.md` when needed.
-5. Check whether the task status or outcome should be reflected in `ACTIVE-CONTEXT.md`.
-6. Verify that meaningful runs and outcomes from the task have been recorded as timed entries appended to the end of today's daily brief.
-7. If the workspace uses task-browser metadata, align it with the closure state using `framework/tools/task-browser/metadata-cli.mjs`: `done` for accepted closure, `paused` for deliberate deferral, `blocked` only for concrete blockers, and `review` when closure still awaits review. Also align `nextActor` with `HANDOFF.md`: clear it for done, paused, external/no-action states; set it for a concrete Operator/Agent blocker or pending review according to the authoritative matrix in `framework/TASKS.md`. Do not infer it from status. In framework versions with task-browser action history, pass real provenance such as the current role/session tool/session ID when useful and available; leave provenance unset rather than inventing it.
-8. Write a final or intermediate run log that makes the task state obvious to the next session.
+## Closure Complete When
 
-## Outputs
+- one supported disposition has all required evidence;
+- `HANDOFF.md`, the closure run log, and optional metadata agree;
+- status, `nextActor`, and task relationships satisfy their separate rules;
+- stable knowledge and shared workspace state are updated only where the outcome requires it;
+- today's daily brief contains the timed reconciliation entry;
+- incomplete or bounced work has been routed back to `task-pickup` rather than closed.
 
-- a task directory whose status is clear
-- current task state in `HANDOFF.md`
-- stable task facts in `CONTEXT.md` when needed
-- durable knowledge moved into the right long-lived files
-- daily brief coverage for meaningful task work
-- task-browser metadata aligned when the workspace uses task-browser
+## Companion Routing
 
-## Stop Conditions
-
-- the next session can tell whether the task is complete, paused, blocked, or still active
-- no important task outcome is trapped only in chat or stale task text
-- meaningful work from the closure slice is reflected in the daily brief
-- task-browser metadata, when used, does not contradict the task files
-
-## Pitfalls / Anti-Patterns
-
-- calling a task done while `HANDOFF.md` still reads like active work
-- preserving stale next-step lists after closure
-- putting temporary status in `CONTEXT.md`
-- leaving durable findings only in task files
-- forgetting to log meaningful task outcomes in the daily brief
-- closing or pausing a task while task-browser metadata still shows the old state
-
-## Related Files / Tools
-
-- `framework/TASKS.md`
-- `projects/[name]/work/[task-slug]/`
-- `projects/[name]/library/*.md`
-- `ACTIVE-CONTEXT.md`
-- `memory/daily-brief-YYYY-MM-DD.md`
-- `FIXES.md`
-- `framework/tools/task-browser/metadata-cli.mjs` when task-browser metadata is used
+- Use `task-pickup` to resume active work, implement review fixes, or prepare a review handoff.
+- Use `review-and-test` when acceptance requires broader verification; Oracle approval remains a separate task run.
+- Consult `TASKS.md` for task-file semantics, run-log requirements, review verdicts, Task Browser relationships, and the authoritative `nextActor` matrix.
