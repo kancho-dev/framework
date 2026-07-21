@@ -1,67 +1,50 @@
 ---
 name: self-check
-description: "Keep workspace-level coordination files healthy, current, and concise."
+description: "Audit workspace-level coordination health when shared state may have drifted."
 ---
 
 # Skill: Self-Check
 
-## Purpose
+## Outcome
 
-Keep workspace-level coordination files healthy, current, and concise.
+Restore a recoverable workspace-level control plane: current shared context, cleanly explained repository state, consistent cross-project Task Browser metadata, and unambiguous workspace-skill precedence.
 
-## When To Use
+## Scope And Inputs
 
-- at the end of a meaningful session
-- when workspace state feels stale or bloated
-- before handing work off
-- during maintenance sessions
+This skill owns workspace coordination health only. Read:
 
-## Recommended Roles
+- `ACTIVE-CONTEXT.md`;
+- repository status for workspace repositories relevant to reported shared state;
+- workspace-custom and framework skill directory names plus their `INDEX.md` files when either skill scope exists; load an individual `SKILL.md` only when the indexes and workspace guidance do not establish collision intent;
+- Task Browser metadata and its CLI only when the workspace uses Task Browser.
 
-- Overseer
-- Historian
+Route project task/library/doc drift to `project-self-check`, documentation accuracy to `docs-sync`, and task disposition to `task-closure`. `TASKS.md` owns task-file, Steering Notes, review, and `nextActor` semantics; load it only when resolving a contradiction in that contract.
 
-## Required Inputs
+## Workspace Audit
 
-- `ACTIVE-CONTEXT.md`
-- today's daily brief
-- `FIXES.md` when a durable workaround or lesson appeared
-- workspace git status when relevant
+1. **Establish the snapshot.** Inspect the listed inputs that exist. Identify the workspace repositories and optional Task Browser/skill scopes from workspace instructions and configuration rather than assuming a layout.
+   - Complete when every applicable input is named as present, absent, or intentionally out of scope.
+2. **Reconcile active context.** Test each current priority, active item, blocker, and repository claim in `ACTIVE-CONTEXT.md` against available workspace-level evidence. Before pruning, classify useful material: retain concise actionable or orienting workspace state; route durable project knowledge to the appropriate project library; and route durable workaround or lesson material to `FIXES.md` when applicable. Remove only obsolete or duplicated detail, keeping the file minimal because every main session reads it.
+   - Complete when every consequential shared-state claim is supported, corrected, or explicitly marked uncertain; each retained detail helps a later session orient or act; and removed useful material has an authoritative durable destination.
+3. **Explain repository hygiene.** Inspect relevant repository statuses for unexpected modifications, untracked artifacts, branch divergence, or edits in read-only/generated locations. Preserve legitimate work and report ownership or a next action for each anomaly; remove or revert only artifacts whose disposition is certain and safe.
+   - Complete when every observed anomaly is resolved or has an explicit owner and next action, and no legitimate work was discarded.
+4. **Check cross-project Task Browser consistency.** When Task Browser is present, use its supported inspection/metadata CLI to test workspace-global board integrity: task keys and paths resolve, display identifiers are globally unambiguous, cross-project relationships point to existing tasks, and board summaries do not contradict `ACTIVE-CONTEXT.md`. Correct workspace-global metadata only when authoritative task Markdown and path evidence make the correction unambiguous, keeping task Markdown as the source of truth and using real provenance when available. Route project-local status or content reconciliation to `project-self-check`, `nextActor` or handoff mismatches to the authoritative task workflow or `project-self-check`, and acceptance or disposition to `task-closure`; when correction authority remains ambiguous, leave the metadata intact and request clarification or route it to the responsible workflow.
+   - Complete when every workspace-global contradiction is corrected from unambiguous authoritative evidence or has one explicit clarification/routing destination, every project-local contradiction is routed to its owning workflow, and a fresh read confirms each applied correction. If Task Browser is absent, record this branch as not applicable.
+5. **Resolve workspace-skill collisions.** Compare workspace-custom skill names with framework skill names and inspect indexes for explicit override intent. Keep an intentional override only when workspace or Operator guidance says so; otherwise leave both intact, record the collision, and request the Operator's rename-or-override decision.
+   - Complete when every collision is documented as intentional or awaiting one explicit decision, and every non-colliding index entry resolves to its named skill. If either scope is absent, record this branch as not applicable.
+6. **Close the audit.** Re-read changed shared files and fresh repository/metadata status. Summarize corrections, unresolved anomalies with owners, and the next workspace action.
+   - Complete when another session can recover current coordination state from workspace files without chat history and every unresolved item has one next action.
 
-## Steps
+## Self-Check Complete When
 
-1. Check whether `ACTIVE-CONTEXT.md` still reflects the current priority and active tasks.
-2. Summarize or remove stale detail instead of preserving old status verbatim.
-3. Check whether the day’s meaningful work has been recorded as timed entries appended to the end of today's daily brief.
-4. Check today's carry-forward items and mark any clearly completed/no-longer-actionable items checked (`[x]`) only when confirmed by task state, closure, or explicit Operator direction.
-5. If a non-obvious bug, mistake, or durable workaround appeared, record it in `FIXES.md`.
-6. If root `SKILLS/` exists, check for workspace-custom skill name collisions with framework skills under `framework/SKILLS/`; if a collision exists, record it as a cleanup item and ask the Operator whether to rename the local skill or treat it as an explicit override.
-7. If the workspace uses task-browser metadata, spot-check that active/review/blocked/done task metadata does not contradict `ACTIVE-CONTEXT.md`, task handoffs, or today's meaningful outcomes; fix obvious drift with `framework/tools/task-browser/metadata-cli.mjs`. In framework versions with task-browser action history, pass real role/session provenance when useful and available; leave provenance unset rather than inventing it.
-8. Check for uncommitted changes if session workflow expects clean repo state.
-9. Leave the workspace easier for the next run to recover.
+- `ACTIVE-CONTEXT.md` is concise and evidence-aligned;
+- repository anomalies, cross-project metadata issues, and skill collisions are each resolved or explicitly routed;
+- project maintenance, docs synchronization, and task closure remain with their companion workflows;
+- the final fresh read exposes no unexplained workspace-level contradiction.
 
-## Outputs
+## Companion Routing
 
-- current, concise workspace coordination files
-- task-browser metadata aligned with workspace state when the workspace uses task-browser
-- durable fixes captured when relevant
-
-## Stop Conditions
-
-- workspace state is accurate enough for the next session to recover quickly
-- stale detail has been summarized or removed
-
-## Pitfalls / Anti-Patterns
-
-- letting `ACTIVE-CONTEXT.md` become a historical dump
-- recording temporary details in durable files
-- ending a meaningful session without updating shared state
-- leaving task-browser metadata stale when the workspace uses the task-browser board
-- letting workspace-custom skills accidentally shadow framework skills without an explicit Operator decision
-
-## Related Files / Tools
-
-- `ACTIVE-CONTEXT.md`
-- `memory/daily-brief-YYYY-MM-DD.md`
-- `FIXES.md`
-- `framework/tools/task-browser/metadata-cli.mjs` when task-browser metadata is used
+- Use `project-self-check` for one project's task state, library, implementation, and documentation alignment.
+- Use `docs-sync` for documentation-to-reality repair.
+- Use `task-closure` only after an evidenced task disposition.
+- Consult `TASKS.md` for universal task semantics, and `SKILLS.md` for skill precedence details.
