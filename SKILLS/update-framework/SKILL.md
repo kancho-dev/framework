@@ -1,129 +1,103 @@
 ---
 name: update-framework
-description: "Bring an already framework-managed workspace into alignment with newer framework changes using minimal safe updates."
+description: "Align an already framework-managed workspace with newer framework changes through an approval-gated update plan."
 ---
 
 # Skill: Update Framework
 
-## Purpose
+## Outcome
 
-Bring an already framework-managed workspace into alignment with newer framework changes using minimal safe updates.
+Produce an evidence-backed update plan, then execute it only after explicit Operator approval. Finish with every changed framework file and workspace adaptation accounted for, validated, and reported.
 
-## When To Use
+## Entry Contract
 
-- when the framework repository in a workspace has been updated after time has passed
-- when new framework features introduce additional setup or configuration steps
-- when the workspace should be checked for drift against the current framework expectations
+`FRAMEWORK.md` selects Historian before this skill runs.
 
-## Recommended Roles
+Treat inspection and planning as read-only. Pulls, merges, workspace edits, setup commands, and `CURRENT_VERSION` changes belong to the approval-gated execution branch.
 
-- Overseer
-- Historian
+## Inputs
 
-## Required Inputs
+Always inspect:
 
-- `framework/INSTALLATION.md`
-- `framework/README.md`
-- `framework/MIGRATIONS.md` when present
-- `framework/WORKSPACE.md`, `framework/TASKS.md`, and `framework/SKILLS.md` when present
-- `framework/VERSION`
-- `framework/CURRENT_VERSION` when present
-- relevant templates under `framework/TEMPLATES/`
-- the current workspace root contents
-- local workspace/project skills and skill indexes when framework guidance changed
-- the current framework files already present in the workspace
+- `framework/VERSION` and `framework/CURRENT_VERSION` when present;
+- framework repository and workspace repository boundaries and working-tree state;
+- `framework/INSTALLATION.md`, `framework/README.md`, and the current workspace root;
+- the Operator's requested source, target, and scope.
 
-## Steps
+Load only when its branch requires it:
 
-1. If the Operator asked to update from the remote framework repository, first check the `framework/` working tree state, then pull the latest framework repo changes using the workspace's normal git flow. Do not pull over local framework edits or unresolved conflicts; ask before risky git operations.
-2. Read `framework/INSTALLATION.md` to understand the current expected setup shape, including the phased adoption guidance for existing workspaces.
-3. Read `framework/CURRENT_VERSION` if it exists, and read the newly pulled `framework/VERSION`.
-4. If `CURRENT_VERSION` is missing, treat the workspace as having an unknown installed framework version, create it from `VERSION` after the update, and mention that version-specific diff review was not possible.
-5. If both versions exist and differ, inspect the framework changes between the old installed version and the new `VERSION` before changing workspace files. Prefer git tag comparison when tags exist, for example `git -C framework diff vOLD..vNEW -- INSTALLATION.md MIGRATIONS.md FRAMEWORK.md WORKSPACE.md TASKS.md SKILLS.md ROLES/ SKILLS/ TEMPLATES/ README.md USAGE-PROMPTS.md COMMANDS.md prompts/`; otherwise compare the current files directly and note the limitation.
-6. If `framework/MIGRATIONS.md` exists, read only the migration sections that apply between the old installed version and the new `VERSION`.
-7. Inspect the workspace root for the existing framework-managed files and directories.
-8. Compare the current workspace setup against the latest framework expectations.
-9. Check the actual repository boundaries before editing config files so the update does not guess wrongly about which repo owns what.
-10. Check whether the root `.gitignore` still matches the current framework repository model and ignore guidance.
-11. Recheck that workspace-owned `projects/[name]/library/` and `projects/[name]/work/` are not being ignored under the default model.
-12. When framework guidance changed, check local skill indexes and local skills for stale framework assumptions before declaring the workspace aligned:
-   - `SKILLS/INDEX.md` and `SKILLS/*/SKILL.md`;
-   - `projects/[name]/SKILLS/INDEX.md` and `projects/[name]/SKILLS/*/SKILL.md`;
-   - tool-native project skills or commands when they are relevant and supported by the current agent/tool.
-13. Add newly required files or directories when they are missing and templates clearly apply.
-14. If the newer framework includes optional tools such as `framework/tools/tool-orchestrator/`, `framework/tools/session-browser/`, or `framework/tools/task-browser/`, do not force workspace changes; tell the Operator the tools are available after updating `framework/`, and point them to the relevant tool READMEs for optional setup/use.
-15. If the newer framework includes optional native command templates under `framework/prompts/`, do not force setup; tell the Operator they are available and point them to `framework/COMMANDS.md` for Pi symlink/copy setup and OpenCode guidance.
-16. Update or merge existing workspace files only when needed to support new framework behavior or guidance.
-17. Do not overwrite local workspace-specific instructions blindly.
-18. If a merge is non-obvious, ask the user before changing the file.
-19. Leave adapter-specific files such as `CLAUDE.md` intact unless the user explicitly wants them updated.
-20. If the workspace uses other root agent/editor entrypoint files, decide deliberately whether they should mirror the same workspace guidance.
-21. After the workspace has been updated, set `framework/CURRENT_VERSION` to match `framework/VERSION`.
-22. Summarize the old version, new version, what changed, what was added, updated, left unchanged, or escalated.
+- `framework/MIGRATIONS.md`: sections between the installed and target versions;
+- version/tag diff: when installed and target versions differ and comparable history exists;
+- `FRAMEWORK.md`, `WORKSPACE.md`, `TASKS.md`, `SKILLS.md`, `ROLES/`, `SKILLS/`, `TEMPLATES/`, `COMMANDS.md`, `prompts/`, and tool READMEs: only when the version diff or migration guidance identifies them as relevant;
+- workspace/project skill indexes, local skills, mirrored agent entrypoints, `.gitignore`, and project boundaries: only when affected guidance or templates could make them stale.
 
-## Optional Framework Tool Check
+## Update Sequence
 
-If the updated framework includes optional browser tools:
+### 1. Inspect the baseline
 
-1. Mention Framework Cockpit (`framework/tools/tool-orchestrator/`) to the Operator as an optional local shell for opening small framework browser tools from one place.
-2. Mention Session Browser (`framework/tools/session-browser/`) as an optional local, read-only browser for Pi and OpenCode coding-agent sessions.
-3. Mention Task Browser (`framework/tools/task-browser/`) as an optional local browser for tracked task directories and task-browser-owned metadata.
-4. Do not force setup; the core framework workflow does not require these tools.
-5. If the Operator wants to use Framework Cockpit, verify `node --version` and point to:
-   - `cd framework/tools/tool-orchestrator && npm start`
-   - open `http://localhost:8789`
-6. If the Operator wants to use Session Browser directly, verify basic prerequisites:
-   - `node --version`
-   - optional for OpenCode: `sqlite3 --version`
-7. Point to the Session Browser quick start:
-   - `cd framework/tools/session-browser && npm start`
-   - open `http://localhost:8787`
-8. For workspace-specific setup, suggest only the env vars that matter:
-   - `WORKSPACE_ROOT=/path/to/workspace`
-   - `SESSION_SOURCES=pi`, `SESSION_SOURCES=opencode`, or `SESSION_SOURCES=pi,opencode`
-   - `PORT=8790` when the default port is busy
-   - `PI_SESSION_ROOT` / `SESSION_ROOT` when Pi sessions are not in the default location
-   - `OPENCODE_DB` / `OPENCODE_DATA_DIR` when OpenCode data is not in the default location
-9. Remind the Operator that task metadata, session transcripts, cwd paths, tool outputs, copied databases, exports, logs, and env files can be sensitive.
-10. Do not copy session files, OpenCode databases, exports, logs, local `.env` files, local `.tools-config/`, or legacy local `.task-browser/` metadata into the framework repo.
-11. For full details, refer to the relevant tool README under `framework/tools/`.
+Record the installed version, available target version, repository boundaries, dirty files, and whether version-to-version comparison is possible. If the Operator requested a newer remote revision, inspect local state and identify the normal safe git operation, but leave it in the plan.
 
-## Outputs
+Treat a missing `CURRENT_VERSION` as an unknown installed version. Preserve that uncertainty until successful execution; do not infer version-specific migrations.
 
-- a workspace brought closer to the current framework expectations
-- `framework/CURRENT_VERSION` updated to the installed framework version after successful sync
-- only the necessary config/setup changes applied
-- repo-boundary and root `.gitignore` expectations rechecked rather than assumed
-- workspace-owned `library/` and `work` preserved under the default repo model while nested `project/` repositories remain ignored as expected
-- a clear summary of required follow-up when user input was needed
-- optional framework tools surfaced to the Operator without forcing workspace-specific setup
+**Complete when:** source, target, version certainty, repository ownership, and every pre-existing dirty or conflicted file are recorded.
 
-## Stop Conditions
+### 2. Build the update inventory
 
-- the workspace no longer misses any newly required framework setup that clearly applies
-- `framework/CURRENT_VERSION` matches `framework/VERSION` after successful sync
-- any ambiguous merge or local-policy conflict has been escalated to the user
+When no newer target is available, compare the workspace only against guidance that can be established from the installed framework. Otherwise inspect the applicable migration sections and version diff. Inventory every changed framework path, classify its workspace impact, and identify any required, optional, or irrelevant adaptation.
 
-## Pitfalls / Anti-Patterns
+For each potentially affected workspace file, record its owner, local customization, applicable template or guidance, and proposed disposition: add, merge, leave unchanged, or escalate. Include local skills and indexes when framework skill guidance changed; include root and mirrored entrypoints when bootstrap guidance changed; include `.gitignore` and nested repository boundaries when the repository model changed.
 
-- treating update as a fresh install and recreating files unnecessarily
-- assuming repo ownership from the folder layout without checking the real nested repositories
-- accidentally gitignoring workspace-owned `library/` or `work` paths while updating `.gitignore`
-- overwriting customized `AGENTS.md`, `.gitignore`, `README.md`, or other workspace files blindly
-- applying template changes that are not actually needed for the current framework update
-- skipping applicable `MIGRATIONS.md` notes when framework behavior or file organization changed
-- missing stale assumptions in workspace-custom or project-local skills after framework guidance changes
-- copying private session data into `framework/tools/session-browser/` or treating optional tools as required workspace setup
-- updating `CURRENT_VERSION` before checking whether the old/new framework versions require workspace changes
-- changing adapter-specific files by default
+**Complete when:** every changed framework path and every discovered workspace adaptation has one sourced disposition, with no unclassified item.
 
-## Related Files / Tools
+### 3. Present a plan and stop at the gate
 
-- `framework/INSTALLATION.md`
-- `framework/README.md`
-- `framework/MIGRATIONS.md`
-- `framework/WORKSPACE.md`
-- `framework/TASKS.md`
-- `framework/SKILLS.md`
-- `framework/TEMPLATES/WORKSPACE/`
-- `framework/TEMPLATES/TASKS/`
+Return:
+
+- installed and target versions, including comparison limitations;
+- framework change inventory and workspace adaptation inventory;
+- exact proposed git operations, file edits, setup commands, and validation checks;
+- conflicts, ambiguous merges, sensitive-data risks, optional features, and files intentionally left unchanged;
+- the final `CURRENT_VERSION` change, conditional on successful validation.
+
+If no update or adaptation is needed, report a no-update result and stop without requesting execution approval. If a conflict or non-obvious merge exists, present choices and request the specific decision needed. Otherwise request explicit Operator approval for the bounded plan.
+
+**Complete when:** the run has stopped with either a checkable no-update result, a conflict decision request, or an approval-ready plan. No execution action has occurred.
+
+### 4. Execute only the approved plan
+
+After explicit approval, recheck repository state and target identity. Pause and re-plan if either changed. Apply only approved git operations and workspace adaptations, preserving local instructions and adapter-specific files unless the plan explicitly includes them.
+
+Surface optional prompts and tools without configuring them unless approved. Keep session data, databases, exports, logs, env files, `.tools-config/`, and legacy `.task-browser/` metadata outside the framework repository.
+
+**Complete when:** each approved operation has an observed result and the post-change inventory accounts for every modified, added, deleted, conflicted, skipped, or escalated file.
+
+### 5. Validate before marking installed
+
+Run the approved focused checks for affected behavior. At minimum:
+
+- inspect diffs and run `git diff --check` in each changed repository;
+- verify repository and `.gitignore` boundaries when affected;
+- verify workspace-owned `projects/[name]/library/` and `work/` remain preserved under the default model when ignore rules changed;
+- verify affected local skills, indexes, prompts, and mirrored entrypoints against current framework guidance;
+- run applicable automated checks named by changed components or migration guidance.
+
+Resolve failures or return to the conflict/approval gate with a revised plan. Only after all required checks pass, set `framework/CURRENT_VERSION` to the exact validated `framework/VERSION`, then verify they match.
+
+**Complete when:** validation evidence passes, `CURRENT_VERSION` matches the validated framework version, and no unresolved approved item remains.
+
+### 6. Report exhaustive results
+
+Report old and new versions; every framework operation; every workspace file added, merged, unchanged, skipped, or escalated; validation evidence; optional capabilities discovered; and remaining follow-up. Distinguish pre-existing dirty files from this update's files.
+
+**Complete when:** the report reconciles the plan, post-change inventory, final diffs, and validation evidence without an unaccounted file or action.
+
+## Branch Outcomes
+
+- **No update:** evidence shows the installed framework and applicable workspace setup are aligned; no execution or `CURRENT_VERSION` write occurs.
+- **Planned update:** a complete bounded plan awaits explicit Operator approval; no execution occurs.
+- **Conflict:** the exact local conflict or ambiguous merge and safe choices await a decision; unaffected inspection may be reported, but execution pauses.
+- **Approved sync:** the unchanged approved plan is applied, validated, version-marked, and exhaustively reported.
+
+## Companion Routing
+
+- Consult relevant tool READMEs only when an affected optional tool branch is reached.
