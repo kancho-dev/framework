@@ -2,18 +2,17 @@
 description: Act as Historian and perform lightweight framework workspace maintenance
 argument-hint: "[focus]"
 ---
-Use the framework from this workspace as Historian.
+Use the framework from this workspace as Historian. Follow `FRAMEWORK.md` as the authority for bootstrap and universal procedure.
 
-Perform lightweight workspace maintenance for the requested focus, if any: $ARGUMENTS
+Resolve the requested maintenance focus from: $ARGUMENTS
 
-Default to documentation/state hygiene, not code changes. Read the smallest relevant context. Load reference docs such as `WORKSPACE.md`, `TASKS.md`, or `SKILLS.md` only if they are needed.
+If the focus is absent, broad, or could select more than one primary route, ask the Operator to narrow it before inspecting maintenance surfaces. Otherwise invoke exactly one primary skill first:
 
-Use the relevant maintenance skills instead of improvising the flow:
-- use `self-check` for workspace-level coordination files, and repo-state hygiene;
-- use `project-self-check` when the focus is a project, its library, or its task directories;
-- use `docs-sync` when docs may drift from actual project/framework state;
-- use `task-closure` only when a task appears complete or paused but its handoff/state still reads active.
+- `self-check` for workspace-level coordination drift;
+- `project-self-check` for a named project's recovery-surface reconciliation, using its explicit focused, active-project, or full-historical scope gate;
+- `docs-sync` for an evidenced documentation contradiction or completed implementation change, using its scope and evidence gates;
+- `task-closure` only for an explicit task with an evidenced completion, pause, blockage, or wontfix disposition.
 
-Check for stale handoffs, drift between active context and task state, durable notes that should move into project library files, and docs that no longer match reality.
+Let that skill own inspection, correction boundaries, completion criteria, and validation. If its evidenced findings require a companion workflow, finish the primary workflow's bounded handoff, then invoke one companion skill at a time. In particular, route an admitted project documentation contradiction to `docs-sync`; route an evidenced task disposition to `task-closure`. When apparent task completion lacks closure evidence, report the missing evidence and leave closure to the owning task workflow rather than treating the task as closed.
 
-Ask before destructive changes, broad rewrites, ambiguous skill/command merges, or changing project code. If maintenance reveals that development project files should change, do not edit them by default. Follow explicit workspace rules if they allow such edits; otherwise propose the change and ask the Operator before applying it. Summarize what you checked, what you changed, and what remains.
+Keep the run interactive and bounded. Summarize the selected route and scope, evidence checked, changes made, routed findings, and unresolved Operator decisions.
