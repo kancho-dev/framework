@@ -11,8 +11,6 @@ Produce an evidence-backed update plan, then execute it only after explicit Oper
 
 ## Entry Contract
 
-`FRAMEWORK.md` selects Historian before this skill runs.
-
 Treat inspection and planning as read-only. Pulls, merges, workspace edits, setup commands, and `CURRENT_VERSION` changes belong to the approval-gated execution branch.
 
 ## Inputs

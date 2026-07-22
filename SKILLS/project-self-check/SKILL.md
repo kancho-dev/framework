@@ -11,7 +11,7 @@ Produce an evidence-backed project reconciliation whose coverage is explicit: ev
 
 ## Entry Contract
 
-Use the role selected by `FRAMEWORK.md`; this skill neither selects nor loads roles. Project task Markdown is authoritative for task truth, implementation and tests for behavior, and project `library/` files for durable project knowledge. Documentation is a claim to verify, not evidence of its own accuracy. Consult `TASKS.md` only when task-file, review, Steering Notes, relationship, or `nextActor` semantics are needed.
+Project task Markdown is authoritative for task truth, implementation and tests for behavior, and project `library/` files for durable project knowledge. Documentation is a claim to verify, not evidence of its own accuracy. Consult `TASKS.md` only when task-file, review, Steering Notes, relationship, or `nextActor` semantics are needed.
 
 ## Reconciliation
 

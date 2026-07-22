@@ -11,8 +11,6 @@ Produce a bounded, evidence-backed action queue that makes Operator attention vi
 
 ## Entry Contract
 
-`FRAMEWORK.md` selects Overseer before this skill runs.
-
 Task status, ownership, assignment, and `nextActor` are separate concepts. `nextActor: operator` means a concrete Operator action is needed for the task to advance; it is an attention signal, not a status or ownership claim. Task files remain authoritative when Task Browser metadata conflicts.
 
 ## Required Inputs

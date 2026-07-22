@@ -11,8 +11,6 @@ Reconcile one explicit task disposition across authoritative task state, evidenc
 
 ## Entry Contract
 
-`FRAMEWORK.md` selects the primary role before this skill runs. Confirm that exactly one selected role is loaded; if not, resolve the role through the framework bootstrap before reading another role file.
-
 Use `task-pickup` for implementation, review handoff, or an incomplete/bounced slice. Run closure only when the task has one evidenced disposition: accepted completion, deliberate pause, concrete blockage, or explicit wontfix. Task-file semantics, review independence, Steering Notes, and the `nextActor` matrix remain owned by `TASKS.md`.
 
 ## Reconciliation Sequence
@@ -21,7 +19,7 @@ Use `task-pickup` for implementation, review handoff, or an incomplete/bounced s
 
    | Branch | Required evidence | Lifecycle result |
    | --- | --- | --- |
-   | Complete | Acceptance is recorded and the accepted scope has verification evidence. When Oracle review is required, an `approve` verdict is recorded. | `done` |
+   | Complete | Acceptance is recorded and the accepted scope has verification evidence. When review is required and an `approve` verdict is recorded. | `done` |
    | Pause | An explicit deferral decision and a resumable condition or trigger are recorded. | `paused` |
    | Blocked | A concrete unresolved blocker, its evidence, and the actor or external condition that can resolve it are recorded. | `blocked` |
    | Wontfix | An explicit decision, rationale, and disposition of the intended scope are recorded. | `done` |
@@ -49,5 +47,5 @@ Use `task-pickup` for implementation, review handoff, or an incomplete/bounced s
 ## Companion Routing
 
 - Use `task-pickup` to resume active work, implement review fixes, or prepare a review handoff.
-- Use `review-and-test` when acceptance requires broader verification; Oracle approval remains a separate task run.
+- Use `review-and-test` when acceptance requires broader verification; approval remains a separate task run.
 - Consult `TASKS.md` for task-file semantics, run-log requirements, review verdicts, Task Browser relationships, and the authoritative `nextActor` matrix.

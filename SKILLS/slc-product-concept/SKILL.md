@@ -18,12 +18,6 @@ Keep the workflow lightweight. The result is a concise shaping artifact, not aut
 - scoping a useful, reviewable implementation change
 - testing whether a proposed first release or slice is coherent and bounded
 
-## Recommended Roles
-
-- Overseer for concept shaping and task scoping
-- Builder for shaping an implementation slice or writing a durable artifact
-- Oracle for a separate review when the result will guide meaningful execution
-
 ## Required Inputs
 
 - the idea, problem, design question, or implementation goal
@@ -95,7 +89,7 @@ Use the compact output shape below. Adapt labels to the mode, but do not add par
 
 ### 7. Recommend Follow-Up Only When Useful
 
-If execution should follow, recommend the smallest next task and include acceptance criteria derived from Must Have and the validation evidence. Use `next-best-actions` when prioritization among multiple follow-ups is needed. Meaningful execution should use the appropriate task flow and separate Oracle review where warranted.
+If execution should follow, recommend the smallest next task and include acceptance criteria derived from Must Have and the validation evidence. Use `next-best-actions` when prioritization among multiple follow-ups is needed. Meaningful execution should use the appropriate task flow and separate review where warranted.
 
 **Complete when:** the recommendation is directly executable without expanding the SLC boundary, or the artifact explicitly says that no follow-up is yet justified.
 

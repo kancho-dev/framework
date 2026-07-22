@@ -29,7 +29,7 @@ Apply these rules to the skill being authored:
 - **Positive steering:** state the target action; retain explicit prohibitions for security and repository boundaries.
 - **Pruning:** remove sections, inputs, and repeated wording that do not change execution.
 
-A workspace skill needs minimal YAML frontmatter (`name` and routing-oriented `description`) and enough structure to execute its declared branches. Add roles, outputs, examples, resources, scripts, or artifacts only when they change execution or verification.
+A workspace skill needs minimal YAML frontmatter (`name` and routing-oriented `description`) and enough structure to execute its declared branches. Keep role selection and loading in framework bootstrap or a thin invoking prompt; do not add them to the skill. Add outputs, examples, resources, scripts, or artifacts only when they change execution or verification.
 
 ## Inputs
 

@@ -16,13 +16,6 @@ Use the memory system selectively to recover relevant prior context without turn
 - when recovering context after a long pause
 - when verifying whether a similar issue was solved before
 
-## Recommended Roles
-
-- Overseer
-- Builder
-- Oracle
-- Historian
-
 ## Required Inputs
 
 - the question or context gap being answered

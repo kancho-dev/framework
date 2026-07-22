@@ -36,7 +36,7 @@ Start every framework-managed session with this common sequence:
 2. read `framework/SECURITY.md`;
 3. select one primary role before reading any file under `framework/ROLES/`:
    1. use the role explicitly named by the Operator or invoking workflow;
-   2. otherwise use the role declared by the applicable workflow or task guidance;
+   2. otherwise choose the role that fits the requested work, current task action, or applicable task guidance;
    3. otherwise fall back to Overseer for an unclassified top-level session;
 4. read only the selected role file.
 

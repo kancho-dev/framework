@@ -20,6 +20,10 @@ When checking skills, prefer the most specific relevant capability:
 
 If the right scope or skill remains unclear, ask the Operator before executing the skill.
 
+## Role Boundary
+
+Roles and skills are separate runtime dimensions. `FRAMEWORK.md` owns primary-role selection and loading before skill use. Skills own procedures and must not select, load, verify, restart, or transition roles. When a workflow needs deterministic role intent, a thin invoking prompt may select one role before passing arguments and invoking the skill; skill indexes remain role-neutral workflow routers.
+
 ## Skill Locations
 
 ### Project-local capabilities
@@ -102,14 +106,3 @@ When creating local skills, avoid same-name collisions unless an explicit overri
 Review skill scripts before running them. Follow `framework/SECURITY.md`.
 
 Do not execute untrusted scripts, install commands, or risky setup steps without explicit approval.
-
-## Optional Memory Retrieval
-
-Memory retrieval is a skill-supported extension, not the source of truth for current state.
-
-If current markdown files do not answer a specific context question, use `framework/SKILLS/memory-search/SKILL.md` and the optional memory CLI selectively, for example:
-
-- `mem search "query"`
-- `mem recent 20`
-- `mem sessions`
-- `mem lessons search "query"`
