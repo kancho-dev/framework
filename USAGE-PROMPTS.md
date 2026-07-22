@@ -87,7 +87,7 @@ Use `project-self-check` skill on project X
 ```
 
 ```text
-Use `docs-sync` skill to check whether docs and task state have drifted
+Use `docs-sync` to repair this identified documentation contradiction against its authoritative evidence: [contradiction, evidence, and docs]
 ```
 
 ```text
