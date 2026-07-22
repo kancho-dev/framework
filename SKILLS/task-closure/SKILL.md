@@ -19,7 +19,7 @@ Use `task-pickup` for implementation, review handoff, or an incomplete/bounced s
 
    | Branch | Required evidence | Lifecycle result |
    | --- | --- | --- |
-   | Complete | Acceptance is recorded and the accepted scope has verification evidence. When review is required and an `approve` verdict is recorded. | `done` |
+   | Complete | Acceptance is recorded and the accepted scope has verification evidence. When review is required, an `approve` verdict is recorded. | `done` |
    | Pause | An explicit deferral decision and a resumable condition or trigger are recorded. | `paused` |
    | Blocked | A concrete unresolved blocker, its evidence, and the actor or external condition that can resolve it are recorded. | `blocked` |
    | Wontfix | An explicit decision, rationale, and disposition of the intended scope are recorded. | `done` |
