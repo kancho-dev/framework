@@ -47,6 +47,8 @@ export function tokenPressurePercent(sessionOrTokens) {
 }
 
 export function tokenPressurePill(sessionOrTokens) {
+  // GitHub Copilot sessions don't have token data in local files
+  if (sessionOrTokens?.source === 'copilot') return '';
   const total = tokenPressureTotal(sessionOrTokens);
   return `<span class="token-pill ${tokenPressureLevel(sessionOrTokens)}" title="Recorded token pressure; excludes repeated cache-read tokens and is not a model context-window percentage">${formatCompactNumber(total)} tok</span>`;
 }
