@@ -14,6 +14,6 @@ For skill precedence, local/project/workspace skill rules, collision handling, a
 | `review-and-test` | Review completed work against its specification and repository standards, test material claims, and return a verdict. | `framework/SKILLS/review-and-test/SKILL.md` |
 | `docs-sync` | Align documentation with implemented or current behavior. | `framework/SKILLS/docs-sync/SKILL.md` |
 | `self-check` | Inspect workspace-level coordination state for staleness or drift. | `framework/SKILLS/self-check/SKILL.md` |
-| `project-self-check` | Inspect a project's task state, library files, and docs for drift. | `framework/SKILLS/project-self-check/SKILL.md` |
+| `project-self-check` | Reconcile a named project inconsistency or active project state; run a full historical audit only when explicitly requested. | `framework/SKILLS/project-self-check/SKILL.md` |
 | `update-framework` | Align an already framework-managed workspace with newer framework changes. | `framework/SKILLS/update-framework/SKILL.md` |
 | `memory-search` | Use optional memory retrieval when current markdown files are insufficient. | `framework/SKILLS/memory-search/SKILL.md` |
