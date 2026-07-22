@@ -15,7 +15,8 @@ const OPENCODE_DATA_DIR = resolve(process.env.OPENCODE_DATA_DIR || join(homedir(
 const OPENCODE_DB = resolve(process.env.OPENCODE_DB || join(OPENCODE_DATA_DIR, 'opencode.db'));
 const CODEX_HOME = resolve(process.env.CODEX_HOME || join(homedir(), '.codex'));
 const CODEX_SESSION_ROOT = resolve(process.env.CODEX_SESSION_ROOT || join(CODEX_HOME, 'sessions'));
-const ENABLED_SOURCES = new Set(String(process.env.SESSION_SOURCES || 'pi,opencode,codex').split(',').map((source) => source.trim().toLowerCase()).filter(Boolean));
+const VSCODE_COPILOT_DATA = resolve(process.env.VSCODE_COPILOT_DATA || join(homedir(), 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage'));
+const ENABLED_SOURCES = new Set(String(process.env.SESSION_SOURCES || 'pi,opencode,codex,copilot').split(',').map((source) => source.trim().toLowerCase()).filter(Boolean));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
 const SHARED_WEB_DIR = join(TOOL_DIR, '..', 'shared-web');
 const DEFAULT_WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
@@ -355,10 +356,12 @@ function sessionKey(sessionOrPath, source = null) {
   if (typeof sessionOrPath === 'string') {
     if (isOpenCodeRef(sessionOrPath)) return sessionOrPath;
     if (isCodexRef(sessionOrPath)) return sessionOrPath;
+    if (isCopilotRef(sessionOrPath)) return sessionOrPath;
     return `pi:${resolve(sessionOrPath)}`;
   }
   if (sessionOrPath?.source === 'opencode') return opencodeRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^opencode:/, ''));
   if (sessionOrPath?.source === 'codex') return codexRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^codex:/, ''));
+  if (sessionOrPath?.source === 'copilot') return copilotRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^copilot:/, ''));
   return `pi:${resolve(sessionOrPath?.path || '')}`;
 }
 
@@ -435,6 +438,14 @@ function codexRef(sessionId) {
 
 function isCodexRef(ref) {
   return typeof ref === 'string' && ref.startsWith('codex:');
+}
+
+function copilotRef(sessionId) {
+  return `copilot:${sessionId}`;
+}
+
+function isCopilotRef(ref) {
+  return typeof ref === 'string' && ref.startsWith('copilot:');
 }
 
 function timestampFromMs(value) {
@@ -803,6 +814,206 @@ async function loadCodexSession(ctx, ref) {
   throw new Error('Codex session not found');
 }
 
+function copilotContentBlocks(responseParts) {
+  if (!Array.isArray(responseParts)) return [];
+  const blocks = [];
+  for (const part of responseParts) {
+    if (part?.kind === 'text' && typeof part.value === 'string') {
+      blocks.push({ type: 'text', text: part.value });
+    } else if (part?.kind === 'toolInvocationSerialized') {
+      let resultText = '';
+      if (part.result && typeof part.result === 'object' && part.result.value) {
+        resultText = String(part.result.value);
+      } else if (part.invocationMessage && typeof part.invocationMessage === 'object' && part.invocationMessage.value) {
+        resultText = String(part.invocationMessage.value);
+      } else if (typeof part.invocationMessage === 'string') {
+        resultText = part.invocationMessage;
+      }
+      blocks.push({
+        type: 'toolCall',
+        id: part.toolCallId || '',
+        name: part.toolId || part.toolName || 'tool',
+        arguments: {},
+        result: resultText,
+      });
+    }
+  }
+  return blocks;
+}
+
+function copilotRequestMessage(request) {
+  if (!request?.message?.text) return [];
+  return [{ type: 'text', text: request.message.text }];
+}
+
+async function walkWorkspaceStorage(root) {
+  const workspaces = [];
+  let entries;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return workspaces;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const workspaceDir = join(root, entry.name);
+    const workspaceJsonPath = join(workspaceDir, 'workspace.json');
+    const chatSessionsDir = join(workspaceDir, 'chatSessions');
+    try {
+      const [workspaceJson, chatSessionsStat] = await Promise.all([
+        readFile(workspaceJsonPath, 'utf8').then(JSON.parse).catch(() => null),
+        stat(chatSessionsDir).catch(() => null),
+      ]);
+      if (workspaceJson && chatSessionsStat?.isDirectory()) {
+        const folderUri = workspaceJson.folder || workspaceJson.workspace;
+        if (!folderUri) continue;
+        let cwd = folderUri.startsWith('file://') ? decodeURIComponent(folderUri.slice(7)) : '';
+        // For multi-folder workspaces (.code-workspace files), extract the directory
+        if (cwd.endsWith('.code-workspace')) {
+          cwd = dirname(cwd);
+        }
+        if (cwd) workspaces.push({ cwd, chatSessionsDir });
+      }
+    } catch {
+      continue;
+    }
+  }
+  return workspaces;
+}
+
+async function listCopilotSessions(ctx) {
+  if (!await exists(VSCODE_COPILOT_DATA)) return [];
+  const workspaces = await walkWorkspaceStorage(VSCODE_COPILOT_DATA);
+  const sessions = [];
+  for (const workspace of workspaces) {
+    if (!isUnderRoot(workspace.cwd, ctx.workspaceRoot)) continue;
+    try {
+      const files = await readdir(workspace.chatSessionsDir);
+      for (const file of files) {
+        if (!file.endsWith('.json')) continue;
+        const sessionPath = join(workspace.chatSessionsDir, file);
+        try {
+          const [content, fileStat] = await Promise.all([
+            readFile(sessionPath, 'utf8'),
+            stat(sessionPath),
+          ]);
+          const session = JSON.parse(content);
+          const sessionId = basename(file, '.json');
+          const requests = Array.isArray(session.requests) ? session.requests : [];
+          const userMessages = requests.filter((req) => req?.message?.text);
+          const firstPrompt = truncate(userMessages[0]?.message?.text || '');
+          const allResponses = requests.flatMap((req) => Array.isArray(req.response) ? req.response : []);
+          const toolCalls = allResponses.filter((part) => part?.kind === 'toolInvocationSerialized');
+          const timestamps = requests.map((req) => req.timestamp).filter(Boolean);
+          sessions.push({
+            id: sessionId,
+            source: 'copilot',
+            path: copilotRef(sessionId),
+            cwd: workspace.cwd,
+            name: '',
+            modelLabel: 'GitHub Copilot',
+            firstPrompt,
+            createdAt: timestamps[0] || fileStat.birthtime?.toISOString(),
+            updatedAt: timestamps.at(-1) || fileStat.mtime?.toISOString(),
+            leafId: null,
+            messageCount: requests.length * 2,
+            userMessageCount: userMessages.length,
+            assistantMessageCount: requests.length,
+            assistantRawMessageCount: requests.length,
+            toolMessageCount: 0,
+            toolResultCount: 0,
+            toolCallCount: toolCalls.length,
+            toolNames: Array.from(new Set(toolCalls.map((call) => call.toolId || call.toolName || 'tool'))).sort(),
+            ...emptyUsage(),
+          });
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+  return sessions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+}
+
+async function loadCopilotSession(ctx, ref) {
+  const sessionId = ref.replace(/^copilot:/, '');
+  const workspaces = await walkWorkspaceStorage(VSCODE_COPILOT_DATA);
+  for (const workspace of workspaces) {
+    const sessionPath = join(workspace.chatSessionsDir, `${sessionId}.json`);
+    if (!await exists(sessionPath)) continue;
+    const [content, fileStat] = await Promise.all([
+      readFile(sessionPath, 'utf8'),
+      stat(sessionPath),
+    ]);
+    const session = JSON.parse(content);
+    const requests = Array.isArray(session.requests) ? session.requests : [];
+    const entries = [];
+    let counter = 0;
+    for (const request of requests) {
+      if (request?.message?.text) {
+        entries.push({
+          id: `user-${counter++}`,
+          type: 'message',
+          timestamp: request.timestamp || new Date().toISOString(),
+          source: 'copilot',
+          message: {
+            role: 'user',
+            content: copilotRequestMessage(request),
+          },
+        });
+      }
+      if (Array.isArray(request.response)) {
+        entries.push({
+          id: `assistant-${counter++}`,
+          type: 'message',
+          timestamp: request.timestamp || new Date().toISOString(),
+          source: 'copilot',
+          message: {
+            role: 'assistant',
+            content: copilotContentBlocks(request.response),
+          },
+        });
+      }
+    }
+    const userMessages = requests.filter((req) => req?.message?.text);
+    const firstPrompt = truncate(userMessages[0]?.message?.text || '');
+    const timestamps = requests.map((req) => req.timestamp).filter(Boolean);
+    const topicAnchors = entries
+      .filter((entry) => entry.message?.role === 'user')
+      .map((entry, index) => ({
+        id: entry.id,
+        timestamp: entry.timestamp,
+        title: truncate(textFromContent(entry.message.content), 80) || `User prompt ${index + 1}`,
+        depth: index === 0 ? 'first-prompt' : 'user-prompt',
+      }));
+    const summary = {
+      id: sessionId,
+      source: 'copilot',
+      path: copilotRef(sessionId),
+      cwd: workspace.cwd,
+      name: '',
+      modelLabel: 'GitHub Copilot',
+      firstPrompt,
+      createdAt: timestamps[0] || fileStat.birthtime?.toISOString(),
+      updatedAt: timestamps.at(-1) || fileStat.mtime?.toISOString(),
+      leafId: null,
+      messageCount: entries.length,
+      userMessageCount: userMessages.length,
+      assistantMessageCount: requests.length,
+      assistantRawMessageCount: requests.length,
+      toolMessageCount: 0,
+      toolResultCount: 0,
+      toolCallCount: entries.filter((e) => e.message?.content?.some((c) => c.type === 'toolCall')).length,
+      toolNames: [],
+      ...emptyUsage(),
+    };
+    return { ...summary, entries, activeEntries: entries, topicAnchors };
+  }
+  throw new Error('Copilot session not found');
+}
+
 async function loadOpenCodeRows(sessionId = null) {
   const sessionWhere = sessionId ? `where id = ${sqlString(sessionId)}` : '';
   const sessions = await sqliteJson(OPENCODE_DB, `
@@ -1075,23 +1286,30 @@ async function listSessions(ctx) {
     ['pi', () => listPiSessions(ctx)],
     ['opencode', () => listOpenCodeSessions(ctx)],
     ['codex', () => listCodexSessions(ctx)],
+    ['copilot', () => listCopilotSessions(ctx)],
   ];
   const enabledSources = sources.filter(([source]) => sourceEnabled(source));
   const results = await Promise.allSettled(enabledSources.map(([source, list]) => withTimeout(list(), `${source} source`, SOURCE_TIMEOUT_MS)));
   const sourceErrors = [];
+  const successfulSources = [];
   const sessions = [];
   for (const [index, result] of results.entries()) {
     const source = enabledSources[index][0];
-    if (result.status === 'fulfilled') sessions.push(...result.value);
-    else sourceErrors.push(sourceError(source, result.reason));
+    if (result.status === 'fulfilled') {
+      sessions.push(...result.value);
+      successfulSources.push(source);
+    } else {
+      sourceErrors.push(sourceError(source, result.reason));
+    }
   }
   sessions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-  return { sessions: sessions.map((session) => attachMetadata(session, metadata)), sourceErrors, metadataError, metadataPath: ctx.metadataPath };
+  return { sessions: sessions.map((session) => attachMetadata(session, metadata)), sourceErrors, successfulSources, metadataError, metadataPath: ctx.metadataPath };
 }
 
 function isAllowedSessionPath(ctx, candidate) {
   if (isOpenCodeRef(candidate)) return true;
   if (isCodexRef(candidate)) return true;
+  if (isCopilotRef(candidate)) return true;
   const resolved = resolve(candidate);
   return isUnderRoot(resolved, PI_SESSION_ROOT);
 }
@@ -1105,15 +1323,15 @@ export function createSessionBrowserHandler({ basePath = '/', cockpit = null, wo
       const pathname = stripBasePath(url.pathname, normalizedBase);
       if (pathname === null) return false;
       if (pathname === '/api/sessions') {
-        const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(ctx), '/api/sessions', REQUEST_TIMEOUT_MS)
-          .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: ctx.metadataPath }));
-        sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
+        const { sessions, sourceErrors, successfulSources, metadataError, metadataPath } = await withTimeout(listSessions(ctx), '/api/sessions', REQUEST_TIMEOUT_MS)
+          .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], successfulSources: [], metadataError: null, metadataPath: ctx.metadataPath }));
+        sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, successfulSources, metadataError, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
         return true;
       }
       if (pathname === '/api/summary') {
-        const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(ctx), '/api/summary', REQUEST_TIMEOUT_MS)
-          .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: ctx.metadataPath }));
-        sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, metadataPath, sourceErrors, metadataError, ...sessionDashboardSummary(sessions) });
+        const { sessions, sourceErrors, successfulSources, metadataError, metadataPath } = await withTimeout(listSessions(ctx), '/api/summary', REQUEST_TIMEOUT_MS)
+          .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], successfulSources: [], metadataError: null, metadataPath: ctx.metadataPath }));
+        sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, metadataPath, sourceErrors, successfulSources, metadataError, ...sessionDashboardSummary(sessions) });
         return true;
       }
       if (pathname === '/api/session') {
@@ -1122,7 +1340,7 @@ export function createSessionBrowserHandler({ basePath = '/', cockpit = null, wo
           sendJson(res, 400, { error: 'Invalid session path' });
           return true;
         }
-        const session = isOpenCodeRef(path) ? await loadOpenCodeSession(ctx, path) : isCodexRef(path) ? await loadCodexSession(ctx, path) : await loadSessionFile(path);
+        const session = isOpenCodeRef(path) ? await loadOpenCodeSession(ctx, path) : isCodexRef(path) ? await loadCodexSession(ctx, path) : isCopilotRef(path) ? await loadCopilotSession(ctx, path) : await loadSessionFile(path);
         if (!isUnderRoot(session.cwd, ctx.workspaceRoot)) {
           sendJson(res, 404, { error: 'Session is outside the current workspace root' });
           return true;
@@ -1176,6 +1394,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.log(`Workspace root: ${DEFAULT_WORKSPACE_ROOT}`);
     console.log(`Pi session root: ${PI_SESSION_ROOT}`);
     console.log(`OpenCode DB: ${OPENCODE_DB}`);
+    console.log(`Codex session root: ${CODEX_SESSION_ROOT}`);
+    console.log(`VS Code Copilot data: ${VSCODE_COPILOT_DATA}`);
     console.log(`Metadata: ${DEFAULT_METADATA_PATH}`);
   });
 }
