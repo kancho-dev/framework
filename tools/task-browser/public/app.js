@@ -7,13 +7,9 @@ import { captureDetailFocus, isEditingAutocompleteInput, restoreDetailFocus, ren
 import { fetchTasks, saveMetadata, saveSteeringNotes } from './api.js';
 import { editSteeringDraft, savedSteeringDraft } from './steering-notes.js';
 import { addRelationPatch, currentTags, relationInput, removeRelationPatch, taskKeyFromRelationInput } from './relations.js';
+import { clearRequestedSelection, requestedSelection } from './selection.js';
 
 window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
-
-function requestedSelection() {
-  const params = new URLSearchParams(location.search);
-  return { key: params.get('selectTask') || params.get('task'), status: params.get('selectStatus') || params.get('status') };
-}
 
 function restoreSelectedKey() {
   if (state.selectedKey) return;
@@ -153,6 +149,8 @@ els.clear.addEventListener('click', () => { resetFilters(); render(); });
 
 function closeDetail() {
   selectTaskKey(null);
+  const url = clearRequestedSelection(new URL(location.href));
+  history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
   render();
 }
 
