@@ -81,7 +81,7 @@ Report:
 
 An implementation self-check updates implementation evidence and hands off to a separate independent-review run without recording approval.
 
-For a meaningful independent task review, use a separate Task Run under the review authority defined by `FRAMEWORK.md` and `TASKS.md`. Record the verdict in a run log, update `HANDOFF.md`, append the daily brief, and align Task Browser metadata with `framework/TASKS.md`. On `approve`, hand to the Operator when acceptance is still required; on `bounce`, hand to implementation; on `needs clarification`, hand to the actor who owns the missing decision.
+For a meaningful independent task review, use a separate Task Run under the review authority defined by `FRAMEWORK.md` and `TASKS.md`. Persist the review under the review and end-of-task contracts in `TASKS.md`. On `approve`, hand to the Operator when acceptance is still required; on `bounce`, hand to implementation; on `needs clarification`, hand to the actor who owns the missing decision.
 
 **Complete when:** the selected mode's authority was preserved and durable task state, narrative next action, and `nextActor` agree, or the review was explicitly read-only and the report names who must persist it.
 

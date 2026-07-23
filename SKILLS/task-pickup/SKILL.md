@@ -15,7 +15,7 @@ Choose the task action from authoritative task state and the current handoff. Ta
 
 ## Pickup Sequence
 
-1. **Recover the contract.** Read `TASK.md`, `HANDOFF.md`, and `CONTEXT.md`. Check task-local `NOTES.md` exactly once at task-run start: missing or whitespace-only means no payload; when non-empty, capture it successfully, immediately delete the file, and apply the payload once within the durable task contract. Record a conflict and seek clarification before conflicting work. Read recent `runs/` evidence only when the handoff or selected action depends on it.
+1. **Recover the contract.** Read `TASK.md`, `HANDOFF.md`, and `CONTEXT.md`. Check and handle task-local `NOTES.md` exactly once at task-run start under the Steering Notes contract in `TASKS.md`; retain the observed result for run evidence. Read recent `runs/` evidence only when the handoff or selected action depends on it.
    - Complete when scope, current state, constraints, and the one-time Steering Notes result are known.
 2. **Align pickup state.** When the workspace uses Task Browser, set the task to `active` unless its real state is already `blocked` or `review`. Compare metadata with `HANDOFF.md`; resolve discrepancies from task markdown and use the `TASKS.md` matrix to set or clear `nextActor` independently of status.
    - Complete when metadata reflects the real lifecycle state and responsible next actor, or Task Browser is not in use.
@@ -32,7 +32,7 @@ Choose the task action from authoritative task state and the current handoff. Ta
    - Complete when one action has a named deliverable and a checkable finish condition.
 4. **Execute and verify.** Complete only the selected action and run the smallest checks that establish its finish condition. Put newly discovered stable facts in `CONTEXT.md` or project knowledge only when they must survive the run.
    - Complete when the deliverable is verified or a concrete blocker is evidenced.
-5. **Leave a resumable handoff.** Replace transient buildup in `HANDOFF.md` with current state, the next action, and blockers or watch-outs. Write an append-only run log with exactly one `Steering Notes: none` or `Steering Notes: consumed` field. Align Task Browser status and `nextActor` again; use `review` with Agent next for an independent-review handoff, `active` with Agent next after a review bounce, and the authoritative `TASKS.md` matrix for every other case.
+5. **Leave a resumable handoff.** Replace transient buildup in `HANDOFF.md` with current state, the next action, and blockers or watch-outs. Write an append-only run log with exactly one `Steering Notes: none` or `Steering Notes: consumed` field. Align Task Browser status and `nextActor` again under the review-handoff, bounce, and `nextActor` contracts in `TASKS.md`.
    - Complete when task markdown, run evidence, and optional metadata agree and the next run can proceed without guessing.
 
 ## Pickup Complete When

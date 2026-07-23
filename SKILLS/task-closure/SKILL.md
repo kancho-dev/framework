@@ -28,9 +28,9 @@ Use `task-pickup` for implementation, review handoff, or an incomplete/bounced s
    - Complete when one branch and all of its required evidence are named, or closure has stopped with the missing evidence identified.
 2. **Reconcile task truth.** Replace historical buildup in `HANDOFF.md` with the disposition, evidence summary, and only the next action or resume condition that still applies. Update `CONTEXT.md` only for stable facts. Write an append-only closure run log; preserve the run's required Steering Notes field rather than reconstructing it.
    - Complete when task markdown states the same disposition, evidence, and actionable remainder without stale next steps.
-3. **Promote durable outcomes.** Update project `library/` files or `FIXES.md` only for knowledge that should outlive the task. Update `ACTIVE-CONTEXT.md` when the disposition changes shared priority, direction, or reported active state. Append a real timed entry to today's daily brief.
-   - Complete when every durable outcome has one authoritative home and the daily brief records this reconciliation.
-4. **Align optional metadata.** When Task Browser is in use, apply the lifecycle result from the branch table. Set `nextActor` independently from status using the `TASKS.md` matrix: clear it for done, paused, external/no-action states; set it only when a concrete Operator or Agent action can advance a blocker. Retain parent, child, and related links; keep `blockedBy` limited to existing concrete task blockers and clear resolved blockers. Pass only real provenance to the metadata CLI.
+3. **Promote durable outcomes.** Update project `library/` files or `FIXES.md` only for knowledge that should outlive the task. Update `ACTIVE-CONTEXT.md` when the disposition changes shared priority, direction, or reported active state.
+   - Complete when every durable outcome has one authoritative home and the end-of-session contract in `FRAMEWORK.md` is satisfied.
+4. **Align optional metadata.** When Task Browser is in use, apply the lifecycle result from the branch table. Align `nextActor`, relationships, blockers, and provenance under the Task Browser contract in `TASKS.md`, then confirm the result with a fresh metadata read.
    - Complete when metadata matches `HANDOFF.md`, relationship changes are accounted for, and a fresh metadata read shows no contradiction.
 5. **Audit the closure.** Re-read the compact handoff, run evidence, affected shared state, and metadata result. For a complete or wontfix branch, confirm no active next action survives; for pause, confirm the resume condition; for blocked, confirm the resolver and blocker.
    - Complete when another session can reproduce why this disposition is valid without relying on chat.
@@ -41,7 +41,7 @@ Use `task-pickup` for implementation, review handoff, or an incomplete/bounced s
 - `HANDOFF.md`, the closure run log, and optional metadata agree;
 - status, `nextActor`, and task relationships satisfy their separate rules;
 - stable knowledge and shared workspace state are updated only where the outcome requires it;
-- today's daily brief contains the timed reconciliation entry;
+- the universal end-of-task persistence in `FRAMEWORK.md` and `TASKS.md` is complete;
 - incomplete or bounced work has been routed back to `task-pickup` rather than closed.
 
 ## Companion Routing
