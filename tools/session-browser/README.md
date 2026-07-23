@@ -2,7 +2,7 @@
 
 A local, read-only browser for AI coding-agent sessions.
 
-Use it to quickly find, skim, and restore past Pi, OpenCode, and Codex coding sessions for the current workspace.
+Use it to quickly find, skim, and restore past Pi, OpenCode, Codex, and VS Code Copilot coding sessions for the current workspace.
 
 ## Quick Start
 
@@ -25,6 +25,7 @@ Useful one-liners:
 SESSION_SOURCES=pi npm start
 SESSION_SOURCES=opencode npm start
 SESSION_SOURCES=codex npm start
+SESSION_SOURCES=copilot npm start
 WORKSPACE_ROOT=/path/to/workspace npm start
 PORT=8790 npm start
 ```
@@ -34,10 +35,10 @@ The tool helps you:
 - browse sessions by prompt, cwd, origin, source, recency, token pressure, bookmarks, and tags;
 - bookmark important sessions and add simple manual tags that persist locally;
 - skim conversations, topic anchors, assistant answers, and tool actions;
-- copy restore commands back into Pi, OpenCode, or Codex;
+- copy restore commands back into Pi, OpenCode, Codex, or VS Code;
 - inspect patches, edits, todos, and copyable assistant code blocks.
 
-Everything stays local. The server reads session data and does not modify Pi, OpenCode, or Codex session stores.
+Everything stays local. The server reads session data and does not modify Pi, OpenCode, Codex, or VS Code Copilot session stores.
 
 ## Requirements
 
@@ -52,13 +53,14 @@ No npm install is needed for the current dependency-free tool.
 | --- | --- |
 | `PORT` | HTTP port. Default: `8787`. |
 | `WORKSPACE_ROOT` | Workspace to show sessions for. Default: nearest parent containing `AGENTS.md`, otherwise current directory. |
-| `SESSION_SOURCES` | Comma-separated sources. Default: `pi,opencode,codex`. Use `pi`, `opencode`, or `codex` to isolate one source. |
+| `SESSION_SOURCES` | Comma-separated sources. Default: `pi,opencode,codex,copilot`. Use `pi`, `opencode`, `codex`, or `copilot` to isolate one source. |
 | `PI_SESSION_ROOT` | Pi JSONL session root. |
 | `SESSION_ROOT` | Backward-compatible alias for `PI_SESSION_ROOT`. |
 | `OPENCODE_DB` | Exact OpenCode SQLite database path. |
 | `OPENCODE_DATA_DIR` | OpenCode data directory. Default DB becomes `$OPENCODE_DATA_DIR/opencode.db`. Also used for diff sidecar files. |
 | `CODEX_HOME` | Codex state directory. Default: `~/.codex`. |
 | `CODEX_SESSION_ROOT` | Codex rollout JSONL root. Default: `$CODEX_HOME/sessions`. |
+| `VSCODE_COPILOT_DATA` | VS Code workspace storage directory. Default: `~/Library/Application Support/Code/User/workspaceStorage` (macOS). |
 | `SESSION_BROWSER_OPENCODE_LIMIT` | Maximum OpenCode sessions to list after workspace filtering. Default: `500`. |
 | `SESSION_BROWSER_METADATA` | Local JSON sidecar file for bookmarks and tags. Default: `$WORKSPACE_ROOT/.tools-config/session-browser/metadata.json`. |
 
@@ -122,6 +124,30 @@ codex resume '<session-id>'
 
 Codex support is best-effort and fail-soft. It renders user/assistant text and generic tool calls from observed rollout events. `~/.codex/session_index.jsonl` may list only currently indexed sessions, so rollout JSONL files are treated as the browsing source of truth.
 
+### VS Code Copilot
+
+The VS Code Copilot adapter reads chat session JSON files from VS Code's workspace storage directory. It maps workspace storage IDs to actual workspace paths using `workspace.json` files and filters sessions to the configured `WORKSPACE_ROOT`.
+
+Default VS Code Copilot workspace storage (macOS):
+
+```text
+~/Library/Application Support/Code/User/workspaceStorage
+```
+
+On Linux:
+
+```text
+~/.config/Code/User/workspaceStorage
+```
+
+On Windows:
+
+```text
+%APPDATA%\Code\User\workspaceStorage
+```
+
+VS Code Copilot support is best-effort and fail-soft. Sessions are displayed as-is from the stored JSON. No restore command is generated as VS Code Copilot sessions are automatically available in the VS Code UI.
+
 ## UI Guide
 
 - **Search**: filter by prompt, cwd, name, id, path, or tag.
@@ -177,6 +203,10 @@ The file shape is intentionally simple and private/local. Older metadata files u
     "codex:session-id": {
       "bookmarked": false,
       "tags": ["codex"]
+    },
+    "copilot:session-id": {
+      "bookmarked": true,
+      "tags": ["vscode", "refactor"]
     }
   }
 }

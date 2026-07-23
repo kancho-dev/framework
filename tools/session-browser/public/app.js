@@ -4,7 +4,7 @@ import { renderEntry } from './entry-rendering.js';
 import { fetchSessionDetail, fetchSessions, putMetadata } from './api.js';
 import { sessionBrowserScope } from '/shared/browser/session-links.js';
 
-const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, tagFilter: 'all', sourceErrors: [], metadataError: null };
+const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, tagFilter: 'all', sourceErrors: [], successfulSources: [], metadataError: null };
 
 const els = {
   refresh: document.querySelector('#refresh'),
@@ -239,12 +239,18 @@ function scheduleSelectedTopicLinkScroll() {
 function renderSessions() {
   const query = els.filter.value;
   const sessions = sortSessions(state.sessions.filter((session) => matches(session, query)));
-  const errorText = [
-    ...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`),
-    state.metadataError || '',
-  ].filter(Boolean).length ? ` · ${[...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`), state.metadataError || ''].filter(Boolean).join(', ')}` : '';
+  const allSourcesFailed = (state.successfulSources || []).length === 0 && (state.sourceErrors || []).length > 0;
+  const sourceInfo = (state.successfulSources || []).length > 0
+    ? state.successfulSources.map(sourceLabel).join(', ')
+    : '';
+  const errorMessages = allSourcesFailed
+    ? (state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`)
+    : [];
+  if (state.metadataError) errorMessages.push(state.metadataError);
+  const errorText = errorMessages.length ? ` · ${errorMessages.join(', ')}` : '';
+  const sourceText = sourceInfo ? ` · ${sourceInfo}` : '';
   window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: state.workspaceName, root: state.workspaceRoot, tooltipPrefix: 'Workspace' });
-  els.status.textContent = `${sessions.length} of ${state.sessions.length} sessions · ${workspaceDisplayName()}${errorText}`;
+  els.status.textContent = `${sessions.length} of ${state.sessions.length} sessions · ${workspaceDisplayName()}${sourceText}${errorText}`;
   els.sessions.innerHTML = sessions.map((session) => `
     <li>
       <button class="session-card ${session.path === state.selectedPath ? 'active' : ''} ${isBookmarked(session) ? 'bookmarked' : ''}" data-path="${escapeHtml(session.path)}">
@@ -448,6 +454,7 @@ async function loadSessions({ reloadSelected = false, scrollSelected = true } = 
   state.sessions = data.sessions;
   state.sessionRoot = data.sessionRoot;
   state.sourceErrors = data.sourceErrors || [];
+  state.successfulSources = data.successfulSources || [];
   state.workspaceRoot = data.workspaceRoot;
   state.workspaceName = data.workspaceName;
   updateDocumentTitle();
