@@ -102,6 +102,12 @@ async function readSubscriptions(path) {
 function summarize(normalized, subscriptions) {
   const records = normalized.records || [];
   const byMonth = group(records, (r) => (r.date || 'unknown').slice(0, 7));
+  const byDay = group(records.filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date || '')), (r) => r.date);
+  const daily = [...byDay.entries()].map(([date, rows]) => ({
+    date,
+    tokens: sum(rows, 'totalTokens'),
+    records: rows.length,
+  })).sort((a, b) => a.date.localeCompare(b.date));
   const monthly = [...byMonth.entries()].map(([month, rows]) => {
     const tokens = sum(rows, 'totalTokens');
     const recorded = sum(rows, 'recordedCost');
@@ -125,6 +131,7 @@ function summarize(normalized, subscriptions) {
     byModel: rows(group(records, (r) => r.modelLabel || r.model || 'unknown-model')),
     bySource: rows(group(records, (r) => r.source || 'unknown-source')),
     monthly,
+    daily,
     subscriptions,
     topDrivers: sessionDrivers(records).slice(0, 12),
     topMessageDrivers: records.slice().sort(compareTopDrivers).slice(0, 12),

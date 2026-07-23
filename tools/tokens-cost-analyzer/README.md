@@ -34,6 +34,8 @@ Optional private subscription records can live at:
 
 using records shaped like `id`, `month`, `service`, `amount`, and `currency`. The web UI uses them for a monthly subscription-vs-token-spend chart and effective subscription cost per 1M tokens.
 
+The monthly chart labels token totals above each stack and compact subscription/estimated currency values inside their segments; tooltips retain the complete monthly details. The dashboard also derives UTC daily buckets from normalized records. It presents a Monday-first, multi-year token-usage heatmap; average usage per observed calendar day and active day; the latest 30 calendar days compared with the prior 30; and dynamic token share by source tool. Missing calendar dates render as zero usage. Source token totals are comparable for this overview, but source record counts are not because adapters can record at different granularities.
+
 The analyzer includes a bundled Pi-derived pricing table at `data/pi-pricing.json`, so estimates work even when Pi is not installed locally. Copy `pricing.sample.json` to `.tools-config/tokens-cost-analyzer/pricing.json` only when you need workspace-local overrides or additional models; local entries are checked before the bundled table. Missing pricing or missing token fields are reported as unknown/unpriced, not zero. Use explicit `0` prices only for models you know were free for your local usage window.
 
 Subscription comparisons are warning-only when currencies differ from token estimate currency. Token estimates are USD pricing-table estimates; manually normalize subscription records to USD before treating token and subscription totals as directly comparable.

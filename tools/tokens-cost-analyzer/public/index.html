@@ -20,7 +20,13 @@
     <p id="status" class="status">Loading…</p>
     <section id="warnings" class="warnings hidden"></section>
     <section class="hero-grid" id="totals"></section>
-    <section class="panel wide"><div class="panel-title"><h2>Monthly spend cockpit</h2><span>estimated token cost vs subscriptions</span></div><div id="monthly-chart" class="chart"></div></section>
+    <section class="usage-layout">
+      <article class="panel monthly-panel"><div class="panel-title"><h2>Monthly spend cockpit</h2><div class="panel-legend"><span><i class="dot" style="background:var(--accent)"></i>estimated token cost</span><span><i class="dot" style="background:var(--purple)"></i>subscriptions</span></div></div><div id="monthly-chart" class="chart"></div></article>
+      <div class="usage-stack">
+        <article class="panel"><div class="panel-title"><div><h2>Daily token usage</h2><span id="daily-summary">UTC calendar days</span></div></div><div id="daily-heatmap" class="heatmap"></div><div id="daily-stats" class="daily-stats"></div></article>
+        <article class="panel"><div class="panel-title"><h2>Usage by agent tool</h2><span>normalized token share</span></div><div id="source-chart" class="bars compact-bars"></div></article>
+      </div>
+    </section>
     <section class="grid two">
       <article class="panel"><div class="panel-title"><h2>Models</h2><span>token-heavy drivers</span></div><div id="model-chart" class="bars"></div></article>
       <article class="panel"><div class="panel-title"><h2>Subscriptions</h2><span>private local data</span></div><div id="subscription-chart" class="bars"></div></article>
