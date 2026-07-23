@@ -818,8 +818,12 @@ function copilotContentBlocks(responseParts) {
   if (!Array.isArray(responseParts)) return [];
   const blocks = [];
   for (const part of responseParts) {
-    if (part?.kind === 'text' && typeof part.value === 'string') {
-      blocks.push({ type: 'text', text: part.value });
+    // Text responses can have kind: "text" or no kind property (just value with supportThemeIcons/supportHtml)
+    if (typeof part?.value === 'string' && (part.kind === 'text' || part.kind === null || part.kind === undefined)) {
+      // Skip if it's actually a tool invocation message (has other identifying properties)
+      if (part.kind !== 'toolInvocationSerialized' && !part.toolCallId) {
+        blocks.push({ type: 'text', text: part.value });
+      }
     } else if (part?.kind === 'toolInvocationSerialized') {
       let resultText = '';
       if (part.result && typeof part.result === 'object' && part.result.value) {
