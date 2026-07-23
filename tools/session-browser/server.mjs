@@ -850,6 +850,55 @@ function copilotRequestMessage(request) {
   return [{ type: 'text', text: request.message.text }];
 }
 
+function copilotModelChangeEntries(entries, requests) {
+  const result = [];
+  let previousModel = '';
+  
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    
+    // Find the corresponding request for this assistant message
+    if (entry?.type === 'message' && entry.message?.role === 'assistant') {
+      // Find which request index this corresponds to by counting assistant messages
+      let assistantCount = 0;
+      for (let j = 0; j < entries.length; j++) {
+        if (entries[j]?.type === 'message' && entries[j].message?.role === 'assistant') {
+          if (j <= i) assistantCount++;
+        }
+      }
+      
+      const requestIndex = assistantCount - 1;
+      const request = requests[requestIndex];
+      const currentModel = request?.modelId || '';
+      
+      // If model changed, add a model_change entry before the assistant message
+      if (currentModel && currentModel !== previousModel) {
+        // Parse the model string (e.g., "copilot/claude-sonnet-4.5")
+        const parts = String(currentModel).split('/');
+        const provider = parts[0] || '';
+        const model = parts.slice(1).join('/') || currentModel;
+        
+        result.push({
+          id: `model-${entry.id}`,
+          type: 'model_change',
+          timestamp: entry.timestamp,
+          source: 'copilot',
+          provider,
+          modelId: model,
+          variant: '',
+          modelLabel: modelLabelFromParts({ source: 'copilot', provider, model, variant: '' }),
+          synthetic: true,
+        });
+        previousModel = currentModel;
+      }
+    }
+    
+    result.push(entry);
+  }
+  
+  return result;
+}
+
 async function walkWorkspaceStorage(root) {
   const workspaces = [];
   let entries;
@@ -909,13 +958,26 @@ async function listCopilotSessions(ctx) {
           const allResponses = requests.flatMap((req) => Array.isArray(req.response) ? req.response : []);
           const toolCalls = allResponses.filter((part) => part?.kind === 'toolInvocationSerialized');
           const timestamps = requests.map((req) => req.timestamp).filter(Boolean);
+          
+          // Extract the actual model label from the latest request
+          let modelLabel = 'GitHub Copilot';
+          if (requests.length > 0) {
+            const lastRequest = requests[requests.length - 1];
+            if (lastRequest?.modelId) {
+              const parts = String(lastRequest.modelId).split('/');
+              const provider = parts[0] || '';
+              const model = parts.slice(1).join('/') || lastRequest.modelId;
+              modelLabel = modelLabelFromParts({ source: 'copilot', provider, model, variant: '' });
+            }
+          }
+          
           sessions.push({
             id: sessionId,
             source: 'copilot',
             path: copilotRef(sessionId),
             cwd: workspace.cwd,
             name: '',
-            modelLabel: 'GitHub Copilot',
+            modelLabel,
             firstPrompt,
             createdAt: timestamps[0] || fileStat.birthtime?.toISOString(),
             updatedAt: timestamps.at(-1) || fileStat.mtime?.toISOString(),
@@ -981,10 +1043,14 @@ async function loadCopilotSession(ctx, ref) {
         });
       }
     }
+    
+    // Add model change entries when model changes
+    const enrichedEntries = copilotModelChangeEntries(entries, requests);
+    
     const userMessages = requests.filter((req) => req?.message?.text);
     const firstPrompt = truncate(userMessages[0]?.message?.text || '');
     const timestamps = requests.map((req) => req.timestamp).filter(Boolean);
-    const topicAnchors = entries
+    const topicAnchors = enrichedEntries
       .filter((entry) => entry.message?.role === 'user')
       .map((entry, index) => ({
         id: entry.id,
@@ -992,28 +1058,41 @@ async function loadCopilotSession(ctx, ref) {
         title: truncate(textFromContent(entry.message.content), 80) || `User prompt ${index + 1}`,
         depth: index === 0 ? 'first-prompt' : 'user-prompt',
       }));
+    
+    // Extract the actual model label from the latest request
+    let modelLabel = 'GitHub Copilot';
+    if (requests.length > 0) {
+      const lastRequest = requests[requests.length - 1];
+      if (lastRequest?.modelId) {
+        const parts = String(lastRequest.modelId).split('/');
+        const provider = parts[0] || '';
+        const model = parts.slice(1).join('/') || lastRequest.modelId;
+        modelLabel = modelLabelFromParts({ source: 'copilot', provider, model, variant: '' });
+      }
+    }
+    
     const summary = {
       id: sessionId,
       source: 'copilot',
       path: copilotRef(sessionId),
       cwd: workspace.cwd,
       name: '',
-      modelLabel: 'GitHub Copilot',
+      modelLabel,
       firstPrompt,
       createdAt: timestamps[0] || fileStat.birthtime?.toISOString(),
       updatedAt: timestamps.at(-1) || fileStat.mtime?.toISOString(),
       leafId: null,
-      messageCount: entries.length,
+      messageCount: enrichedEntries.length,
       userMessageCount: userMessages.length,
       assistantMessageCount: requests.length,
       assistantRawMessageCount: requests.length,
       toolMessageCount: 0,
       toolResultCount: 0,
-      toolCallCount: entries.filter((e) => e.message?.content?.some((c) => c.type === 'toolCall')).length,
+      toolCallCount: enrichedEntries.filter((e) => e.message?.content?.some((c) => c.type === 'toolCall')).length,
       toolNames: [],
       ...emptyUsage(),
     };
-    return { ...summary, entries, activeEntries: entries, topicAnchors };
+    return { ...summary, entries: enrichedEntries, activeEntries: enrichedEntries, topicAnchors };
   }
   throw new Error('Copilot session not found');
 }
