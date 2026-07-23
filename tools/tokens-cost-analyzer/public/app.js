@@ -182,5 +182,8 @@ function analysisLabel(analysis) {
 }
 function metric(label, value, note) { return `<article class="metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`; }
 function compactStat(label, value, details) { return `<span class="daily-stat" title="${details}" aria-label="${label}: ${value}. ${details}" tabindex="0"><span>${label}:</span> <strong>${value}</strong></span>`; }
-function compactCurrency(value, currency) { return new Intl.NumberFormat('en', { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1 }).format(Number(value) || 0); }
-function barHeight(value, max) { return Math.max(value > 0 ? 6 : 0, (Number(value) || 0) / max * 88); }
+function compactCurrency(value, currency) {
+  const amount = Number(value) || 0;
+  return new Intl.NumberFormat('en', { style: 'currency', currency, notation: 'compact', maximumFractionDigits: Math.abs(amount) >= 100 ? 0 : 1 }).format(amount);
+}
+function barHeight(value, max) { return Math.max(value > 0 ? 7 : 0, (Number(value) || 0) / max * 86); }
