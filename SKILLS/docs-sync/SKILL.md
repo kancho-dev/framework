@@ -19,7 +19,7 @@ Admit exactly one branch before inspection:
 
 If the project, changed behavior, contradiction, or documentation surface needed by the selected branch is absent or ambiguous, ask the Operator to choose or supply it before broad inspection. The branch is admitted when its boundary can be stated in one sentence and its evidence and candidate documentation surfaces are named.
 
-`project-self-check` detects and scopes project drift; it hands admitted contradictions to this repair workflow. `self-check` owns workspace coordination, `task-closure` owns task dispositions, and `FRAMEWORK.md`/`TASKS.md` own universal procedure.
+Invoke this workflow directly when the contradiction, authority, project, and candidate documentation surface are already identified. Use `project-self-check` upstream only when project maintenance discovers or still needs to scope the drift; it hands admitted contradictions to this repair workflow. `self-check` owns workspace coordination, `task-closure` owns task dispositions, and `FRAMEWORK.md`/`TASKS.md` own universal procedure.
 
 ## Required Inputs
 
