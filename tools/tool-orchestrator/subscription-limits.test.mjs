@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { claudeGauge, codexGauge, selectCodexWeeklyWindow, subscriptionLimits, WEEKLY_WINDOW_MINS } from './subscription-limits.mjs';
+import { claudeGauges, codexGauge, selectCodexWeeklyWindow, subscriptionLimits, WEEKLY_WINDOW_MINS } from './subscription-limits.mjs';
+
+const [weeklyGauge, fiveHourGauge] = [
+  (usage, asOf) => claudeGauges(usage, asOf)[0],
+  (usage, asOf) => claudeGauges(usage, asOf)[1],
+];
 
 const ASOF = '2026-07-24T20:00:00.000Z';
 const RESET_SECONDS = 1_784_000_000;
@@ -51,42 +56,71 @@ test('converts Codex reset seconds to ISO and omits absent resets', () => {
   assert.equal(codexGauge(withoutReset, ASOF).resetsAt, null);
 });
 
-test('reads the Claude seven-day window and keeps provider-reported provenance', () => {
+test('reads both Claude windows from one usage response and keeps provider-reported provenance', () => {
   const usage = {
     five_hour: { utilization: 99, resets_at: '2026-07-24T22:00:00Z' },
     seven_day: { utilization: 62.4, resets_at: '2026-07-29T09:30:00Z' },
   };
-  const result = claudeGauge(usage, ASOF);
-  assert.equal(result.remainingPercent, 38);
-  assert.equal(result.resetsAt, '2026-07-29T09:30:00.000Z');
-  assert.equal(result.source, 'provider-reported');
-  assert.equal(result.windowLabel, 'Weekly (7 day)');
+  const [weekly, fiveHour] = claudeGauges(usage, ASOF);
+  assert.deepEqual(
+    [weekly.id, weekly.remainingPercent, weekly.resetsAt, weekly.windowLabel, weekly.source],
+    ['claude-code', 38, '2026-07-29T09:30:00.000Z', 'Weekly (7 day)', 'provider-reported'],
+  );
+  assert.deepEqual(
+    [fiveHour.id, fiveHour.remainingPercent, fiveHour.resetsAt, fiveHour.windowLabel, fiveHour.source],
+    ['claude-code-five-hour', 1, '2026-07-24T22:00:00.000Z', '5 hour', 'provider-reported'],
+  );
 });
 
-test('reports Claude unavailable for missing, null, or unparsable weekly data', () => {
-  assert.equal(claudeGauge({ five_hour: { utilization: 10 } }, ASOF).reason, 'no-weekly-window');
-  assert.equal(claudeGauge({ seven_day: { utilization: null } }, ASOF).status, 'unavailable');
-  assert.equal(claudeGauge(null, ASOF).reason, 'no-data');
-  assert.equal(claudeGauge({ seven_day: { utilization: 20, resets_at: 'not-a-date' } }, ASOF).resetsAt, null);
+test('reports each Claude window unavailable independently with a window-specific reason', () => {
+  const weeklyOnly = { seven_day: { utilization: 30 } };
+  assert.equal(fiveHourGauge(weeklyOnly, ASOF).reason, 'no-five-hour-window');
+  assert.equal(weeklyGauge(weeklyOnly, ASOF).status, 'ok');
+  const fiveHourOnly = { five_hour: { utilization: 10 } };
+  assert.equal(weeklyGauge(fiveHourOnly, ASOF).reason, 'no-weekly-window');
+  assert.equal(fiveHourGauge(fiveHourOnly, ASOF).status, 'ok');
+  assert.equal(weeklyGauge({ seven_day: { utilization: null } }, ASOF).status, 'unavailable');
+  assert.equal(fiveHourGauge({ five_hour: { utilization: null } }, ASOF).status, 'unavailable');
+  assert.deepEqual(claudeGauges(null, ASOF).map((provider) => provider.reason), ['no-data', 'no-data']);
+  assert.equal(weeklyGauge({ seven_day: { utilization: 20, resets_at: 'not-a-date' } }, ASOF).resetsAt, null);
 });
 
 test('clamps out-of-range utilization for display only', () => {
-  assert.equal(claudeGauge({ seven_day: { utilization: 140 } }, ASOF).remainingPercent, 0);
-  assert.equal(claudeGauge({ seven_day: { utilization: -20 } }, ASOF).remainingPercent, 100);
+  assert.equal(weeklyGauge({ seven_day: { utilization: 140 } }, ASOF).remainingPercent, 0);
+  assert.equal(weeklyGauge({ seven_day: { utilization: -20 } }, ASOF).remainingPercent, 100);
+  assert.equal(fiveHourGauge({ five_hour: { utilization: 140 } }, ASOF).remainingPercent, 0);
 });
 
 test('providers fail independently and carry a coarse reason', async () => {
   const summary = await subscriptionLimits({
     readCodex: async () => { throw new Error('codex-timeout'); },
-    readClaude: async () => ({ seven_day: { utilization: 30, resets_at: '2026-07-29T09:30:00Z' } }),
+    readClaude: async () => ({
+      five_hour: { utilization: 80, resets_at: '2026-07-24T22:00:00Z' },
+      seven_day: { utilization: 30, resets_at: '2026-07-29T09:30:00Z' },
+    }),
     now: () => new Date(ASOF),
   });
-  const [codex, claude] = summary.providers;
+  const [codex, weekly, fiveHour] = summary.providers;
   assert.equal(codex.status, 'unavailable');
   assert.equal(codex.reason, 'codex-timeout');
-  assert.equal(claude.status, 'ok');
-  assert.equal(claude.remainingPercent, 70);
+  assert.equal(weekly.status, 'ok');
+  assert.equal(weekly.remainingPercent, 70);
+  assert.equal(fiveHour.status, 'ok');
+  assert.equal(fiveHour.remainingPercent, 20);
   assert.equal(summary.asOf, ASOF);
+});
+
+test('a single Claude read backs both windows, so they fail together on one failure', async () => {
+  let reads = 0;
+  const summary = await subscriptionLimits({
+    readCodex: async () => ({ rateLimits: { primary: { usedPercent: 10, windowDurationMins: WEEKLY_WINDOW_MINS } } }),
+    readClaude: async () => { reads += 1; throw new Error('claude-token-expired'); },
+    now: () => new Date(ASOF),
+  });
+  assert.equal(reads, 1);
+  assert.deepEqual(summary.providers.map((provider) => provider.id), ['codex', 'claude-code', 'claude-code-five-hour']);
+  assert.equal(summary.providers[0].status, 'ok');
+  assert.deepEqual(summary.providers.slice(1).map((provider) => provider.reason), ['claude-token-expired', 'claude-token-expired']);
 });
 
 test('reduces unknown failures to a coarse reason without leaking provider detail', async () => {
@@ -102,12 +136,22 @@ test('reduces unknown failures to a coarse reason without leaking provider detai
   assert.ok(!serialized.includes('Bearer'));
 });
 
+test('reduces unknown Claude failures for every window without leaking provider detail', async () => {
+  const summary = await subscriptionLimits({
+    readCodex: async () => ({ rateLimits: {} }),
+    readClaude: async () => { throw new Error('Bearer sk-secret-token leaked in message'); },
+    now: () => new Date(ASOF),
+  });
+  assert.deepEqual(summary.providers.slice(1).map((provider) => provider.reason), ['unreadable', 'unreadable']);
+  assert.ok(!JSON.stringify(summary).includes('sk-secret-token'));
+});
+
 test('stamps every provider with the same as-of time so staleness is comparable', async () => {
   const summary = await subscriptionLimits({
     readCodex: async () => ({ rateLimits: { primary: { usedPercent: 10, windowDurationMins: WEEKLY_WINDOW_MINS } } }),
-    readClaude: async () => ({ seven_day: { utilization: 10 } }),
+    readClaude: async () => ({ five_hour: { utilization: 50 }, seven_day: { utilization: 10 } }),
     now: () => new Date(ASOF),
   });
-  assert.deepEqual(summary.providers.map((provider) => provider.asOf), [ASOF, ASOF]);
+  assert.deepEqual(summary.providers.map((provider) => provider.asOf), [ASOF, ASOF, ASOF]);
   assert.equal(summary.refreshIntervalMs, 300_000);
 });

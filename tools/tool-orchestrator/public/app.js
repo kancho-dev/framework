@@ -15,7 +15,7 @@ let widgetCatalog = {
   'priority-tasks': { title: 'Needs attention', size: 'wide' },
   'latest-bookmarked-session': { title: 'Bookmarked session', size: 'small' },
   'latest-updated-session': { title: 'Latest session', size: 'small' },
-  'subscription-limits': { title: 'Weekly limits', size: 'wide' },
+  'subscription-limits': { title: 'Subscription limits', size: 'wide' },
   tools: { title: 'Tools', size: 'wide' },
 };
 const DEFAULT_LAYOUT = [
@@ -186,9 +186,9 @@ function renderWidgetContent(type) {
 }
 
 function renderSubscriptionLimits(limits) {
-  const header = `<div class="limits-head"><div><p class="kicker">weekly subscription limits</p><h3>Weekly limits</h3></div>
-    <button type="button" class="limits-refresh" data-action="refresh-limits" aria-label="Refresh weekly limits"${limits.loading ? ' disabled' : ''}>${refreshIcon()}</button></div>`;
-  if (!limits.data) return `${header}<p class="empty">${limits.loading ? 'Loading limits…' : 'Weekly limits unavailable.'}</p>`;
+  const header = `<div class="limits-head"><div><p class="kicker">subscription usage limits</p><h3>Subscription limits</h3></div>
+    <button type="button" class="limits-refresh" data-action="refresh-limits" aria-label="Refresh subscription limits"${limits.loading ? ' disabled' : ''}>${refreshIcon()}</button></div>`;
+  if (!limits.data) return `${header}<p class="empty">${limits.loading ? 'Loading limits…' : 'Subscription limits unavailable.'}</p>`;
   return `${header}<div class="limit-gauges${isStale(limits) ? ' stale' : ''}">${limits.data.providers.map(renderLimitGauge).join('')}</div>`;
 }
 
@@ -196,15 +196,16 @@ function renderLimitGauge(provider) {
   const remaining = remainingFor(provider);
   const level = gaugeLevel(remaining);
   const value = remaining === null ? '—' : `${remaining}%`;
+  const title = `${provider.label} · ${provider.windowLabel}`;
   const summary = remaining === null
     ? `unavailable — ${escapeHtml(limitReasonText(provider.reason))}`
     : `${remaining}% left`;
   const detail = remaining === null
     ? 'No provider-reported value'
-    : `${escapeHtml(provider.windowLabel)} · resets ${escapeHtml(formatReset(provider.resetsAt))}`;
-  return `<div class="limit-gauge level-${level}">
-    <span class="gauge-ring" style="--pct:${remaining === null ? 0 : remaining}" role="img" aria-label="${escapeHtml(provider.label)}: ${summary}"><span>${escapeHtml(value)}</span></span>
-    <div class="gauge-text"><strong>${escapeHtml(provider.label)}</strong><span class="gauge-summary">${summary}</span><span class="gauge-detail">${detail}</span>
+    : `resets ${escapeHtml(formatReset(provider.resetsAt))}`;
+  return `<div class="limit-gauge level-${level}" data-provider="${escapeHtml(provider.id)}">
+    <span class="gauge-ring" style="--pct:${remaining === null ? 0 : remaining}" role="img" aria-label="${escapeHtml(title)}: ${summary}"><span>${escapeHtml(value)}</span></span>
+    <div class="gauge-text"><strong>${escapeHtml(title)}</strong><span class="gauge-summary">${summary}</span><span class="gauge-detail">${detail}</span>
       <span class="gauge-detail">as of ${escapeHtml(formatDate(provider.asOf))}${provider.source ? ' · provider-reported' : ''}</span></div>
   </div>`;
 }

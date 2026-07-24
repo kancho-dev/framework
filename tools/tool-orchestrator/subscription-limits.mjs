@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-// Retrieval-only weekly subscription limits for Codex and Claude Code.
+// Retrieval-only subscription limits for Codex and Claude Code.
 // Provider credentials and raw provider responses never leave this module:
 // callers receive computed gauges only, and every failure degrades to a
 // coarse `unavailable` reason instead of surfacing provider payloads.
@@ -18,6 +18,17 @@ const CLAUDE_OAUTH_BETA = 'oauth-2025-04-20';
 export const PROVIDERS = [
   { id: 'codex', label: 'Codex', windowLabel: 'Weekly' },
   { id: 'claude-code', label: 'Claude Code', windowLabel: 'Weekly (7 day)' },
+  { id: 'claude-code-five-hour', label: 'Claude Code', windowLabel: '5 hour' },
+];
+
+const CODEX = PROVIDERS[0];
+
+// Both Claude windows come from a single usage response, so they share one read
+// and fail together; Codex stays independent. Weekly leads so the two weekly
+// gauges line up first and the five-hour one falls under Claude's weekly gauge.
+const CLAUDE_WINDOWS = [
+  { provider: PROVIDERS[1], key: 'seven_day', missingReason: 'no-weekly-window' },
+  { provider: PROVIDERS[2], key: 'five_hour', missingReason: 'no-five-hour-window' },
 ];
 
 function unavailable(provider, reason, asOf) {
@@ -67,23 +78,25 @@ function codexSnapshots(response) {
 }
 
 export function codexGauge(response, asOf) {
-  const provider = PROVIDERS[0];
-  if (!response || typeof response !== 'object') return unavailable(provider, 'no-data', asOf);
+  if (!response || typeof response !== 'object') return unavailable(CODEX, 'no-data', asOf);
   const window = selectCodexWeeklyWindow(response);
-  if (!window) return unavailable(provider, 'no-weekly-window', asOf);
+  if (!window) return unavailable(CODEX, 'no-weekly-window', asOf);
   const remainingPercent = displayRemaining(window.usedPercent);
-  if (remainingPercent === null) return unavailable(provider, 'no-weekly-window', asOf);
-  return gauge(provider, remainingPercent, isoFromSeconds(window.resetsAt), asOf);
+  if (remainingPercent === null) return unavailable(CODEX, 'no-weekly-window', asOf);
+  return gauge(CODEX, remainingPercent, isoFromSeconds(window.resetsAt), asOf);
 }
 
-export function claudeGauge(usage, asOf) {
-  const provider = PROVIDERS[1];
+function claudeWindowGauge(usage, asOf, { provider, key, missingReason }) {
   if (!usage || typeof usage !== 'object') return unavailable(provider, 'no-data', asOf);
-  const weekly = usage.seven_day;
-  if (!weekly || typeof weekly !== 'object') return unavailable(provider, 'no-weekly-window', asOf);
-  const remainingPercent = displayRemaining(weekly.utilization);
-  if (remainingPercent === null) return unavailable(provider, 'no-weekly-window', asOf);
-  return gauge(provider, remainingPercent, isoFromValue(weekly.resets_at), asOf);
+  const window = usage[key];
+  if (!window || typeof window !== 'object') return unavailable(provider, missingReason, asOf);
+  const remainingPercent = displayRemaining(window.utilization);
+  if (remainingPercent === null) return unavailable(provider, missingReason, asOf);
+  return gauge(provider, remainingPercent, isoFromValue(window.resets_at), asOf);
+}
+
+export function claudeGauges(usage, asOf) {
+  return CLAUDE_WINDOWS.map((window) => claudeWindowGauge(usage, asOf, window));
 }
 
 async function withTimeout(promise, ms, onTimeout) {
@@ -168,21 +181,22 @@ function reasonFor(error) {
   return known.has(message) ? message : 'unreadable';
 }
 
-async function providerGauge(provider, read, build, asOf) {
+async function providerGauges(providers, read, build, asOf) {
   try {
     return build(await read(), asOf);
   } catch (error) {
-    return unavailable(provider, reasonFor(error), asOf);
+    const reason = reasonFor(error);
+    return providers.map((provider) => unavailable(provider, reason, asOf));
   }
 }
 
 export async function subscriptionLimits({ readCodex = readCodexRateLimits, readClaude = readClaudeUsage, now = () => new Date() } = {}) {
   const asOf = now().toISOString();
-  const providers = await Promise.all([
-    providerGauge(PROVIDERS[0], readCodex, codexGauge, asOf),
-    providerGauge(PROVIDERS[1], readClaude, claudeGauge, asOf),
+  const [codex, claude] = await Promise.all([
+    providerGauges([CODEX], readCodex, (response, at) => [codexGauge(response, at)], asOf),
+    providerGauges(CLAUDE_WINDOWS.map((window) => window.provider), readClaude, claudeGauges, asOf),
   ]);
-  return { asOf, refreshIntervalMs: 300_000, providers };
+  return { asOf, refreshIntervalMs: 300_000, providers: [...codex, ...claude] };
 }
 
 export function createSubscriptionLimitsReader(options = {}) {

@@ -10,6 +10,7 @@ const REASON_TEXT = {
   'claude-request-failed': 'provider request failed',
   'no-data': 'no data returned',
   'no-weekly-window': 'no weekly window reported',
+  'no-five-hour-window': 'no 5 hour window reported',
   timeout: 'provider timed out',
   unreadable: 'source unreadable',
 };

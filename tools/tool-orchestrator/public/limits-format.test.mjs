@@ -34,6 +34,7 @@ test('explains every coarse unavailable reason without echoing provider detail',
   assert.equal(limitReasonText('claude-no-token'), 'Claude Code sign-in not found');
   assert.equal(limitReasonText('codex-timeout'), 'provider timed out');
   assert.equal(limitReasonText('no-weekly-window'), 'no weekly window reported');
+  assert.equal(limitReasonText('no-five-hour-window'), 'no 5 hour window reported');
   assert.equal(limitReasonText('something-unmapped'), 'no available source');
   assert.equal(limitReasonText(undefined), 'no available source');
 });
