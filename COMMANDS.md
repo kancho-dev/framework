@@ -1,6 +1,6 @@
 # Native Framework Commands
 
-This framework can be used through normal prompts, but some tools also support native slash/prompt commands. Keep these commands transparent: they should expand to inspectable prompts that name the role, skill, context expectations, and safety gates.
+This framework can be used through normal prompts, but several tools also support native slash/prompt commands. Keep these commands transparent: each should expand to an inspectable prompt that names the role, skill, context expectations, and safety gates.
 
 ## Command Model
 
@@ -28,89 +28,50 @@ The first portable commands are intentionally small:
 
 More commands can be added later once these prove useful. Good candidates include `task-pickup`, `review-and-test`, and `task-closure`.
 
-## Pi Prompt Templates
+## Canonical Command Files
 
-Pi supports native prompt templates loaded from `~/.pi/agent/prompts/*.md`, workspace `.pi/prompts/*.md`, package `prompts/` directories, configured `prompts` entries, or repeated `--prompt-template <path>` flags.
+This repository ships the command bodies once, as plain Markdown in [`prompts/`](prompts/). Every supported tool consumes these same files, so behavior lives in one place and changes ship with normal framework updates.
 
-This repository ships Pi-compatible templates in [`prompts/`](prompts/):
+| Command | File | Invoke as |
+| --- | --- | --- |
+| next-best-actions | [`prompts/next-best-actions.md`](prompts/next-best-actions.md) | `/next-best-actions` |
+| slc | [`prompts/slc.md`](prompts/slc.md) | `/slc` |
+| update-framework | [`prompts/update-framework.md`](prompts/update-framework.md) | `/update-framework` |
+| workspace-maintenance | [`prompts/workspace-maintenance.md`](prompts/workspace-maintenance.md) | `/workspace-maintenance` |
 
-- [`prompts/next-best-actions.md`](prompts/next-best-actions.md) -> `/next-best-actions`
-- [`prompts/slc.md`](prompts/slc.md) -> `/slc`
-- [`prompts/update-framework.md`](prompts/update-framework.md) -> `/update-framework`
-- [`prompts/workspace-maintenance.md`](prompts/workspace-maintenance.md) -> `/workspace-maintenance`
+Each file uses YAML frontmatter (`description`, `argument-hint`) and reads user input from `$ARGUMENTS`. The files are plain Markdown, so inspect and modify any command before invoking it.
 
-To use them in one workspace, symlink or copy the files into `.pi/prompts/` at the workspace root, or configure Pi to load this repository's `prompts/` directory. The files are plain Markdown so users can inspect and modify the behavior before invoking them.
+## Installing Into a Tool
 
-Recommended Linux/macOS symlink setup from the workspace root:
+Every supported tool loads commands from a directory of Markdown files; installation only points that directory at the shipped `prompts/` files. Symlinks keep the directory tracking the installed `framework/prompts/`, so prompt changes arrive with normal framework updates. Copies are more Windows-friendly but do not auto-update — re-copy after framework updates.
 
-```bash
-mkdir -p .pi/prompts
-ln -s ../../framework/prompts/next-best-actions.md .pi/prompts/next-best-actions.md
-ln -s ../../framework/prompts/slc.md .pi/prompts/slc.md
-ln -s ../../framework/prompts/update-framework.md .pi/prompts/update-framework.md
-ln -s ../../framework/prompts/workspace-maintenance.md .pi/prompts/workspace-maintenance.md
-```
-
-Symlinks keep `.pi/prompts/` pointed at the installed `framework/prompts/` files, so command prompt changes arrive with normal framework updates. If symlinks are not supported or are undesirable, use the copy fallback:
+Pi, OpenCode, and Claude Code read commands from a **workspace** directory two levels below the root, so the same relative setup works for all three — only the directory name changes:
 
 ```bash
-mkdir -p .pi/prompts
-cp framework/prompts/*.md .pi/prompts/
-```
-
-Copied prompts are simpler and more Windows-friendly, but they do not update automatically when `framework/prompts/` changes. Re-copy them after framework updates when needed.
-
-Before installing either way, inspect existing `.pi/prompts/` files. Do not overwrite same-name local prompts unless the Operator explicitly wants framework prompts to replace them. The `ln -s` commands above intentionally fail when a target file already exists.
-
-## OpenCode Commands
-
-OpenCode supports native Markdown commands in workspace `.opencode/commands/` and global `~/.config/opencode/commands/`. The Markdown body is the command template, frontmatter can provide metadata such as `description`, and arguments are available as `$ARGUMENTS` or positional variables like `$1` and `$2`.
-
-Use the same canonical templates from [`prompts/`](prompts/) for OpenCode unless a local OpenCode version rejects a frontmatter field. Recommended Linux/macOS symlink setup from the workspace root:
-
-```bash
-mkdir -p .opencode/commands
-ln -s ../../framework/prompts/next-best-actions.md .opencode/commands/next-best-actions.md
-ln -s ../../framework/prompts/slc.md .opencode/commands/slc.md
-ln -s ../../framework/prompts/update-framework.md .opencode/commands/update-framework.md
-ln -s ../../framework/prompts/workspace-maintenance.md .opencode/commands/workspace-maintenance.md
+DIR=.claude/commands   # or .pi/prompts, or .opencode/commands
+mkdir -p "$DIR"
+for f in next-best-actions slc update-framework workspace-maintenance; do
+  ln -s "../../framework/prompts/$f.md" "$DIR/$f.md"
+done
 ```
 
 Copy fallback:
 
 ```bash
-mkdir -p .opencode/commands
-cp framework/prompts/*.md .opencode/commands/
+mkdir -p "$DIR" && cp framework/prompts/*.md "$DIR/"
 ```
 
-OpenCode also supports JSON/JSONC `command` config and `{file:path}` substitution, for example `template: "{file:framework/prompts/next-best-actions.md}"`. Treat that as an advanced adapter option; the default workspace setup should avoid mutating `opencode.json` unless the Operator explicitly asks for it.
+Before installing either way, inspect the target directory first. Do not overwrite same-name local commands unless the Operator explicitly wants framework commands to replace them; the `ln -s` form intentionally fails when a target already exists. Preserve unrelated adapter state the installation flow manages, such as Claude Code's `.claude/skills/` and `CLAUDE.md`.
 
-Before installing either way, inspect existing `.opencode/commands/` files. Do not overwrite same-name local commands unless the Operator explicitly wants framework commands to replace them. The `ln -s` commands above intentionally fail when a target file already exists.
+## Supported Tools
 
-## Claude Code Commands
+These commands are meant to run in a workspace that has the framework installed, so the setup targets each tool's **workspace** command directory (the symlink resolves the installed `framework/prompts/`). Each tool also has a user/global command directory, but that is out of scope here.
 
-Claude Code supports native custom slash commands as Markdown files in workspace `.claude/commands/` and personal `~/.claude/commands/`. The Markdown body is the command prompt, YAML frontmatter provides metadata such as `description` and `argument-hint`, and user input is available as `$ARGUMENTS` (or positional `$1`, `$2`). The canonical templates in [`prompts/`](prompts/) already use exactly this frontmatter and `$ARGUMENTS` convention, so no body changes are needed.
-
-Recommended Linux/macOS symlink setup from the workspace root:
-
-```bash
-mkdir -p .claude/commands
-ln -s ../../framework/prompts/next-best-actions.md .claude/commands/next-best-actions.md
-ln -s ../../framework/prompts/slc.md .claude/commands/slc.md
-ln -s ../../framework/prompts/update-framework.md .claude/commands/update-framework.md
-ln -s ../../framework/prompts/workspace-maintenance.md .claude/commands/workspace-maintenance.md
-```
-
-Copy fallback:
-
-```bash
-mkdir -p .claude/commands
-cp framework/prompts/*.md .claude/commands/
-```
-
-Symlinks keep `.claude/commands/` pointed at the installed `framework/prompts/` files, so command prompt changes arrive with normal framework updates. Copied commands are more Windows-friendly but must be re-copied after framework updates.
-
-Before installing either way, inspect existing `.claude/commands/` files, and preserve any existing `.claude/skills/` and `CLAUDE.md` that the installation flow already manages. Do not overwrite same-name local commands unless the Operator explicitly wants framework commands to replace them. The `ln -s` commands above intentionally fail when a target file already exists.
+| Tool | Workspace command directory | Notes |
+| --- | --- | --- |
+| Pi | `.pi/prompts/` | Frontmatter provides `description`; args as `$ARGUMENTS`. |
+| OpenCode | `.opencode/commands/` | Frontmatter provides `description`; args as `$ARGUMENTS` or positional `$1`, `$2`. Advanced: JSON/JSONC `command` config with `{file:framework/prompts/...}` substitution; leave `opencode.json` unchanged unless the Operator asks. |
+| Claude Code | `.claude/commands/` | Frontmatter provides `description` and `argument-hint`; args as `$ARGUMENTS` or positional `$1`, `$2`. The canonical files already use exactly this convention. |
 
 ## Safety Rules
 
