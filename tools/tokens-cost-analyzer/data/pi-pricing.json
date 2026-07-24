@@ -1659,6 +1659,21 @@
     },
     {
       "provider": "anthropic",
+      "model": "claude-opus-5",
+      "name": "Claude Opus 5",
+      "aliases": [
+        "anthropic/claude-opus-5"
+      ],
+      "effectiveDate": null,
+      "unit": "per_1m_tokens",
+      "input": 5,
+      "output": 25,
+      "cacheRead": 0.5,
+      "cacheWrite": 6.25,
+      "notes": "Added from official Anthropic pricing; estimate only, not billing-authoritative. 1h cache-write pricing is not represented by the current analyzer pricing schema."
+    },
+    {
+      "provider": "anthropic",
       "model": "claude-sonnet-4-0",
       "name": "Claude Sonnet 4 (latest)",
       "aliases": [
