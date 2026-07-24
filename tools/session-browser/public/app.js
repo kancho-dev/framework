@@ -3,6 +3,7 @@ import { restoreCommand, copyRestoreCommand, copyAndFlash } from './copy-restore
 import { renderEntry } from './entry-rendering.js';
 import { fetchSessionDetail, fetchSessions, putMetadata } from './api.js';
 import { sessionBrowserScope } from '/shared/browser/session-links.js';
+import { clearStaleRequestedSelection, requestedSelection, requestedTopic } from './selection.js';
 
 const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, tagFilter: 'all', sourceErrors: [], metadataError: null };
 
@@ -86,15 +87,6 @@ function continuityScope() { return sessionBrowserScope(state.workspaceRoot, loc
 function continuityKey() { return `framework.session-browser.selectedPath:${continuityScope()}`; }
 function topicContinuityKey(path = state.selectedPath) { return `framework.session-browser.selectedTopic:${continuityScope()}:${path || 'none'}`; }
 function filtersContinuityKey() { return `framework.session-browser.filters:${continuityScope()}`; }
-function requestedParams() { return new URLSearchParams(location.search); }
-function requestedSelection() {
-  const params = requestedParams();
-  return params.get('selectSession') || params.get('session');
-}
-function requestedTopic() {
-  const params = requestedParams();
-  return params.get('selectTopic') || params.get('topic');
-}
 function restoreSelectedPath() {
   if (state.selectedPath) return;
   const requested = requestedSelection();
@@ -400,6 +392,8 @@ function updateSelectedSummary(detail) {
 }
 
 async function selectSession(path, options = {}) {
+  const url = new URL(location.href);
+  if (clearStaleRequestedSelection(url, path)) history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
   if (state.selectedPath !== path) clearSelectedTopic(state.selectedPath);
   state.selectedPath = path;
   if (options.topicId) state.selectedTopicId = options.topicId;

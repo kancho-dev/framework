@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "migrate-metadata": "node migrate-metadata.mjs"
+    "migrate-metadata": "node migrate-metadata.mjs",
+    "test": "node --test claude-code.test.mjs public/selection.test.mjs"
   }
 }
