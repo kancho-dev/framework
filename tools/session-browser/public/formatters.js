@@ -1,6 +1,8 @@
 import { escapeHtml } from '/shared/browser/dom.js';
+import { formatCompactNumber } from './token-formatting.js';
 
 export { escapeHtml };
+export { formatCompactNumber, formatTokens } from './token-formatting.js';
 
 export function textFromContent(content) {
   if (typeof content === 'string') return content;
@@ -17,17 +19,6 @@ export function shortPath(value, max = 72) {
   const text = String(value || '');
   if (text.length <= max) return text;
   return `…${text.slice(-(max - 1))}`;
-}
-
-export function formatCompactNumber(value) {
-  const number = Number(value || 0);
-  if (number >= 1_000_000) return `${Math.round(number / 1000).toLocaleString()}k`;
-  if (number >= 1000) return `${Math.round(number / 1000)}k`;
-  return number.toLocaleString();
-}
-
-export function formatTokens(tokens) {
-  return `↓${formatCompactNumber(tokens?.input)} ↑${formatCompactNumber(tokens?.output)} R${formatCompactNumber(tokens?.cacheRead)}`;
 }
 
 export function tokenPressureTotal(sessionOrTokens) {
