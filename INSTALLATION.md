@@ -56,7 +56,7 @@ If the workspace is already framework-managed and is being updated from an older
 6. Ensure the root `.gitignore` matches the intended repository model.
 7. If `AGENTS.md` is missing, create it from the workspace template.
 8. If `AGENTS.md` already exists, merge the framework-required guidance into it rather than replacing it.
-9. If `CLAUDE.md` exists, do not overwrite it. If relevant, suggest mirroring the same workspace guidance there.
+9. For Claude Code workspaces, if `CLAUDE.md` is missing, create it from `framework/TEMPLATES/WORKSPACE/CLAUDE.md`; if it exists, do not overwrite it.
 10. After successful install/adoption, create or update gitignored `framework/CURRENT_VERSION` from `framework/VERSION` so the workspace records the framework version it has installed.
 11. Leave the workspace in a state where an agent can begin operating with the framework immediately.
 
@@ -107,6 +107,7 @@ Use templates under `framework/TEMPLATES/`.
 - `.gitignore` → `framework/TEMPLATES/WORKSPACE/.gitignore`
 - `README.md` → `framework/TEMPLATES/WORKSPACE/README.md`
 - `AGENTS.md` → `framework/TEMPLATES/WORKSPACE/AGENTS.md`
+- `CLAUDE.md` (Claude Code workspaces) → `framework/TEMPLATES/WORKSPACE/CLAUDE.md`
 - `ACTIVE-CONTEXT.md` → `framework/TEMPLATES/WORKSPACE/ACTIVE-CONTEXT.md`
 - `OPERATOR-NOTES.md` → `framework/TEMPLATES/WORKSPACE/OPERATOR-NOTES.md`
 - `FIXES.md` → `framework/TEMPLATES/WORKSPACE/FIXES.md`
@@ -132,11 +133,11 @@ The framework includes optional Markdown command templates under:
 framework/prompts/
 ```
 
-These templates expose slash commands such as `/next-best-actions`, `/slc`, `/update-framework`, and `/workspace-maintenance` in Pi when symlinked or copied into workspace `.pi/prompts/`, and in OpenCode when symlinked or copied into workspace `.opencode/commands/`.
+These templates expose slash commands such as `/next-best-actions`, `/slc`, `/update-framework`, and `/workspace-maintenance` in Pi when symlinked or copied into workspace `.pi/prompts/`, in OpenCode when symlinked or copied into workspace `.opencode/commands/`, and in Claude Code when symlinked or copied into workspace `.claude/commands/`.
 
 Recommended Linux/macOS setup is symlinking tool-local command files to `framework/prompts/*.md`, so prompt changes arrive with normal framework updates. Copying the files is the simpler fallback, especially on Windows or filesystems where symlinks are inconvenient. In either case, inspect existing command files first and ask before replacing same-name local prompts/commands.
 
-Detailed Pi and OpenCode setup options are documented in `framework/COMMANDS.md`. Do not mutate OpenCode `opencode.json` automatically during basic framework installation unless the Operator explicitly asks for it and the target config is clear.
+Detailed Pi, OpenCode, and Claude Code setup options are documented in `framework/COMMANDS.md`. Do not mutate OpenCode `opencode.json` automatically during basic framework installation unless the Operator explicitly asks for it and the target config is clear.
 
 Native commands are convenience adapters only. The framework remains usable through normal prompts.
 
@@ -205,7 +206,7 @@ The framework includes an optional local session browser under:
 framework/tools/session-browser/
 ```
 
-It is a read-only web tool for browsing Pi JSONL sessions and OpenCode SQLite sessions for the current workspace.
+It is a read-only web tool for browsing Pi JSONL, OpenCode SQLite, Codex JSONL, and Claude Code JSONL sessions for the current workspace.
 
 Quick start after the framework is present in a workspace:
 
@@ -229,9 +230,11 @@ Useful configuration:
 
 - `WORKSPACE_ROOT` — workspace whose sessions should be shown.
 - `PORT` — local HTTP port, default `8787`.
-- `SESSION_SOURCES` — `pi`, `opencode`, or `pi,opencode`.
+- `SESSION_SOURCES` — comma-separated sources; default `pi,opencode,codex,claude-code`. Use a single value such as `pi`, `opencode`, `codex`, or `claude-code` to isolate one.
 - `PI_SESSION_ROOT` / `SESSION_ROOT` — Pi JSONL session root.
 - `OPENCODE_DB` / `OPENCODE_DATA_DIR` — OpenCode SQLite database/data location.
+- `CODEX_HOME` / `CODEX_SESSION_ROOT` — Codex state directory (default `~/.codex`) and rollout JSONL root (default `$CODEX_HOME/sessions`).
+- `CLAUDE_HOME` / `CLAUDE_PROJECTS_ROOT` — Claude Code state directory (default `~/.claude`) and session JSONL root (default `$CLAUDE_HOME/projects`).
 
 Safety:
 
@@ -243,36 +246,14 @@ Safety:
 
 ### `.gitignore`
 
-- if missing, create from the template
-- if present, merge the framework-related ignore rules into it rather than replacing unrelated local rules
-- by default, ignore the nested `framework/` repository, nested `projects/[name]/project/` repositories, `OPERATOR-NOTES.md`, and tool-local adapter/cache directories such as `.pi/`, `.opencode/`, and `.tools-config/`
+`framework/TEMPLATES/WORKSPACE/.gitignore` is the single source of truth for the default ignore set.
+
+- if missing, create it from `framework/TEMPLATES/WORKSPACE/.gitignore`
+- if present, merge the template's framework-related ignore rules into it rather than replacing unrelated local rules
+- the template ignores the nested `framework/` repository, nested `projects/[name]/project/` repositories, `OPERATOR-NOTES.md`, and tool-local adapter/cache directories (`.pi/`, `.opencode/`, `.claude/`, `.tools-config/`), while keeping the coordination tree (`projects/`, `projects/*/`) visible
 - do not ignore `projects/[name]/library/` or `projects/[name]/work/` in the default model; those belong to the workspace root repo
 - check this early in an existing-workspace adoption; it is one of the easiest places to make the workspace awkward by accident
 - if the workspace is in a mixed migration state, make sure the ignore rules still match the real nested-repo boundaries instead of assuming every project is already organized identically
-
-Example root `.gitignore`:
-
-```gitignore
-# Nested framework repository
-framework/.git/
-framework/
-
-# Nested project code repositories in the default setup
-projects/*/project/.git/
-projects/*/project/
-
-# Keep the coordination tree visible to the workspace repo
-!projects/
-!projects/*/
-
-# Operator-maintained notes
-OPERATOR-NOTES.md
-
-# Tool-local workspace adapters and config
-.pi/
-.opencode/
-.tools-config/
-```
 
 ### `.tools-config/`
 
@@ -305,9 +286,8 @@ Keep this directory ignored unless the workspace intentionally shares local tool
 
 ### `CLAUDE.md`
 
-- not required by the framework
-- do not create it by default
-- if present, leave it intact and optionally mirror relevant workspace guidance there
+- Claude Code reads `CLAUDE.md` as its workspace entrypoint
+- if missing, create it from `framework/TEMPLATES/WORKSPACE/CLAUDE.md` (a one-line pointer to `AGENTS.md`), keeping `AGENTS.md` authoritative
 
 ### `ACTIVE-CONTEXT.md`, `OPERATOR-NOTES.md`, `FIXES.md`
 
@@ -330,7 +310,7 @@ Keep this directory ignored unless the workspace intentionally shares local tool
 Ask when:
 - the workspace root is unclear
 - an existing `AGENTS.md` or `README.md` should be merged but the right result is ambiguous
-- the user may want framework guidance mirrored into `CLAUDE.md`
+- an existing `CLAUDE.md` does not already point to `AGENTS.md` and the right reconciliation is unclear
 - a local convention conflicts with the framework defaults
 
 ## Public-Repo Hygiene Reminder

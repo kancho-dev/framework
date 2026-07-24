@@ -16,4 +16,5 @@ OPERATOR-NOTES.md
 # Tool-local workspace adapters and config
 .pi/
 .opencode/
+.claude/
 .tools-config/

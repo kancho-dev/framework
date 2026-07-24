@@ -146,7 +146,7 @@ Read [`tools/tool-orchestrator/README.md`](tools/tool-orchestrator/README.md) fo
 
 ### Session Browser
 
-[`tools/session-browser/`](tools/session-browser/) is an optional but high-value local tool for browsing and searching Pi and OpenCode coding-agent sessions.
+[`tools/session-browser/`](tools/session-browser/) is an optional but high-value local tool for browsing and searching Pi, OpenCode, Codex, and Claude Code coding-agent sessions.
 
 It can be useful both inside framework-managed workspaces and as a standalone session browser in other directories.
 
@@ -175,7 +175,7 @@ Read [`tools/task-browser/README.md`](tools/task-browser/README.md) for setup, m
 
 ### Native Commands
 
-[`prompts/`](prompts/) contains optional Pi/OpenCode-compatible command templates such as `/next-best-actions`, `/slc`, `/update-framework`, and `/workspace-maintenance`.
+[`prompts/`](prompts/) contains optional command templates for Pi, OpenCode, and Claude Code such as `/next-best-actions`, `/slc`, `/update-framework`, and `/workspace-maintenance`.
 
 Use [`COMMANDS.md`](COMMANDS.md) if you want native slash-command integration. The framework remains usable through normal prompts without these adapters.
 
