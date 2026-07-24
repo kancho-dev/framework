@@ -15,7 +15,9 @@ const OPENCODE_DATA_DIR = resolve(process.env.OPENCODE_DATA_DIR || join(homedir(
 const OPENCODE_DB = resolve(process.env.OPENCODE_DB || join(OPENCODE_DATA_DIR, 'opencode.db'));
 const CODEX_HOME = resolve(process.env.CODEX_HOME || join(homedir(), '.codex'));
 const CODEX_SESSION_ROOT = resolve(process.env.CODEX_SESSION_ROOT || join(CODEX_HOME, 'sessions'));
-const ENABLED_SOURCES = new Set(String(process.env.SESSION_SOURCES || 'pi,opencode,codex').split(',').map((source) => source.trim().toLowerCase()).filter(Boolean));
+const CLAUDE_HOME = resolve(process.env.CLAUDE_HOME || join(homedir(), '.claude'));
+const CLAUDE_PROJECTS_ROOT = resolve(process.env.CLAUDE_PROJECTS_ROOT || join(CLAUDE_HOME, 'projects'));
+const ENABLED_SOURCES = new Set(String(process.env.SESSION_SOURCES || 'pi,opencode,codex,claude-code').split(',').map((source) => source.trim().toLowerCase()).filter(Boolean));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
 const SHARED_WEB_DIR = join(TOOL_DIR, '..', 'shared-web');
 const DEFAULT_WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
@@ -355,10 +357,12 @@ function sessionKey(sessionOrPath, source = null) {
   if (typeof sessionOrPath === 'string') {
     if (isOpenCodeRef(sessionOrPath)) return sessionOrPath;
     if (isCodexRef(sessionOrPath)) return sessionOrPath;
+    if (isClaudeCodeRef(sessionOrPath)) return sessionOrPath;
     return `pi:${resolve(sessionOrPath)}`;
   }
   if (sessionOrPath?.source === 'opencode') return opencodeRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^opencode:/, ''));
   if (sessionOrPath?.source === 'codex') return codexRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^codex:/, ''));
+  if (sessionOrPath?.source === 'claude-code') return claudeCodeRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^claude-code:/, ''));
   return `pi:${resolve(sessionOrPath?.path || '')}`;
 }
 
@@ -803,6 +807,231 @@ async function loadCodexSession(ctx, ref) {
   throw new Error('Codex session not found');
 }
 
+function claudeCodeRef(id) {
+  return `claude-code:${id}`;
+}
+
+function isClaudeCodeRef(ref) {
+  return typeof ref === 'string' && ref.startsWith('claude-code:');
+}
+
+// Claude Code stores one JSONL per parent session at <project>/<sessionId>.jsonl and
+// sub-agent sidechains at <project>/<parentSessionId>/subagents/agent-<agentId>.jsonl.
+// The parent session id is the directory name, so parent<->child links need no guessing.
+function claudeCodeFileInfo(file) {
+  const inSubagents = basename(dirname(file)) === 'subagents';
+  if (inSubagents && basename(file).startsWith('agent-')) {
+    return { isSidechain: true, parentId: basename(dirname(dirname(file))), agentName: basename(file, '.jsonl') };
+  }
+  return { isSidechain: false, parentId: null, agentName: null };
+}
+
+function claudeCodeFileId(file) {
+  const info = claudeCodeFileInfo(file);
+  return info.isSidechain ? `${info.parentId}/${info.agentName}` : basename(file, '.jsonl');
+}
+
+function parseClaudeCodeJsonl(content) {
+  const lines = [];
+  for (const line of content.split(/\r?\n/)) {
+    if (!line) continue;
+    try { lines.push(JSON.parse(line)); } catch { /* skip malformed line */ }
+  }
+  return lines;
+}
+
+function claudeCodeUsage(usage) {
+  if (!usage) return undefined;
+  return {
+    input: Number(usage.input_tokens || 0),
+    output: Number(usage.output_tokens || 0),
+    cacheRead: Number(usage.cache_read_input_tokens || 0),
+    cacheWrite: Number(usage.cache_creation_input_tokens || 0),
+  };
+}
+
+function claudeCodeAssistantBlocks(content) {
+  if (!Array.isArray(content)) {
+    const text = textFromContent(content);
+    return text ? [{ type: 'text', text }] : [];
+  }
+  const blocks = [];
+  for (const block of content) {
+    if (block?.type === 'text' && typeof block.text === 'string') blocks.push({ type: 'text', text: block.text });
+    else if (block?.type === 'thinking' && typeof block.thinking === 'string') blocks.push({ type: 'thinking', thinking: block.thinking });
+    else if (block?.type === 'tool_use') blocks.push({ type: 'toolCall', id: block.id, name: block.name || 'tool', arguments: block.input || {}, result: '' });
+  }
+  return blocks;
+}
+
+function claudeCodeToolResultText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.map((block) => (typeof block === 'string' ? block : block?.text || '')).filter(Boolean).join('\n');
+  return content == null ? '' : JSON.stringify(content, null, 2);
+}
+
+function claudeCodeUserMessages(content) {
+  if (typeof content === 'string') return content.trim() ? [{ role: 'user', content: [{ type: 'text', text: content }] }] : [];
+  if (!Array.isArray(content)) return [];
+  const messages = [];
+  const textBlocks = content.filter((block) => block?.type === 'text' && typeof block.text === 'string').map((block) => ({ type: 'text', text: block.text }));
+  if (textBlocks.length) messages.push({ role: 'user', content: textBlocks });
+  for (const block of content) {
+    if (block?.type === 'tool_result') {
+      messages.push({ role: 'toolResult', toolCallId: block.tool_use_id, content: [{ type: 'text', text: claudeCodeToolResultText(block.content) }] });
+    }
+  }
+  return messages;
+}
+
+function claudeCodeEntries(parsed) {
+  const entries = [];
+  let counter = 0;
+  for (const line of parsed) {
+    if (line?.type === 'assistant' && line.message) {
+      entries.push({
+        id: line.uuid || `claude-entry-${counter++}`,
+        type: 'message',
+        timestamp: line.timestamp,
+        source: 'claude-code',
+        message: {
+          role: 'assistant',
+          content: claudeCodeAssistantBlocks(line.message.content),
+          usage: claudeCodeUsage(line.message.usage),
+          model: line.message.model || '',
+        },
+      });
+    } else if (line?.type === 'user' && line.message) {
+      for (const message of claudeCodeUserMessages(line.message.content)) {
+        entries.push({
+          id: `${line.uuid || 'claude-user'}-${counter++}`,
+          type: 'message',
+          timestamp: line.timestamp,
+          source: 'claude-code',
+          message,
+        });
+      }
+    }
+  }
+  return entries;
+}
+
+function summarizeClaudeCodeSession(file, fileStat, parsed) {
+  const info = claudeCodeFileInfo(file);
+  const id = claudeCodeFileId(file);
+  const cwd = parsed.find((line) => line?.cwd)?.cwd || '';
+  const title = parsed.find((line) => line?.type === 'ai-title')?.aiTitle || '';
+  const entries = claudeCodeEntries(parsed);
+  const messageEntries = entries.filter((entry) => entry.type === 'message');
+  const userEntries = messageEntries.filter((entry) => entry.message.role === 'user');
+  const assistantEntries = messageEntries.filter((entry) => entry.message.role === 'assistant');
+  const toolResultEntries = messageEntries.filter((entry) => entry.message.role === 'toolResult');
+  const stats = collectStats(entries);
+  const timestamps = parsed.map((line) => line?.timestamp).filter(Boolean).sort((a, b) => new Date(b) - new Date(a));
+  const model = [...assistantEntries].reverse().find((entry) => entry.message.model && entry.message.model !== '<synthetic>')?.message.model || '';
+  return {
+    id,
+    source: 'claude-code',
+    path: claudeCodeRef(id),
+    parentId: info.isSidechain ? info.parentId : null,
+    isSidechain: info.isSidechain,
+    cwd,
+    name: title,
+    modelLabel: model,
+    model: { source: 'claude-code', provider: 'anthropic', model, variant: '' },
+    firstPrompt: truncate(textFromContent(userEntries[0]?.message?.content)),
+    createdAt: timestamps.at(-1) || fileStat.birthtime?.toISOString(),
+    updatedAt: timestamps[0] || fileStat.mtime?.toISOString(),
+    leafId: null,
+    messageCount: messageEntries.filter((entry) => ['user', 'assistant'].includes(entry.message.role)).length,
+    userMessageCount: userEntries.length,
+    assistantMessageCount: stats.assistantAnswerCount,
+    assistantRawMessageCount: assistantEntries.length,
+    toolMessageCount: stats.toolMessageCount,
+    toolResultCount: toolResultEntries.length,
+    toolCallCount: stats.toolCallCount,
+    toolNames: stats.toolNames,
+    tokens: stats.tokens,
+    tokenPressure: stats.tokenPressure,
+  };
+}
+
+async function loadClaudeCodeFile(file) {
+  const [fileStat, content] = await Promise.all([stat(file), readFile(file, 'utf8')]);
+  const parsed = parseClaudeCodeJsonl(content);
+  const summary = summarizeClaudeCodeSession(file, fileStat, parsed);
+  const entries = claudeCodeEntries(parsed);
+  const activeEntries = entries;
+  const topicAnchors = activeEntries
+    .filter((entry) => entry?.type === 'message' && entry.message?.role === 'user')
+    .map((entry, index) => ({
+      id: entry.id,
+      timestamp: entry.timestamp,
+      title: truncate(textFromContent(entry.message.content), 80) || `User prompt ${index + 1}`,
+      depth: index === 0 ? 'first-prompt' : 'user-prompt',
+    }));
+  return { ...summary, entries, activeEntries, topicAnchors };
+}
+
+async function listClaudeCodeSessions(ctx) {
+  const files = await walkJsonlFiles(CLAUDE_PROJECTS_ROOT);
+  const settled = await Promise.allSettled(files.map((file) => loadClaudeCodeFile(file)));
+  return settled
+    .filter((result) => result.status === 'fulfilled')
+    .map((result) => result.value)
+    .filter((session) => isUnderRoot(session.cwd, ctx.workspaceRoot))
+    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+}
+
+function claudeCodeRelation(session) {
+  return {
+    id: session.id,
+    path: session.path,
+    source: 'claude-code',
+    name: session.name || session.firstPrompt || session.id,
+    cwd: session.cwd,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  };
+}
+
+async function loadClaudeCodeRelations(detail) {
+  const files = await walkJsonlFiles(CLAUDE_PROJECTS_ROOT).catch(() => []);
+  if (detail.isSidechain) {
+    const parentId = String(detail.id).split('/')[0];
+    for (const file of files) {
+      if (!claudeCodeFileInfo(file).isSidechain && basename(file, '.jsonl') === parentId) {
+        const parent = await loadClaudeCodeFile(file).catch(() => null);
+        if (parent) return { parentSession: claudeCodeRelation(parent), childSessions: [] };
+      }
+    }
+    return { parentSession: null, childSessions: [] };
+  }
+  const childSessions = [];
+  for (const file of files) {
+    const info = claudeCodeFileInfo(file);
+    if (info.isSidechain && info.parentId === detail.id) {
+      const child = await loadClaudeCodeFile(file).catch(() => null);
+      if (child) childSessions.push(claudeCodeRelation(child));
+    }
+  }
+  childSessions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  return { parentSession: null, childSessions };
+}
+
+async function loadClaudeCodeSession(ctx, ref) {
+  const id = ref.replace(/^claude-code:/, '');
+  const files = await walkJsonlFiles(CLAUDE_PROJECTS_ROOT);
+  for (const file of files) {
+    if (claudeCodeFileId(file) === id) {
+      const detail = await loadClaudeCodeFile(file);
+      const relations = await loadClaudeCodeRelations(detail);
+      return { ...detail, ...relations };
+    }
+  }
+  throw new Error('Claude Code session not found');
+}
+
 async function loadOpenCodeRows(sessionId = null) {
   const sessionWhere = sessionId ? `where id = ${sqlString(sessionId)}` : '';
   const sessions = await sqliteJson(OPENCODE_DB, `
@@ -1075,6 +1304,7 @@ async function listSessions(ctx) {
     ['pi', () => listPiSessions(ctx)],
     ['opencode', () => listOpenCodeSessions(ctx)],
     ['codex', () => listCodexSessions(ctx)],
+    ['claude-code', () => listClaudeCodeSessions(ctx)],
   ];
   const enabledSources = sources.filter(([source]) => sourceEnabled(source));
   const results = await Promise.allSettled(enabledSources.map(([source, list]) => withTimeout(list(), `${source} source`, SOURCE_TIMEOUT_MS)));
@@ -1092,6 +1322,7 @@ async function listSessions(ctx) {
 function isAllowedSessionPath(ctx, candidate) {
   if (isOpenCodeRef(candidate)) return true;
   if (isCodexRef(candidate)) return true;
+  if (isClaudeCodeRef(candidate)) return true;
   const resolved = resolve(candidate);
   return isUnderRoot(resolved, PI_SESSION_ROOT);
 }
@@ -1122,7 +1353,7 @@ export function createSessionBrowserHandler({ basePath = '/', cockpit = null, wo
           sendJson(res, 400, { error: 'Invalid session path' });
           return true;
         }
-        const session = isOpenCodeRef(path) ? await loadOpenCodeSession(ctx, path) : isCodexRef(path) ? await loadCodexSession(ctx, path) : await loadSessionFile(path);
+        const session = isOpenCodeRef(path) ? await loadOpenCodeSession(ctx, path) : isCodexRef(path) ? await loadCodexSession(ctx, path) : isClaudeCodeRef(path) ? await loadClaudeCodeSession(ctx, path) : await loadSessionFile(path);
         if (!isUnderRoot(session.cwd, ctx.workspaceRoot)) {
           sendJson(res, 404, { error: 'Session is outside the current workspace root' });
           return true;

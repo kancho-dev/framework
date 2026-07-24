@@ -2,7 +2,7 @@
 
 A local, read-only browser for AI coding-agent sessions.
 
-Use it to quickly find, skim, and restore past Pi, OpenCode, and Codex coding sessions for the current workspace.
+Use it to quickly find, skim, and restore past Pi, OpenCode, Codex, and Claude Code coding sessions for the current workspace.
 
 ## Quick Start
 
@@ -52,13 +52,15 @@ No npm install is needed for the current dependency-free tool.
 | --- | --- |
 | `PORT` | HTTP port. Default: `8787`. |
 | `WORKSPACE_ROOT` | Workspace to show sessions for. Default: nearest parent containing `AGENTS.md`, otherwise current directory. |
-| `SESSION_SOURCES` | Comma-separated sources. Default: `pi,opencode,codex`. Use `pi`, `opencode`, or `codex` to isolate one source. |
+| `SESSION_SOURCES` | Comma-separated sources. Default: `pi,opencode,codex,claude-code`. Use a single value such as `pi`, `opencode`, `codex`, or `claude-code` to isolate one source. |
 | `PI_SESSION_ROOT` | Pi JSONL session root. |
 | `SESSION_ROOT` | Backward-compatible alias for `PI_SESSION_ROOT`. |
 | `OPENCODE_DB` | Exact OpenCode SQLite database path. |
 | `OPENCODE_DATA_DIR` | OpenCode data directory. Default DB becomes `$OPENCODE_DATA_DIR/opencode.db`. Also used for diff sidecar files. |
 | `CODEX_HOME` | Codex state directory. Default: `~/.codex`. |
 | `CODEX_SESSION_ROOT` | Codex rollout JSONL root. Default: `$CODEX_HOME/sessions`. |
+| `CLAUDE_HOME` | Claude Code state directory. Default: `~/.claude`. |
+| `CLAUDE_PROJECTS_ROOT` | Claude Code session JSONL root. Default: `$CLAUDE_HOME/projects`. |
 | `SESSION_BROWSER_OPENCODE_LIMIT` | Maximum OpenCode sessions to list after workspace filtering. Default: `500`. |
 | `SESSION_BROWSER_METADATA` | Local JSON sidecar file for bookmarks and tags. Default: `$WORKSPACE_ROOT/.tools-config/session-browser/metadata.json`. |
 
@@ -122,6 +124,20 @@ codex resume '<session-id>'
 
 Codex support is best-effort and fail-soft. It renders user/assistant text and generic tool calls from observed rollout events. `~/.codex/session_index.jsonl` may list only currently indexed sessions, so rollout JSONL files are treated as the browsing source of truth.
 
+### Claude Code
+
+The Claude Code adapter reads local session JSONL files under `CLAUDE_PROJECTS_ROOT` (`~/.claude/projects/<encoded-cwd>/*.jsonl`) and filters them to the configured `WORKSPACE_ROOT` using each session's recorded `cwd` field rather than the lossy encoded directory name.
+
+Sub-agent sessions are included. Claude Code stores them as sidechains at `<parentSessionId>/subagents/agent-<agentId>.jsonl`; the browser lists them with a **child session** badge and links each sub-agent to its parent (and each parent to its sub-agents) through the same parent/child relations UI used for OpenCode.
+
+Restore command copied by the UI for a parent session:
+
+```bash
+claude --resume '<session-id>'
+```
+
+Sub-agent (sidechain) sessions are read-only in the browser and are not independently resumable, so no restore command is offered for them. Claude Code support is best-effort and fail-soft: it renders user/assistant text, thinking, and generic tool calls/results, and a missing or empty `CLAUDE_PROJECTS_ROOT` never blocks the other sources.
+
 ## UI Guide
 
 - **Search**: filter by prompt, cwd, name, id, path, or tag.
@@ -138,7 +154,7 @@ Codex support is best-effort and fail-soft. It renders user/assistant text and g
 - **Bookmark**: mark/unmark the selected session as worth finding again.
 - **Tags**: add or remove simple manual tags from the selected session with shared capped-height autocomplete suggestions.
 - **Copy restore cmd**: copy the source-specific command to resume a session in the native tool.
-- **Parent/child links**: OpenCode parent/child sessions are shown as quick links when available.
+- **Parent/child links**: OpenCode parent/child sessions and Claude Code parent/sub-agent sessions are shown as quick links when available.
 - **Patches/todos**: `apply_patch`/patch blocks and `todowrite` arrays are rendered best-effort.
 - **Copy prompt**: user messages get a small copy button for reusing prompts in new sessions.
 - **Code blocks**: fenced assistant markdown code blocks get a small copy button.

@@ -87,6 +87,31 @@ OpenCode also supports JSON/JSONC `command` config and `{file:path}` substitutio
 
 Before installing either way, inspect existing `.opencode/commands/` files. Do not overwrite same-name local commands unless the Operator explicitly wants framework commands to replace them. The `ln -s` commands above intentionally fail when a target file already exists.
 
+## Claude Code Commands
+
+Claude Code supports native custom slash commands as Markdown files in workspace `.claude/commands/` and personal `~/.claude/commands/`. The Markdown body is the command prompt, YAML frontmatter provides metadata such as `description` and `argument-hint`, and user input is available as `$ARGUMENTS` (or positional `$1`, `$2`). The canonical templates in [`prompts/`](prompts/) already use exactly this frontmatter and `$ARGUMENTS` convention, so no body changes are needed.
+
+Recommended Linux/macOS symlink setup from the workspace root:
+
+```bash
+mkdir -p .claude/commands
+ln -s ../../framework/prompts/next-best-actions.md .claude/commands/next-best-actions.md
+ln -s ../../framework/prompts/slc.md .claude/commands/slc.md
+ln -s ../../framework/prompts/update-framework.md .claude/commands/update-framework.md
+ln -s ../../framework/prompts/workspace-maintenance.md .claude/commands/workspace-maintenance.md
+```
+
+Copy fallback:
+
+```bash
+mkdir -p .claude/commands
+cp framework/prompts/*.md .claude/commands/
+```
+
+Symlinks keep `.claude/commands/` pointed at the installed `framework/prompts/` files, so command prompt changes arrive with normal framework updates. Copied commands are more Windows-friendly but must be re-copied after framework updates.
+
+Before installing either way, inspect existing `.claude/commands/` files, and preserve any existing `.claude/skills/` and `CLAUDE.md` that the installation flow already manages. Do not overwrite same-name local commands unless the Operator explicitly wants framework commands to replace them. The `ln -s` commands above intentionally fail when a target file already exists.
+
 ## Safety Rules
 
 - Commands may ask the agent to plan, inspect, or edit, but the agent must still follow the framework security rules.

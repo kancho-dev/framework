@@ -1479,6 +1479,21 @@
     },
     {
       "provider": "anthropic",
+      "model": "claude-fable-5",
+      "name": "Claude Fable 5",
+      "aliases": [
+        "anthropic/claude-fable-5"
+      ],
+      "effectiveDate": null,
+      "unit": "per_1m_tokens",
+      "input": 10,
+      "output": 50,
+      "cacheRead": 1,
+      "cacheWrite": 12.5,
+      "notes": "Bundled from Pi ai generated model pricing; estimate only, not billing-authoritative."
+    },
+    {
+      "provider": "anthropic",
       "model": "claude-haiku-4-5",
       "name": "Claude Haiku 4.5 (latest)",
       "aliases": [
@@ -1715,6 +1730,21 @@
       "output": 15,
       "cacheRead": 0.3,
       "cacheWrite": 3.75,
+      "notes": "Bundled from Pi ai generated model pricing; estimate only, not billing-authoritative."
+    },
+    {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5",
+      "name": "Claude Sonnet 5",
+      "aliases": [
+        "anthropic/claude-sonnet-5"
+      ],
+      "effectiveDate": null,
+      "unit": "per_1m_tokens",
+      "input": 2,
+      "output": 10,
+      "cacheRead": 0.2,
+      "cacheWrite": 2.5,
       "notes": "Bundled from Pi ai generated model pricing; estimate only, not billing-authoritative."
     },
     {

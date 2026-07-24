@@ -22,6 +22,7 @@ const outDir = resolve(args.out || join(workspaceRoot, '.tools-config', 'tokens-
 const piRoot = resolve(args.piRoot || process.env.PI_SESSION_ROOT || join(homedir(), '.pi', 'agent', 'sessions'));
 const opencodeDb = resolve(args.opencodeDb || process.env.OPENCODE_DB || join(homedir(), '.local', 'share', 'opencode', 'opencode.db'));
 const codexRoot = resolve(args.codexRoot || process.env.CODEX_SESSION_ROOT || join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'sessions'));
+const claudeRoot = resolve(args.claudeRoot || process.env.CLAUDE_PROJECTS_ROOT || join(process.env.CLAUDE_HOME || join(homedir(), '.claude'), 'projects'));
 const pricingPath = resolve(args.pricing || join(outDir, 'pricing.json'));
 const bundledPricingPath = fileURLToPath(new URL('./data/pi-pricing.json', import.meta.url));
 const limit = parseLimit(args.limit);
@@ -42,6 +43,10 @@ if (sourceRequested(args.source, 'opencode')) {
 if (sourceRequested(args.source, 'codex')) {
   try { records.push(...await readCodexRecords({ codexRoot, workspaceRoot, pricing, limit })); }
   catch (error) { warnings.push({ source: 'codex', warning: safeError(error) }); }
+}
+if (sourceRequested(args.source, 'claude-code')) {
+  try { records.push(...await readClaudeCodeRecords({ claudeRoot, workspaceRoot, pricing, limit })); }
+  catch (error) { warnings.push({ source: 'claude-code', warning: safeError(error) }); }
 }
 
 records.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
@@ -66,7 +71,7 @@ function parseArgs(argv) {
 }
 
 function help() {
-  console.log(`Usage: node analyze.mjs [--workspace PATH] [--out DIR] [--pricing FILE] [--source pi|opencode|codex] [--limit N|all]\n\nOutputs normalized.json and report.md. Defaults write to .tools-config/tokens-cost-analyzer/. By default all in-scope sessions/files are analyzed; use --limit for a bounded recent sessions/files slice per source, not a record/message limit.`);
+  console.log(`Usage: node analyze.mjs [--workspace PATH] [--out DIR] [--pricing FILE] [--source pi|opencode|codex|claude-code] [--limit N|all]\n\nOutputs normalized.json and report.md. Defaults write to .tools-config/tokens-cost-analyzer/. By default all in-scope sessions/files are analyzed; use --limit for a bounded recent sessions/files slice per source, not a record/message limit.`);
   process.exit(0);
 }
 
@@ -325,6 +330,57 @@ async function readCodexRecords({ codexRoot, workspaceRoot, pricing, limit }) {
   return records;
 }
 
+async function readClaudeCodeRecords({ claudeRoot, workspaceRoot, pricing, limit }) {
+  const files = applyRecentLimit((await walkJsonlFiles(claudeRoot)).sort((a, b) => a.localeCompare(b)), limit);
+  const records = [];
+  for (const sessionPath of files) {
+    const lines = (await readFile(sessionPath, 'utf8')).split(/\r?\n/).filter(Boolean);
+    const sessionId = claudeCodeSessionId(sessionPath);
+    const browserRef = claudeCodeRef(sessionId);
+    let latestUserMessageId = null;
+    for (let index = 0; index < lines.length; index += 1) {
+      let entry;
+      try { entry = JSON.parse(lines[index]); } catch { continue; }
+      if (entry?.type === 'user' && entry.message) { latestUserMessageId = entry.uuid || latestUserMessageId; continue; }
+      if (entry?.type !== 'assistant' || !entry.message) continue;
+      if (entry.message.model === '<synthetic>') continue; // local placeholder (e.g. "No response requested."), not a real Anthropic turn
+      const usage = entry.message.usage;
+      if (!usage) continue;
+      if (!isUnderRoot(entry.cwd, workspaceRoot)) continue;
+      const model = entry.message.model || null;
+      records.push(buildRecord({
+        source: 'claude-code',
+        sessionId,
+        messageId: entry.uuid || `claude-entry-${index}`,
+        sessionRef: redactHome(sessionPath),
+        sessionBrowserPath: browserRef,
+        sessionTopicId: latestUserMessageId,
+        timestamp: entry.timestamp,
+        provider: 'anthropic',
+        model,
+        variant: null,
+        modelLabel: model,
+        tokens: {
+          input: knownNumber(usage.input_tokens),
+          output: knownNumber(usage.output_tokens),
+          cacheRead: knownNumber(usage.cache_read_input_tokens),
+          cacheWrite: knownNumber(usage.cache_creation_input_tokens),
+        },
+        recordedCost: null,
+        rawFieldRefs: {
+          model: 'message.model',
+          provider: 'constant anthropic',
+          tokens: 'message.usage.{input_tokens,output_tokens,cache_read_input_tokens,cache_creation_input_tokens}',
+          cost: 'not recorded in Claude Code session JSONL',
+        },
+        calculationMethod: 'Claude Code assistant messages record per-response Anthropic usage; input_tokens already excludes cached reads, so token fields map directly with no de-duplication. Sub-agent (sidechain) messages are counted under the same source.',
+        pricing,
+      }));
+    }
+  }
+  return records;
+}
+
 function normalizeCodexTokenUsage(usage) {
   const inputTotal = knownNumber(usage.input_tokens);
   const cacheRead = knownNumber(usage.cached_input_tokens);
@@ -525,6 +581,12 @@ function isUnderRoot(candidate, root) {
 }
 function codexRef(sessionId) { return `codex:${sessionId}`; }
 function codexSessionIdFromFile(file) { return basename(file, '.jsonl').match(/([0-9a-f]{8}-[0-9a-f-]{27,})/)?.[1] || basename(file, '.jsonl'); }
+function claudeCodeRef(id) { return `claude-code:${id}`; }
+function claudeCodeSessionId(file) {
+  const inSubagents = basename(dirname(file)) === 'subagents';
+  if (inSubagents && basename(file).startsWith('agent-')) return `${basename(dirname(dirname(file)))}/${basename(file, '.jsonl')}`;
+  return basename(file, '.jsonl');
+}
 function encodePiWorkspace(path) { return `-${resolve(path).replace(/\//g, '-')}--`; }
 function knownNumber(value) { return Number.isFinite(Number(value)) ? Number(value) : null; }
 function sumKnown(...values) { const known = values.filter((v) => v.value != null); return { known: known.length > 0, value: known.reduce((s, v) => s + v.value, 0) }; }

@@ -179,6 +179,7 @@ function sourceLabel(source) {
   if (source === 'pi') return 'Pi';
   if (source === 'opencode') return 'OpenCode';
   if (source === 'codex') return 'Codex';
+  if (source === 'claude-code') return 'Claude Code';
   return source || 'unknown';
 }
 
