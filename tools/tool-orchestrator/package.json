@@ -1,9 +1,10 @@
 {
   "name": "agent-tool-orchestrator",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "node --test subscription-limits.test.mjs public/limits-format.test.mjs"
   }
 }

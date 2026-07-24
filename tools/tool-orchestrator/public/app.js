@@ -1,6 +1,7 @@
 import { fetchJson } from '/shared/browser/api.js';
 import { escapeHtml } from '/shared/browser/dom.js';
 import { formatDate } from '/shared/browser/format.js';
+import { formatReset, gaugeLevel, isStale, limitReasonText, LIMITS_REFRESH_MS, remainingFor } from './limits-format.js';
 
 const dashboardEl = document.querySelector('#dashboard');
 const workspaceEl = document.querySelector('#workspace');
@@ -14,6 +15,7 @@ let widgetCatalog = {
   'priority-tasks': { title: 'Needs attention', size: 'wide' },
   'latest-bookmarked-session': { title: 'Bookmarked session', size: 'small' },
   'latest-updated-session': { title: 'Latest session', size: 'small' },
+  'subscription-limits': { title: 'Weekly limits', size: 'wide' },
   tools: { title: 'Tools', size: 'wide' },
 };
 const DEFAULT_LAYOUT = [
@@ -21,10 +23,10 @@ const DEFAULT_LAYOUT = [
   { id: 'priority-tasks', type: 'priority-tasks', size: 'wide' },
   { id: 'latest-bookmarked-session', type: 'latest-bookmarked-session', size: 'small' },
   { id: 'latest-updated-session', type: 'latest-updated-session', size: 'small' },
+  { id: 'subscription-limits', type: 'subscription-limits', size: 'wide' },
   { id: 'tools', type: 'tools', size: 'wide' },
 ];
-
-let state = { layout: DEFAULT_LAYOUT, editLayout: null, editing: false, data: null };
+let state = { layout: DEFAULT_LAYOUT, editLayout: null, editing: false, data: null, limits: { data: null, loading: false, failed: false, fetchedAt: 0 } };
 setWorkspaceBadge({ placeholder: 'Loading workspace…' });
 loadDashboard();
 setInterval(() => { if (!state.editing) loadDashboard(); }, AUTO_REFRESH_MS);
@@ -33,9 +35,15 @@ editButton.addEventListener('click', () => setEditing(true));
 cancelButton.addEventListener('click', () => setEditing(false));
 saveButton.addEventListener('click', saveLayout);
 
+window.addEventListener('focus', () => {
+  if (!state.editing && limitsVisible() && Date.now() - state.limits.fetchedAt >= LIMITS_REFRESH_MS) loadLimits();
+});
+setInterval(() => { if (!state.editing && limitsVisible()) loadLimits(); }, LIMITS_REFRESH_MS);
+
 dashboardEl.addEventListener('click', (event) => {
   const action = event.target.closest('[data-action]')?.dataset.action;
   const id = event.target.closest('[data-widget-id]')?.dataset.widgetId;
+  if (action === 'refresh-limits' && !state.editing) return loadLimits({ force: true });
   if (!state.editing || !action) return;
   if (action === 'remove') state.editLayout = state.editLayout.filter((widget) => widget.id !== id);
   if (action === 'up') moveWidget(id, -1);
@@ -68,11 +76,29 @@ async function loadDashboard() {
     state.data = { tools, taskSummary, sessionSummary };
     setWorkspaceBadge({ name: tools.workspaceName, root: tools.workspaceRoot, workspaces: tools.workspaces, currentWorkspace: tools.currentWorkspace });
     renderDashboard();
+    if (limitsVisible() && !state.limits.data) loadLimits();
   } catch (error) {
     setWorkspaceBadge({ unavailable: true });
     if (firstLoad) dashboardEl.innerHTML = `<article class="widget danger"><h3>Dashboard unavailable</h3><p>${escapeHtml(error.message || 'Unknown error')}</p></article>`;
     else showRefreshNotice(error);
   }
+}
+
+function limitsVisible() {
+  return state.layout.some((widget) => widget.type === 'subscription-limits');
+}
+
+async function loadLimits({ force = false } = {}) {
+  if (state.limits.loading) return;
+  state.limits = { ...state.limits, loading: true };
+  renderDashboard();
+  try {
+    const data = await fetchJson(`api/subscription-limits${force ? '?refresh=1' : ''}`);
+    state.limits = { data, loading: false, failed: false, fetchedAt: Date.now() };
+  } catch {
+    state.limits = { ...state.limits, loading: false, failed: true };
+  }
+  renderDashboard();
 }
 
 function catalogFromConfig(catalog) {
@@ -154,8 +180,37 @@ function renderWidgetContent(type) {
   if (type === 'priority-tasks') return renderPriorityTasks(state.data.taskSummary);
   if (type === 'latest-bookmarked-session') return renderSession('Bookmarked session', state.data.sessionSummary.latestBookmarkedSession);
   if (type === 'latest-updated-session') return renderSession('Latest session', state.data.sessionSummary.latestUpdatedSession);
+  if (type === 'subscription-limits') return renderSubscriptionLimits(state.limits);
   if (type === 'tools') return renderTools(state.data.tools.tools || []);
   return '<p>Unknown widget.</p>';
+}
+
+function renderSubscriptionLimits(limits) {
+  const header = `<div class="limits-head"><div><p class="kicker">weekly subscription limits</p><h3>Weekly limits</h3></div>
+    <button type="button" class="limits-refresh" data-action="refresh-limits" aria-label="Refresh weekly limits"${limits.loading ? ' disabled' : ''}>${refreshIcon()}</button></div>`;
+  if (!limits.data) return `${header}<p class="empty">${limits.loading ? 'Loading limits…' : 'Weekly limits unavailable.'}</p>`;
+  return `${header}<div class="limit-gauges${isStale(limits) ? ' stale' : ''}">${limits.data.providers.map(renderLimitGauge).join('')}</div>`;
+}
+
+function renderLimitGauge(provider) {
+  const remaining = remainingFor(provider);
+  const level = gaugeLevel(remaining);
+  const value = remaining === null ? '—' : `${remaining}%`;
+  const summary = remaining === null
+    ? `unavailable — ${escapeHtml(limitReasonText(provider.reason))}`
+    : `${remaining}% left`;
+  const detail = remaining === null
+    ? 'No provider-reported value'
+    : `${escapeHtml(provider.windowLabel)} · resets ${escapeHtml(formatReset(provider.resetsAt))}`;
+  return `<div class="limit-gauge level-${level}">
+    <span class="gauge-ring" style="--pct:${remaining === null ? 0 : remaining}" role="img" aria-label="${escapeHtml(provider.label)}: ${summary}"><span>${escapeHtml(value)}</span></span>
+    <div class="gauge-text"><strong>${escapeHtml(provider.label)}</strong><span class="gauge-summary">${summary}</span><span class="gauge-detail">${detail}</span>
+      <span class="gauge-detail">as of ${escapeHtml(formatDate(provider.asOf))}${provider.source ? ' · provider-reported' : ''}</span></div>
+  </div>`;
+}
+
+function refreshIcon() {
+  return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2v3h-3"/></svg>';
 }
 
 function taskUrl(extra = {}) {

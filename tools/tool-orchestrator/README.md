@@ -23,7 +23,7 @@ Mounted tools:
 
 ## Cockpit Widget Dashboard
 
-The Cockpit home surface is a local-first widget dashboard. It ships a default layout without writing workspace files. Its wide `Needs attention` widget leads with the selected-workspace Operator count and up to three linked Operator tasks, with the Agent-ready count as secondary context. A calm zero state means no actionable task currently names the Operator; Task Browser owns inclusion and ordering through its summary API.
+The Cockpit home surface is a local-first widget dashboard. It ships a default layout without writing workspace files. Its wide `Weekly limits` widget shows remaining weekly Codex and Claude Code subscription quota (see below). Its wide `Needs attention` widget leads with the selected-workspace Operator count and up to three linked Operator tasks, with the Agent-ready count as secondary context. A calm zero state means no actionable task currently names the Operator; Task Browser owns inclusion and ordering through its summary API.
 
 The first dashboard customization writes selected-workspace config to:
 
@@ -42,10 +42,51 @@ Config schema:
     { "id": "priority-tasks", "type": "priority-tasks", "size": "wide" },
     { "id": "latest-bookmarked-session", "type": "latest-bookmarked-session", "size": "small" },
     { "id": "latest-updated-session", "type": "latest-updated-session", "size": "small" },
+    { "id": "subscription-limits", "type": "subscription-limits", "size": "wide" },
     { "id": "tools", "type": "tools", "size": "wide" }
   ]
 }
 ```
+
+## Weekly Subscription Limits Widget
+
+The wide `subscription-limits` widget shows how much of each provider's weekly
+quota remains, so the Operator does not have to check `/usage` or a provider
+account page. Both gauges are independent: one provider being unavailable never
+suppresses the other or the rest of the dashboard.
+
+- **Codex** — read from the Codex CLI app-server method `account/rateLimits/read`.
+  The call is retrieval-only: no thread and no turn are started, so no model runs.
+  The weekly bucket is selected by `windowDurationMins == 10080` rather than by
+  the `primary` position, which often carries the five-hour window.
+- **Claude Code** — read from `GET https://api.anthropic.com/api/oauth/usage`
+  using Claude Code's own local OAuth token, taking the `seven_day` window.
+
+Remaining percent is `100 − utilization`, clamped to `0–100` for display only.
+An absent or null window is reported as unavailable, never as 100% remaining.
+
+Data comes from `GET /api/subscription-limits` (add `?refresh=1` to bypass the
+60-second server cache) and returns per provider `status` (`ok` / `unavailable`),
+`remainingPercent`, `resetsAt`, `windowLabel`, `source`, `asOf`, and a coarse
+`reason` when not `ok`. The widget refreshes every five minutes, on window focus,
+and on demand through its refresh button, preserving the last good values when a
+refresh fails.
+
+Security boundary — the token and the raw provider responses stay inside
+`subscription-limits.mjs`:
+
+- the Claude token is read at request time (`$CLAUDE_HOME/.credentials.json`,
+  default `~/.claude`), kept in memory, and never logged, persisted, cached, or
+  sent to the browser;
+- failures are reduced to a coarse reason class, so no provider payload or
+  credential detail reaches logs or the client;
+- there is no mutation path and no OAuth refresh; a missing, expired, or
+  rejected token, a changed endpoint, or an unexpected shape all fail soft to
+  the provider's unavailable state.
+
+Both providers are optional and are not capability-gated: availability is
+per-run, so the widget renders with unavailable gauges when neither source
+resolves.
 
 ## Authoring A Cockpit Widget
 
@@ -59,7 +100,7 @@ Before implementation, define:
 - **Identity:** a stable URL/config-safe `type` for behavior and a unique per-layout `id`. The current UI allows at most one instance of each type, but code must not assume `id` and `type` will always be identical.
 - **Presentation:** a concise title and one catalog-owned supported size, currently `small` or `wide`. Choose for the content, not desired prominence. Catalog metadata overrides size hints in persisted layouts.
 - **Capability:** the required owning tool, if any. Widgets unavailable in the selected workspace are omitted from both the default layout and Add Widget catalog.
-- **Data:** a focused selected-workspace summary API owned by the domain tool. Cockpit owns catalog, layout/config, orchestration, rendering, and navigation; it must not read domain files or reproduce domain selection, ordering, or interpretation rules. Document response fields and empty/missing-data semantics with the owning API.
+- **Data:** a focused selected-workspace summary API owned by the domain tool. Cockpit owns catalog, layout/config, orchestration, rendering, and navigation; it must not read domain files or reproduce domain selection, ordering, or interpretation rules. Document response fields and empty/missing-data semantics with the owning API. When a widget genuinely has no owning tool — as with `subscription-limits`, whose sources are provider CLIs rather than a framework tool — the Cockpit server may own the summary API itself, but it must stay in its own module with the same contract: the API interprets the domain, and rendering stays free of provider I/O.
 - **States:** useful loading, populated, empty, and error behavior. Empty is a calm valid result, not an error. Keep failures contained to the affected source where practical, preserve useful visible content during background refresh, escape untrusted text, and never inject domain-owned markup.
 - **Destination:** a mounted owning-tool route that preserves the selected workspace and uses only supported stable query parameters. Omit or disable links with no meaningful target; viewing and editing remain in the owning tool.
 
@@ -92,7 +133,7 @@ For each widget, verify:
 
 ### Architecture and skill decision
 
-Keep widget registration and renderers embedded for now. The accepted dashboard has five widgets and simple dispatch; that does not justify a module system, formal shared registry, plugin API, or frontend build step.
+Keep widget registration and renderers embedded for now. The accepted dashboard has six widgets and simple dispatch; that does not justify a module system, formal shared registry, plugin API, or frontend build step.
 
 Reconsider standalone widget modules plus one shared registry when a real change reveals at least one of these pressures:
 

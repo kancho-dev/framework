@@ -6,6 +6,7 @@ import { createTaskBrowserHandler } from '../task-browser/server.mjs';
 import { createSessionBrowserHandler } from '../session-browser/server.mjs';
 import { createTokensCostAnalyzerHandler } from '../tokens-cost-analyzer/server.mjs';
 import { exists, safeError, sendJson, serveStaticPath } from '../shared-web/http.mjs';
+import { createSubscriptionLimitsReader } from './subscription-limits.mjs';
 
 const baseToolNav = [
   { id: 'task-browser', title: 'Task Browser', shortTitle: 'Tasks', route: '/tools/tasks/', icon: '/tools/tasks/icon.svg' },
@@ -112,11 +113,14 @@ function dashboardConfigPath(workspace) {
   return join(workspace.root, '.tools-config', 'tool-orchestrator', 'dashboard.json');
 }
 
+const readSubscriptionLimits = createSubscriptionLimitsReader();
+
 const widgetCatalog = {
   'task-counts': { id: 'task-counts', type: 'task-counts', size: 'small', tool: 'task-browser' },
   'priority-tasks': { id: 'priority-tasks', type: 'priority-tasks', size: 'wide', tool: 'task-browser' },
   'latest-bookmarked-session': { id: 'latest-bookmarked-session', type: 'latest-bookmarked-session', size: 'small', tool: 'session-browser' },
   'latest-updated-session': { id: 'latest-updated-session', type: 'latest-updated-session', size: 'small', tool: 'session-browser' },
+  'subscription-limits': { id: 'subscription-limits', type: 'subscription-limits', size: 'wide' },
   tools: { id: 'tools', type: 'tools', size: 'wide' },
 };
 
@@ -285,6 +289,7 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/api/tools') return sendJson(res, 200, await toolStatuses(workspace));
     if (url.pathname === '/api/dashboard-config' && req.method === 'GET') return sendJson(res, 200, await readDashboardConfig(workspace));
     if (url.pathname === '/api/dashboard-config' && req.method === 'PUT') return sendJson(res, 200, await writeDashboardConfig(workspace, await readJsonBody(req)));
+    if (url.pathname === '/api/subscription-limits') return sendJson(res, 200, await readSubscriptionLimits({ force: url.searchParams.get('refresh') === '1' }));
     if (url.pathname.startsWith('/shared/')) return serveStaticPath(res, join(TOOL_DIR, '..', 'shared-web'), url.pathname.replace('/shared', '') || '/');
     if (await routeToMountedTool(req, res, workspace)) return;
     await serveStaticPath(res, PUBLIC_DIR, url.pathname);
