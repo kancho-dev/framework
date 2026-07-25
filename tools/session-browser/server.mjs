@@ -7,6 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { exists, normalizeBasePath, readStaticText, safeError, sendHtml, sendJson, serveStaticPath, stripBasePath } from '../shared-web/http.mjs';
 import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel, piModelState } from '../shared-web/model-normalization.mjs';
+import { openCodeSessionUsage, openCodeTokenSql } from '../shared-web/opencode-usage.mjs';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = parsePort(process.env.PORT || '8787');
@@ -581,22 +582,14 @@ async function loadOpenCodeDiffs(sessionId) {
 }
 
 function openCodeUsage(messages, parts) {
+  const usage = openCodeSessionUsage(messages, parts);
   const stats = emptyUsage();
-  for (const item of [...messages, ...parts]) {
-    const data = item.data || {};
-    const tokens = data.tokens || {};
-    const input = tokens.input || tokens.prompt || 0;
-    const output = tokens.output || tokens.completion || 0;
-    const cacheRead = tokens.cacheRead || tokens.cache_read || tokens.cache?.read || 0;
-    const cacheWrite = tokens.cacheWrite || tokens.cache_write || tokens.cache?.write || 0;
-    const total = tokens.total || input + output + cacheRead + cacheWrite;
-    stats.tokens.input += input;
-    stats.tokens.output += output;
-    stats.tokens.cacheRead += cacheRead;
-    stats.tokens.cacheWrite += cacheWrite;
-    stats.tokens.total += total;
-    stats.tokenPressure.total = Math.max(stats.tokenPressure.total, input + output + cacheWrite);
-  }
+  stats.tokens.input = usage.input;
+  stats.tokens.output = usage.output;
+  stats.tokens.cacheRead = usage.cacheRead;
+  stats.tokens.cacheWrite = usage.cacheWrite;
+  stats.tokens.total = usage.total;
+  stats.tokenPressure.total = usage.pressure;
   return stats;
 }
 
@@ -1128,6 +1121,37 @@ function summarizeOpenCodeSession(session, messages, parts) {
   };
 }
 
+// Aggregate mirror of openCodeSessionUsage: a message's parts contribute only when the
+// message row itself records no usage, so payloads stored in both are counted once.
+function openCodeUsageSql(sessionIds) {
+  const message = openCodeTokenSql('m');
+  const part = openCodeTokenSql('p');
+  const columns = ['input', 'output', 'cacheRead', 'cacheWrite', 'total', 'pressure'];
+  const select = (source) => columns.map((column) => `${source[column]} as ${column}`).join(', ');
+  return `
+    with usage as (
+      select m.session_id as sessionId, ${select(message)}
+      from message m
+      where m.session_id in (${sessionIds}) and ${message.total} > 0
+      union all
+      select p.session_id as sessionId, ${select(part)}
+      from part p
+      left join message m on m.id = p.message_id
+      where p.session_id in (${sessionIds}) and coalesce(${message.total}, 0) = 0
+    )
+    select
+      sessionId,
+      sum(input) as input,
+      sum(output) as output,
+      sum(cacheRead) as cacheRead,
+      sum(cacheWrite) as cacheWrite,
+      sum(total) as total,
+      max(pressure) as pressure
+    from usage
+    group by sessionId
+  `;
+}
+
 async function listOpenCodeSessions(ctx) {
   if (!await exists(OPENCODE_DB)) return [];
   const workspaceRootSql = sqlString(ctx.workspaceRoot);
@@ -1143,42 +1167,12 @@ async function listOpenCodeSessions(ctx) {
   );
   if (!sessions.length) return [];
   const sessionIds = sessions.map((session) => sqlString(session.id)).join(',');
-  let messageUsageRows = [];
-  let partUsageRows = [];
+  let usageRows = [];
   let messageModelRows = [];
   try {
-    messageUsageRows = await sqliteJson(OPENCODE_DB, `
-      select
-        session_id as sessionId,
-        sum(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0)) as input,
-        sum(coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0)) as output,
-        sum(coalesce(json_extract(data, '$.tokens.cacheRead'), json_extract(data, '$.tokens.cache_read'), json_extract(data, '$.tokens.cache.read'), 0)) as cacheRead,
-        sum(coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as cacheWrite,
-        sum(coalesce(json_extract(data, '$.tokens.total'), 0)) as explicitTotal,
-        max(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0) + coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0) + coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as pressure
-      from message
-      where session_id in (${sessionIds})
-      group by session_id
-    `);
+    usageRows = await sqliteJson(OPENCODE_DB, openCodeUsageSql(sessionIds));
   } catch {
-    messageUsageRows = [];
-  }
-  try {
-    partUsageRows = await sqliteJson(OPENCODE_DB, `
-      select
-        session_id as sessionId,
-        sum(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0)) as input,
-        sum(coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0)) as output,
-        sum(coalesce(json_extract(data, '$.tokens.cacheRead'), json_extract(data, '$.tokens.cache_read'), json_extract(data, '$.tokens.cache.read'), 0)) as cacheRead,
-        sum(coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as cacheWrite,
-        sum(coalesce(json_extract(data, '$.tokens.total'), 0)) as explicitTotal,
-        max(coalesce(json_extract(data, '$.tokens.input'), json_extract(data, '$.tokens.prompt'), 0) + coalesce(json_extract(data, '$.tokens.output'), json_extract(data, '$.tokens.completion'), 0) + coalesce(json_extract(data, '$.tokens.cacheWrite'), json_extract(data, '$.tokens.cache_write'), json_extract(data, '$.tokens.cache.write'), 0)) as pressure
-      from part
-      where session_id in (${sessionIds})
-      group by session_id
-    `);
-  } catch {
-    partUsageRows = [];
+    usageRows = [];
   }
   try {
     messageModelRows = await sqliteJson(OPENCODE_DB, `
@@ -1198,24 +1192,16 @@ async function listOpenCodeSessions(ctx) {
     messageModelRows = [];
   }
   const usageBySession = new Map();
-  for (const row of [...messageUsageRows, ...partUsageRows]) {
-    const sessionId = row.sessionId;
-    if (!sessionId) continue;
-    if (!usageBySession.has(sessionId)) {
-      usageBySession.set(sessionId, emptyUsage());
-    }
-    const usage = usageBySession.get(sessionId);
-    const input = Number(row.input || 0);
-    const output = Number(row.output || 0);
-    const cacheRead = Number(row.cacheRead || 0);
-    const cacheWrite = Number(row.cacheWrite || 0);
-    const explicitTotal = Number(row.explicitTotal || 0);
-    usage.tokens.input += input;
-    usage.tokens.output += output;
-    usage.tokens.cacheRead += cacheRead;
-    usage.tokens.cacheWrite += cacheWrite;
-    usage.tokens.total += explicitTotal || (input + output + cacheRead + cacheWrite);
-    usage.tokenPressure.total = Math.max(usage.tokenPressure.total, Number(row.pressure || 0));
+  for (const row of usageRows) {
+    if (!row.sessionId) continue;
+    const usage = emptyUsage();
+    usage.tokens.input = Number(row.input || 0);
+    usage.tokens.output = Number(row.output || 0);
+    usage.tokens.cacheRead = Number(row.cacheRead || 0);
+    usage.tokens.cacheWrite = Number(row.cacheWrite || 0);
+    usage.tokens.total = Number(row.total || 0);
+    usage.tokenPressure.total = Number(row.pressure || 0);
+    usageBySession.set(row.sessionId, usage);
   }
   const fallbackModelBySession = new Map();
   for (const row of messageModelRows) {

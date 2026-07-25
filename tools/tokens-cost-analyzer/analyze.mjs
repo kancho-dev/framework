@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel } from '../shared-web/model-normalization.mjs';
+import { openCodeTokenValues, openCodeTotalTokens } from '../shared-web/opencode-usage.mjs';
 
 const execFileAsync = promisify(execFile);
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -220,24 +221,33 @@ async function readOpenCodeMessageRecords(opencodeDb, sessions, pricing) {
         model: modelParts.model || null,
         variant: modelParts.variant || null,
         modelLabel: modelLabelFromParts(modelParts) || null,
-        tokens: {
-          input: knownNumber(tokens.input ?? tokens.prompt),
-          output: knownNumber(tokens.output ?? tokens.completion),
-          cacheRead: knownNumber(tokens.cacheRead ?? tokens.cache_read ?? tokens.cache?.read),
-          cacheWrite: knownNumber(tokens.cacheWrite ?? tokens.cache_write ?? tokens.cache?.write),
-        },
+        tokens: openCodeRecordTokens(tokens),
+        sourceTotalTokens: openCodeTotalTokens(tokens),
         recordedCost: Number(data.cost) > 0 ? Number(data.cost) : null,
         rawFieldRefs: {
           model: 'message.data.{providerID,modelID,variant}',
-          tokens: 'message.data.tokens.{input,output,cache.read,cache.write}',
+          tokens: 'message.data.tokens.{input,output,reasoning,cache.read,cache.write,total}',
           cost: 'message.data.cost',
         },
-        calculationMethod: 'OpenCode assistant-message token usage is recorded per response; session aggregate rows are used only when message-level usage is unavailable.',
+        calculationMethod: 'OpenCode assistant-message token usage is recorded per response; its explicit tokens.total is authoritative and covers reasoning tokens, falling back to the component sum (reasoning included) when absent. Session aggregate rows are used only when message-level usage is unavailable. Cost is priced from input/output/cache components only.',
         pricing,
       }));
     }
   }
   return records;
+}
+
+// `reasoning` is only reported when OpenCode recorded it, so records without it keep
+// the four-component shape every other source uses.
+function openCodeRecordTokens(tokens) {
+  const values = openCodeTokenValues(tokens);
+  return {
+    input: values.input,
+    output: values.output,
+    ...(values.reasoning == null ? {} : { reasoning: values.reasoning }),
+    cacheRead: values.cacheRead,
+    cacheWrite: values.cacheWrite,
+  };
 }
 
 function openCodeSessionRecord(row, pricing) {
@@ -399,12 +409,16 @@ function hasCodexTokenUsage(usage) {
   return ['input_tokens', 'cached_input_tokens', 'output_tokens'].some((key) => knownNumber(usage[key]) != null);
 }
 
-function buildRecord({ source, sessionId, messageId = null, sessionRef, sessionBrowserPath, sessionTopicId = null, timestamp, provider, model, variant, modelLabel, tokens, recordedCost, rawFieldRefs, calculationMethod, omittedTokenWarnings = [], pricing }) {
+function buildRecord({ source, sessionId, messageId = null, sessionRef, sessionBrowserPath, sessionTopicId = null, timestamp, provider, model, variant, modelLabel, tokens, sourceTotalTokens = null, recordedCost, rawFieldRefs, calculationMethod, omittedTokenWarnings = [], pricing }) {
   const normalizedTokens = normalizeTokens(tokens);
   const displayModel = modelLabel || modelLabelFromParts({ source, provider, model, variant }) || model;
   const price = findPrice(pricing, provider, model, displayModel);
   const estimate = estimateCost(normalizedTokens, price, { omittedTokenWarnings });
-  const totalTokens = sumKnown(normalizedTokens.input, normalizedTokens.output, normalizedTokens.cacheRead, normalizedTokens.cacheWrite);
+  // A source-reported total wins over the component sum; otherwise every recorded
+  // component the source provided contributes, reasoning included.
+  const totalTokens = sourceTotalTokens != null
+    ? { known: true, value: sourceTotalTokens }
+    : sumKnown(...Object.values(normalizedTokens));
   return {
     source,
     sessionId,

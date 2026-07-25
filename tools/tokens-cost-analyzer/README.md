@@ -42,6 +42,8 @@ Subscription comparisons are warning-only when currencies differ from token esti
 
 The prototype intentionally avoids context-window percentages and invoice-grade cost claims. Recorded native costs, source-derived token totals, pricing-table estimates, and unknowns are separate fields in `normalized.json` and visible in the UI. Cockpit integration should be opt-in for selected workspaces; do not promote the analyzer as a default enabled tool until the workflow has broader validation.
 
+OpenCode support reads assistant-message usage from the local `opencode.db`, and falls back to the `session` aggregate row only when no message-level usage exists. Its explicit per-response `tokens.total` is authoritative because it also covers `tokens.reasoning`, which is recorded beside `output` rather than inside it; when that total is missing, the analyzer derives it from `input + output + reasoning + cache.read + cache.write`. Reasoning tokens therefore count toward token totals but are not priced, so cost stays an input/output/cache estimate. Session Browser applies the same total and fallback rule (shared in `tools/shared-web/opencode-usage.mjs`), so both tools report the same OpenCode total.
+
 Codex support reads local rollout JSONL files from `CODEX_SESSION_ROOT` or `$CODEX_HOME/sessions`. It uses `event_msg.token_count.info.last_token_usage` records and splits `cached_input_tokens` out of `input_tokens` so cached tokens are not double-counted. `total_token_usage` is cumulative and is not used for per-record accounting.
 
 Observed local Codex rollout records do not expose cache-write tokens or native recorded cost. The analyzer estimates Codex cost from input, output, and cache-read tokens only, without repeating cache-write warnings on every Codex record.

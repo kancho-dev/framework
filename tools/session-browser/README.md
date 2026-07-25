@@ -232,6 +232,8 @@ Why:
 
 Instead, the UI shows **token pressure**: the largest observed non-cache-read token usage for a turn, using `input + output + cacheWrite` when available and excluding repeated `cacheRead` tokens. This preserves a useful visual signal for light vs heavy sessions without pretending to know exact context usage.
 
+OpenCode stores the same per-response usage twice — on the assistant `message` row and on that message's `step-finish` `part` rows — so a message's parts are counted only when the message row records no usage of its own. A response's explicit `tokens.total` is authoritative (it also covers `tokens.reasoning`); otherwise the total is derived from `input + output + reasoning + cache.read + cache.write`. Tokens / Cost Analyzer applies the same rule from the shared `tools/shared-web/opencode-usage.mjs` module, so both tools report the same OpenCode total.
+
 ## Limitations
 
 - OpenCode support depends on the local `sqlite3` CLI and current DB schema.
