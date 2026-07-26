@@ -2,6 +2,7 @@ import { escapeHtml, formatDate, shortPath, formatTokens, tokenPressureLevel, to
 import { restoreCommand, copyRestoreCommand, copyAndFlash } from './copy-restore.js';
 import { renderEntry } from './entry-rendering.js';
 import { fetchSessionDetail, fetchSessions, putMetadata } from './api.js';
+import { formatToolTitle } from '/shared/browser/format.js';
 import { sessionBrowserScope } from '/shared/browser/session-links.js';
 import { clearStaleRequestedSelection, requestedSelection, requestedTopic } from './selection.js';
 
@@ -80,7 +81,7 @@ function originRow(session) {
 window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
 
 function updateDocumentTitle() {
-  if (state.workspaceName) document.title = `${state.workspaceName} - Sessions`;
+  if (state.workspaceName) document.title = formatToolTitle(state.workspaceName, 'Sessions');
 }
 
 function continuityScope() { return sessionBrowserScope(state.workspaceRoot, location.pathname); }

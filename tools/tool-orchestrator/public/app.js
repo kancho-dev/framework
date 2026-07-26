@@ -1,6 +1,6 @@
 import { fetchJson } from '/shared/browser/api.js';
 import { escapeHtml } from '/shared/browser/dom.js';
-import { formatDate } from '/shared/browser/format.js';
+import { formatDate, formatToolTitle } from '/shared/browser/format.js';
 import { formatReset, gaugeLevel, isStale, limitReasonText, LIMITS_REFRESH_MS, remainingFor } from './limits-format.js';
 
 const dashboardEl = document.querySelector('#dashboard');
@@ -74,6 +74,7 @@ async function loadDashboard() {
     ]);
     state.layout = normalizeLayout(config.layout);
     state.data = { tools, taskSummary, sessionSummary };
+    document.title = formatToolTitle(tools.workspaceName, 'Cockpit');
     setWorkspaceBadge({ name: tools.workspaceName, root: tools.workspaceRoot, workspaces: tools.workspaces, currentWorkspace: tools.currentWorkspace });
     renderDashboard();
     if (limitsVisible() && !state.limits.data) loadLimits();

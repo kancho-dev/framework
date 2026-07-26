@@ -8,6 +8,7 @@ import { fetchTasks, saveMetadata, saveSteeringNotes } from './api.js';
 import { editSteeringDraft, savedSteeringDraft } from './steering-notes.js';
 import { addRelationPatch, currentTags, relationInput, removeRelationPatch, taskKeyFromRelationInput } from './relations.js';
 import { clearRequestedSelection, requestedSelection } from './selection.js';
+import { formatToolTitle } from '/shared/browser/format.js';
 
 window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
 
@@ -51,7 +52,7 @@ async function loadTasks({ preserveScroll = false, revealRestoredSelection = tru
   Object.assign(state, data);
   if (state.selectedStatuses.size === 0) state.selectedStatuses = new Set(data.statuses.filter((status) => !['done', 'paused'].includes(status)));
   restoreSelectedKey();
-  document.title = `${data.workspaceName} - Tasks`;
+  document.title = formatToolTitle(data.workspaceName, 'Tasks');
   window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: data.workspaceName, root: data.workspaceRoot, tooltipPrefix: 'Workspace' });
   renderStatusFilters();
   fillSelect(els.projectFilter, unique(data.tasks.map((task) => task.project)), 'All projects');

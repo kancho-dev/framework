@@ -1,3 +1,8 @@
+export function formatToolTitle(workspaceName, toolName) {
+  const shortWorkspaceName = String(workspaceName || '').replace(/\s+Workspace$/i, '').trim();
+  return [shortWorkspaceName, toolName].filter(Boolean).join(' ');
+}
+
 export function formatDateTime(value) {
   return value ? new Date(value).toLocaleString() : 'unknown time';
 }
