@@ -149,7 +149,7 @@ The framework includes an optional local tool shell under:
 framework/tools/tool-orchestrator/
 ```
 
-It is a local-only web shell for opening small framework browser tools from one place. It currently mounts Task Browser and Session Browser behind a shared **Framework Cockpit** home page with tool status and compact navigation.
+It is a local-only web shell for opening small framework browser tools from one place. It mounts Task Browser and Session Browser behind a shared **Framework Cockpit** home page with tool status and compact navigation. It can also mount the Tokens / Cost Analyzer when that tool is explicitly enabled in workspace configuration.
 
 Quick start after the framework is present in a workspace:
 
@@ -168,12 +168,14 @@ Useful configuration:
 
 - `WORKSPACE_ROOT` — framework workspace root.
 - `TOOL_ORCHESTRATOR_PORT` / `PORT` — local HTTP port, default `8789`.
-- Task Browser and Session Browser environment variables still apply because Cockpit mounts those tools in-process.
+- Task Browser, Session Browser, and Tokens / Cost Analyzer environment variables still apply because Cockpit mounts those tools in-process.
+- Cockpit access to the analyzer always requires a workspace config (`.tools-config/tool-orchestrator/workspaces.json` or `TOOL_ORCHESTRATOR_WORKSPACES_CONFIG`) with `tools["tokens-cost-analyzer"]` set to `true` for that workspace. This applies even when Cockpit otherwise runs in its default single-workspace mode.
+- Use the analyzer's standalone `npm start` command when no Cockpit workspace config is wanted.
 
 Safety:
 
 - the tool is local-only;
-- it is additive and does not replace standalone Task Browser or Session Browser commands;
+- it is additive and does not replace standalone Task Browser, Session Browser, or Tokens / Cost Analyzer commands;
 - it does not add remote hosting, authentication, sync, daemon behavior, or shared metadata defaults;
 - using Cockpit does not require adopting task-browser metadata unless the workspace uses Task Browser features;
 - for full setup/use details, read `framework/tools/tool-orchestrator/README.md`.
@@ -242,6 +244,51 @@ Safety:
 - do not commit private transcripts, cwd paths, tool outputs, copied databases, exports, logs, env files, or dependency/cache folders;
 - for full setup/use details, read `framework/tools/session-browser/README.md`.
 
+## Optional Tokens / Cost Analyzer Tool
+
+The framework includes an optional local analyzer under:
+
+```text
+framework/tools/tokens-cost-analyzer/
+```
+
+It reads local Pi, OpenCode, Codex, and Claude Code session usage for the selected workspace, normalizes token data, and presents estimated cost evidence in a local web report. It is an alpha planning aid, not invoice-grade billing or provider reconciliation.
+
+Quick start after the framework is present in a workspace:
+
+```bash
+cd framework/tools/tokens-cost-analyzer
+npm start
+```
+
+Then open:
+
+```text
+http://localhost:8790
+```
+
+CLI-only analysis is also available:
+
+```bash
+node framework/tools/tokens-cost-analyzer/analyze.mjs --workspace "$PWD"
+```
+
+Useful configuration:
+
+- `WORKSPACE_ROOT` — workspace whose sessions should be analyzed.
+- `TOKENS_COST_ANALYZER_PORT` / `PORT` — local HTTP port, default `8790`.
+- `TOKENS_COST_ANALYZER_OUT` — generated-output directory; default `.tools-config/tokens-cost-analyzer/` under the workspace.
+- `TOKENS_COST_ANALYZER_LIMIT` — recent sessions/files per source for server and Cockpit refreshes; default is full history. Use a positive integer or `all`.
+- `PI_SESSION_ROOT`, `OPENCODE_DB`, `CODEX_HOME` / `CODEX_SESSION_ROOT`, and `CLAUDE_HOME` / `CLAUDE_PROJECTS_ROOT` — source-specific local data locations.
+
+Safety and privacy:
+
+- analysis is local-only and read-only with respect to source session data;
+- generated `normalized.json`, `report.md`, optional pricing overrides, and optional subscription records stay under ignored `.tools-config/` by default and may reveal models, usage, costs, paths, and work timing;
+- do not commit generated reports or `.tools-config/` unless intentionally sharing that private local state;
+- estimates may be incomplete or unpriced and are explicitly separated from recorded native costs;
+- for complete source semantics, pricing caveats, Cockpit integration, and configuration, read `framework/tools/tokens-cost-analyzer/README.md`.
+
 ## Existing File Guidance
 
 ### `.gitignore`
@@ -268,6 +315,11 @@ Optional browser tools use `.tools-config/` as the default private workspace-loc
     metadata.json
   tool-orchestrator/
     workspaces.json
+  tokens-cost-analyzer/
+    normalized.json
+    report.md
+    pricing.json
+    subscriptions.json
 ```
 
 Keep this directory ignored unless the workspace intentionally shares local tool state. For existing-workspace upgrades from older tool metadata paths, follow [`migrations/v0.14.0.md`](migrations/v0.14.0.md); `MIGRATIONS.md` indexes the full set.

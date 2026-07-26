@@ -52,7 +52,7 @@ The framework has three layers:
 
 1. **Core workflow** — markdown state, roles, task handoffs, security, and review.
 2. **Reference guidance** — installation, usage prompts, skills, task patterns, and workspace structure.
-3. **Optional extensions** — session browser, task browser, native command adapters, and memory service.
+3. **Optional extensions** — session browser, task browser, tokens/cost analysis, native command adapters, and memory service.
 
 You can start with only the core workflow. Add extensions only when they help your actual process.
 
@@ -127,7 +127,7 @@ Typical use looks like this:
 
 [`tools/tool-orchestrator/`](tools/tool-orchestrator/) is an optional local shell for opening small framework browser tools from one place.
 
-It currently mounts Task Browser and Session Browser behind a shared **Framework Cockpit** home page with local tool status and compact navigation. The Cockpit is additive: standalone tools remain available with their existing commands.
+It mounts Task Browser and Session Browser behind a shared **Framework Cockpit** home page with local tool status and compact navigation. Tokens / Cost Analyzer access is opt-in and requires explicit enablement in a Cockpit workspace config; its standalone `npm start` path needs no Cockpit config. The Cockpit is additive: standalone tools remain available with their existing commands.
 
 Quick start:
 
@@ -173,6 +173,27 @@ It reads framework task markdown, stores task-browser-owned workflow metadata in
 
 Read [`tools/task-browser/README.md`](tools/task-browser/README.md) for setup, metadata, configuration, and safety details.
 
+### Tokens / Cost Analyzer
+
+[`tools/tokens-cost-analyzer/`](tools/tokens-cost-analyzer/) is an optional read-only local tool that normalizes Pi, OpenCode, Codex, and Claude Code token usage and presents recorded or estimated cost evidence.
+
+It is an alpha planning aid rather than invoice-grade billing. Generated reports and optional local pricing/subscription configuration stay under ignored `.tools-config/tokens-cost-analyzer/` by default.
+
+Quick start:
+
+```bash
+cd framework/tools/tokens-cost-analyzer
+npm start
+```
+
+Then open:
+
+```text
+http://localhost:8790
+```
+
+Read [`tools/tokens-cost-analyzer/README.md`](tools/tokens-cost-analyzer/README.md) for source semantics, configuration, pricing caveats, Cockpit integration, and safety details.
+
 ### Native Commands
 
 [`prompts/`](prompts/) contains optional command templates for Pi, OpenCode, and Claude Code such as `/next-best-actions`, `/no-context`, `/slc`, `/update-framework`, and `/workspace-maintenance`.
@@ -203,6 +224,7 @@ Use it when curated markdown files are not enough for a specific context questio
 - [`tools/tool-orchestrator/`](tools/tool-orchestrator/) — optional local Framework Cockpit shell for small browser tools.
 - [`tools/session-browser/`](tools/session-browser/) — optional local session browser.
 - [`tools/task-browser/`](tools/task-browser/) — optional local task browser.
+- [`tools/tokens-cost-analyzer/`](tools/tokens-cost-analyzer/) — optional local token and estimated-cost analyzer.
 
 ## Design Principles
 

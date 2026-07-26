@@ -302,5 +302,5 @@ server.listen(PORT, () => {
   console.log(`Framework Cockpit: http://localhost:${PORT}`);
   console.log(`Default workspace root: ${WORKSPACE_ROOT}`);
   if (workspaceConfig.path) console.log(`Workspace config: ${workspaceConfig.path}`);
-  console.log('Local-only tool shell; standalone Task Browser and Session Browser remain available.');
+  console.log('Local-only tool shell; standalone Task Browser, Session Browser, and Tokens / Cost Analyzer remain available.');
 });

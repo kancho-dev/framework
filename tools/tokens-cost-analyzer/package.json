@@ -6,6 +6,6 @@
   "scripts": {
     "start": "node server.mjs",
     "analyze": "node analyze.mjs",
-    "test": "node --test opencode.test.mjs ../shared-web/opencode-usage.test.mjs"
+    "test": "node --test adapters.test.mjs server.test.mjs opencode.test.mjs ../shared-web/opencode-usage.test.mjs"
   }
 }

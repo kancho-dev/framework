@@ -14,12 +14,13 @@ Environment:
 - `TOOL_ORCHESTRATOR_PORT` or `PORT` — server port, default `8789`.
 - `WORKSPACE_ROOT` — framework workspace root. Defaults to the current working directory.
 - `TOOL_ORCHESTRATOR_WORKSPACES_CONFIG` — optional path to a local JSON workspace config for multi-workspace Cockpit mode. If unset, Cockpit auto-loads `$WORKSPACE_ROOT/.tools-config/tool-orchestrator/workspaces.json` when that file exists; otherwise it falls back to single-workspace `WORKSPACE_ROOT` behavior.
-- Existing Task Browser and Session Browser environment variables still apply because the Cockpit mounts those tools in-process.
+- Existing Task Browser, Session Browser, and Tokens / Cost Analyzer environment variables still apply because the Cockpit mounts those tools in-process. `TOKENS_COST_ANALYZER_LIMIT` is especially useful for bounded Cockpit refreshes.
 
 Mounted tools:
 
 - `/tools/tasks/` — Task Browser
 - `/tools/sessions/` — Session Browser
+- `/tools/tokens-cost-analyzer/` — Tokens / Cost Analyzer (opt-in per configured workspace)
 
 ## Cockpit Widget Dashboard
 
@@ -165,7 +166,7 @@ Optional multi-workspace config:
       "taskMetadataPath": "/home/user/work/framework-ws/.tools-config/task-browser/tasks.json",
       "taskHistoryPath": "/home/user/work/framework-ws/.tools-config/task-browser/task-history.jsonl",
       "sessionMetadataPath": "/home/user/work/framework-ws/.tools-config/session-browser/metadata.json",
-      "tools": { "task-browser": true, "session-browser": true }
+      "tools": { "task-browser": true, "session-browser": true, "tokens-cost-analyzer": true }
     },
     {
       "id": "client-a",
@@ -177,13 +178,14 @@ Optional multi-workspace config:
 }
 ```
 
-Workspace IDs are URL-safe and selected with `?workspace=<id>`, so two browser tabs can keep different workspace contexts. Missing `tools` entries default to enabled; availability checks still determine whether a tool is ready or warning. Missing metadata/history paths use each tool's existing default for that workspace.
+Workspace IDs are URL-safe and selected with `?workspace=<id>`, so two browser tabs can keep different workspace contexts. Availability checks determine whether an enabled tool is ready or warning. Missing metadata/history paths use each tool's existing default for that workspace. Task Browser and Session Browser default to enabled when their entries are omitted; Tokens / Cost Analyzer requires an explicit `"tokens-cost-analyzer": true` per workspace because analysis can scan full local session history.
 
 The Cockpit is additive. Standalone tools remain available with their existing commands:
 
 ```bash
 cd tools/task-browser && node server.mjs
 cd tools/session-browser && node server.mjs
+cd tools/tokens-cost-analyzer && node server.mjs
 ```
 
 It does not add remote hosting, authentication, sync, daemon behavior, or shared metadata defaults.

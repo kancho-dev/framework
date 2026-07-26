@@ -1,6 +1,6 @@
-# Tokens / Cost Analyzer Prototype
+# Tokens / Cost Analyzer
 
-Experimental read-only local prototype for normalizing Pi, OpenCode, Codex, and Claude Code session token/cost data and showing it as a visual local web report.
+Read-only local alpha tool for normalizing Pi, OpenCode, Codex, and Claude Code session token/cost data and showing it as a visual local web report.
 
 This tool is an alpha cost-visibility aid, not invoice-grade billing, provider reconciliation, or a recommended/default workflow for every framework workspace. Treat the output as local planning evidence with explicit uncertainty labels.
 
@@ -40,7 +40,7 @@ The analyzer includes a bundled Pi-derived pricing table at `data/pi-pricing.jso
 
 Subscription comparisons are warning-only when currencies differ from token estimate currency. Token estimates are USD pricing-table estimates; manually normalize subscription records to USD before treating token and subscription totals as directly comparable.
 
-The prototype intentionally avoids context-window percentages and invoice-grade cost claims. Recorded native costs, source-derived token totals, pricing-table estimates, and unknowns are separate fields in `normalized.json` and visible in the UI. Cockpit integration should be opt-in for selected workspaces; do not promote the analyzer as a default enabled tool until the workflow has broader validation.
+The analyzer intentionally avoids context-window percentages and invoice-grade cost claims. Recorded native costs, source-derived token totals, pricing-table estimates, and unknowns are separate fields in `normalized.json` and visible in the UI. Cockpit integration should be opt-in for selected workspaces; do not promote the analyzer as a default enabled tool until the workflow has broader validation.
 
 OpenCode support reads assistant-message usage from the local `opencode.db`, and falls back to the `session` aggregate row only when no message-level usage exists. Its explicit per-response `tokens.total` is authoritative because it also covers `tokens.reasoning`, which is recorded beside `output` rather than inside it; when that total is missing, the analyzer derives it from `input + output + reasoning + cache.read + cache.write`. Reasoning tokens therefore count toward token totals but are not priced, so cost stays an input/output/cache estimate. Session Browser applies the same total and fallback rule (shared in `tools/shared-web/opencode-usage.mjs`), so both tools report the same OpenCode total.
 
