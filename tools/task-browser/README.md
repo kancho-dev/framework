@@ -151,42 +151,13 @@ Relationship edits use existing task references with shared capped-height autoco
 
 ## Metadata CLI
 
-Agents must use the dependency-free CLI for non-interactive metadata updates:
-
-```bash
-node tools/task-browser/metadata-cli.mjs list --status active
-node tools/task-browser/metadata-cli.mjs get '#32'
-node tools/task-browser/metadata-cli.mjs key '#32'
-node tools/task-browser/metadata-cli.mjs init agent-framework/task-browser-metadata-guidance-rules --status planned --priority high --type documentation
-node tools/task-browser/metadata-cli.mjs set '#32' --status review --priority high --tags task-browser,metadata-guidance
-node tools/task-browser/metadata-cli.mjs set '#32' --next-actor agent --role Builder --session-tool pi
-node tools/task-browser/metadata-cli.mjs clear '#32' --next-actor
-node tools/task-browser/metadata-cli.mjs set '#32' --status review --role Builder --session-tool pi --session-id pi-session-id
-node tools/task-browser/metadata-cli.mjs history '#32' --limit 10
-node tools/task-browser/metadata-cli.mjs clear '#32' --order
-node tools/task-browser/metadata-cli.mjs add-related '#32' agent-framework/task-browser-prompt-copy-v2
-node tools/task-browser/metadata-cli.mjs add-blocker '#32' '#12'
-node tools/task-browser/metadata-cli.mjs set-parent '#32' agent-framework/task-browser-prompt-copy-v2
-```
-
-The CLI accepts display IDs and canonical task keys for task references. Relationship fields are stored as canonical task keys so browser relationship links remain reliable. Parent/child commands maintain reciprocal `parent`/`children` metadata from either side, and `related` commands maintain symmetric links. `blockedBy` is for existing task blockers only; generic blockers should be explained in `HANDOFF.md`, `CONTEXT.md`, or run logs while metadata uses `status: blocked`. The inverse `blocks` relationship is derived from other tasks' `blockedBy` metadata instead of stored separately.
-
-Supported CLI metadata fields are `status`, `priority`, `type`, `nextActor`, `order`, `parent`, `tags`, `blockedBy`, `children`, and `related`. Use `set --next-actor operator|agent` to assign responsibility and `clear --next-actor` to store `null`. CLI `get` and `list` expose the normalized value. Identity fields such as `displayId`, `project`, `slug`, and `path` are preserved. Write commands accept optional provenance flags `--actor`, `--role`, `--session-tool`, `--session-id`, and `--note`; agents should pass real role/session details when useful and available rather than inventing them.
+Commands, task references, supported fields, and provenance flags live in `METADATA-CLI.md` in this directory.
 
 ## Metadata Hygiene Guidance
 
 Use task-browser metadata only when the workspace has adopted task-browser, such as when `.tools-config/task-browser/tasks.json` exists or the Operator/current task says the board is used. Do not require this metadata in workspaces that are not using task-browser, and do not commit `.tools-config/task-browser/tasks.json` unless sharing local board state is intentional.
 
-Lifecycle scenario rules:
-
-- task creation: initialize metadata for the discovered task, usually `planned` unless work starts immediately;
-- pickup: set `status: active` for the current target;
-- review: set `status: review` for Oracle/Operator review, `active` after a bounce, and `done` only after task files record closure;
-- pause/block: use `paused` for deferral and `blocked` for a real blocker; use `blockedBy` only when another existing task is the blocker;
-- relationships: use `parent`, `children`, and `related` for task splits and peer follow-ups; document execution-relevant relationships in task markdown too;
-- closure: metadata may aid discovery, but task markdown and run logs remain the closure record.
-
-For `nextActor` creation, pickup, review, bounce, blocker, pause, and closure decisions, follow the single authoritative matrix in framework `TASKS.md`. Before ending meaningful task work, keep the field aligned with `HANDOFF.md`'s narrative next action and clear it when no Operator/Agent step is currently actionable.
+Framework `TASKS.md` owns lifecycle status semantics and the `nextActor` matrix. Follow it for creation, pickup, review, bounce, blocker, pause, and closure decisions. Before ending meaningful task work, keep `nextActor` aligned with `HANDOFF.md`'s narrative next action and clear it when no Operator/Agent step is currently actionable.
 
 ## Guidance And Future Work
 

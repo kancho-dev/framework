@@ -139,7 +139,7 @@ A Builder run produces a bounded slice, then a separate Oracle task run reviews 
 
 ### Maintenance
 
-A Historian or Overseer run cleans state, syncs docs, or reduces drift.
+A Historian run cleans state, syncs docs, or reduces drift.
 
 ### Research / plan
 
@@ -198,7 +198,7 @@ When task-browser is used, agents should keep metadata aligned before ending mea
 
 At creation, use `agent` when the task is ready for Agent work, `operator` when explicit Operator action is required, and `null` otherwise. On pickup and whenever `HANDOFF.md`'s narrative next action changes the responsible actor, align `nextActor`. Before ending meaningful tracked-task work, compare the two again and set or clear the field. Do not infer or change `nextActor` merely because `status` changed; lifecycle and action responsibility are orthogonal.
 
-Use `tools/task-browser/metadata-cli.mjs` as the preferred non-interactive way to inspect or update metadata. It accepts display IDs such as `#32` and canonical keys such as `agent-framework/task-slug`, but stores relationships as canonical keys. In framework versions with task-browser action history, CLI writes append local `.tools-config/task-browser/task-history.jsonl` events by default for actual durable metadata changes. Agents may pass real provenance when useful, such as `--role Builder`, `--session-tool pi`, or `--session-id ...`; leave role/session details unset rather than inventing them. See `tools/task-browser/README.md` for detailed history behavior and privacy notes.
+Use `tools/task-browser/metadata-cli.mjs` as the preferred non-interactive way to inspect or update metadata. For metadata-cli usage check `tools/task-browser/METADATA-CLI.md`. Only if more information about storage paths, metadata history, or privacy notes is needed, see `tools/task-browser/README.md`.
 
 ## End Of Task Session
 
