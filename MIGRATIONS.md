@@ -6,6 +6,21 @@ These notes are version-specific checks, not a permanent setup checklist. Apply 
 
 For the update procedure, use `framework/SKILLS/update-framework/SKILL.md`.
 
+## v0.19.0 — Claude Code Source And Workspace Template Refresh
+
+This release is additive: new optional read-only session/cost sources, a new Cockpit widget, and consolidated install/command docs. No data or storage migration is required and existing workspaces keep working untouched. Two workspace *template* changes are worth merging by hand, since template updates do not rewrite files an existing workspace already owns.
+
+### Required checks
+
+1. Compare the workspace root `.gitignore` with `framework/TEMPLATES/WORKSPACE/.gitignore`. The template now ignores `.claude/` alongside `.pi/` and `.opencode/`. Add it if the workspace uses Claude Code, so tool-local adapter state stays out of version control.
+2. If the workspace is used with Claude Code, check for a root `CLAUDE.md`. The new `framework/TEMPLATES/WORKSPACE/CLAUDE.md` is a one-line pointer (`Read AGENTS.md from this folder and follow its instructions`) that keeps agent instructions single-sourced in `AGENTS.md`. Add it if missing; if a hand-written `CLAUDE.md` already exists, reduce it to the pointer plus any genuine workspace-specific exception rather than duplicating `AGENTS.md`.
+
+### Optional checks
+
+3. Session Browser gains an opt-in `claude-code` source. It is enabled by default in `SESSION_SOURCES` (`pi,opencode,codex,claude-code`) and reads `~/.claude/projects` — override with `CLAUDE_HOME` / `CLAUDE_PROJECTS_ROOT`, or narrow `SESSION_SOURCES` to isolate one source. No action needed if Claude Code is not used; a missing directory fails soft.
+4. Tokens / Cost Analyzer prices Claude Code usage from bundled Anthropic pricing, including a new `claude-opus-5` entry. Workspaces carrying a local pricing override should confirm it does not shadow the bundled data.
+5. The Cockpit `subscription-limits` widget is new and self-configuring. It reads provider state locally and fails soft per provider, so no workspace configuration is required.
+
 ## v0.18.0 — Role Bootstrap And Workspace Instruction Boundary
 
 This release makes `framework/FRAMEWORK.md` authoritative for universal session procedure. It selects explicit Operator or workflow role intent before any role file loads and reduces the workspace `AGENTS.md` template to bootstrap plus genuine workspace configuration and boundaries. Existing workspaces must merge this boundary into their agent instructions to receive the footprint reduction.
