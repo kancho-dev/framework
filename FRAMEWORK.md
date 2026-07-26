@@ -10,12 +10,12 @@ Use this framework to keep software development work coherent across main sessio
 
 ## Core Rules
 
-1. Write important state into files. Do not rely on chat history alone.
-2. Keep project code and project knowledge together.
-3. Treat handoff files as working memory for task-level execution.
-4. Prefer the smallest structure that stays consistent.
-5. Load only the context, role files, skills, and references needed for the run.
-6. Use searchable memory only as support, not as the source of truth for current state or policy.
+1. Write important state into files. Do not rely on chat history alone
+2. Keep project code and project knowledge together
+3. Treat handoff files as working memory for task-level execution
+4. Prefer the smallest structure that stays consistent
+5. Load only the context, role files, skills, and references needed for the run
+6. Use searchable memory only as support, not as the source of truth for current state or policy
 
 ## Runtime Model
 
@@ -23,22 +23,29 @@ Use this framework to keep software development work coherent across main sessio
 Run = Base + Role + Skills + Context
 ```
 
-- **Base** = this file, `framework/SECURITY.md`, and the active workspace instructions/state.
-- **Role** = the primary mindset and scope for the run.
-- **Skills** = optional procedural playbooks loaded only when relevant.
-- **Context** = the smallest set of workspace, project, task, and reference files needed.
+- **Base** = this file, `framework/SECURITY.md`, and the active workspace instructions/state
+- **Role** = the primary mindset and scope for the run
+- **Skills** = optional procedural playbooks loaded only when relevant
+- **Context** = the smallest set of workspace, project, task, and reference files needed
 
 ## Read Order
 
 Start every framework-managed session with this common sequence:
 
-1. read `framework/FRAMEWORK.md`;
-2. read `framework/SECURITY.md`;
-3. select one primary role before reading any file under `framework/ROLES/`:
-   1. use the role explicitly named by the Operator or invoking workflow;
-   2. otherwise choose the role that fits the requested work, current task action, or applicable task guidance;
-   3. otherwise fall back to Overseer for an unclassified top-level session;
-4. read only the selected role file.
+1. read `framework/FRAMEWORK.md`
+2. read `framework/SECURITY.md`
+3. using the rules below select exactly one primary role before reading any file under `framework/ROLES/` where the role files live: `OVERSEER.md`, `BUILDER.md`, `ORACLE.md`, and `HISTORIAN.md`:
+
+   1. the role explicitly named by the Operator or invoking workflow; a named skill is not a role
+   2. otherwise the role fitting the next concrete action this run will take:
+      - produce or change an artifact — Builder
+      - verify existing work against a contract or expectation — Oracle
+      - reconcile state, docs, or knowledge with reality — Historian
+      - decide, route, prioritize, or stop for a missing decision — Overseer
+      - on a Task-session branch, read the referenced task's `HANDOFF.md` when the best fit is not yet clear
+   3. otherwise Overseer
+
+4. read only the selected role file
 
 If explicit or applicable guidance names multiple roles without choosing one, resolve the ambiguity with the Operator before loading role guidance. Read a different role file later only for an explicit, justified role transition, and record that transition in task or workspace state when the run is meaningful.
 
@@ -46,45 +53,32 @@ Then continue with the applicable branch.
 
 ### Main-session branch
 
-1. Read `ACTIVE-CONTEXT.md`.
-2. Read today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief under `memory/`, if any.
-   - If today's brief does not exist and you later create it, start with a short `Carry-forward from previous brief` section containing only important unfinished actionable items from the latest previous brief.
-   - Mark a carry-forward item checked in today's brief when confirmed complete; do not rewrite older briefs.
-3. Read relevant project `library/` files when making project decisions.
-4. Load selected reference docs only when needed:
-   - `framework/WORKSPACE.md` for workspace/project layout and state files;
-   - `framework/TASKS.md` for task structure, review loops, and task closure;
-   - `framework/SKILLS.md` for skill resolution rules.
-5. Load selected skills only when relevant.
-6. Use optional memory retrieval only when markdown files leave a specific context gap.
+1. Read `ACTIVE-CONTEXT.md`
+2. Read today's `memory/daily-brief-YYYY-MM-DD.md` if it exists; otherwise read the latest daily brief under `memory/`, if any
+   - If today's brief does not exist and you later create it, start with a short `Carry-forward from previous brief` section containing only important unfinished actionable items from the latest previous brief
+   - Mark a carry-forward item checked in today's brief when confirmed complete; do not rewrite older briefs
+3. Read relevant project `library/` files when making project decisions
+4. Load reference docs only when a specific open question requires them, not to prepare:
+   - `framework/WORKSPACE.md` — placing state, or project/repository layout
+   - `framework/TASKS.md` — a task-contract question the task files and applicable skill leave unresolved
+   - `framework/SKILLS.md` — skill precedence or a collision
+5. Load selected skills only when relevant
+6. Use optional memory retrieval only when markdown files leave a specific context gap
 
 ### Task-session branch
 
-1. Read task files under `projects/[name]/work/[task-slug]/`.
-   - Check task-local `NOTES.md` exactly once when task work starts.
-   - If it contains non-whitespace Steering Notes, read and capture the payload successfully, immediately delete `NOTES.md`, and act on it once.
-   - Do not poll during the run; notes saved afterward belong to the following Task Run.
-2. Read relevant project `library/` files.
-3. Load selected reference docs, skills, and optional memory only when needed.
+1. Read task files under `projects/[name]/work/[task-slug]/`
+   - Check task-local `NOTES.md` exactly once when task work starts
+   - If it contains non-whitespace Steering Notes, read and capture the payload successfully, immediately delete `NOTES.md`, and act on it once
+   - Do not poll during the run; notes saved afterward belong to the following Task Run
+2. Read relevant project `library/` files
+3. Load reference docs, skills, and optional memory only when needed, using the same triggers as the main-session branch
 
 ### Implementation work
 
 Before code or documentation implementation changes, also read:
 
 - `framework/ENGINEERING.md`
-
-## Roles
-
-Use one primary role per run.
-
-Default roles:
-
-- `framework/ROLES/OVERSEER.md` — top-level orchestration, planning, and review.
-- `framework/ROLES/BUILDER.md` — implementation work.
-- `framework/ROLES/ORACLE.md` — review and verification.
-- `framework/ROLES/HISTORIAN.md` — documentation and state hygiene.
-
-Overseer is the fallback only when the role-selection rule above finds no explicit or applicable workflow role.
 
 ## Skills
 
@@ -106,9 +100,9 @@ If the correct skill or scope remains unclear, ask the Operator before executing
 
 This core file intentionally stays short. Load details only when needed:
 
-- `framework/WORKSPACE.md` — workspace files, project structure, repository boundaries, what-goes-where.
-- `framework/TASKS.md` — micro and tracked tasks, task files, task patterns, separate Builder–Oracle runs, review result shape.
-- `framework/SKILLS.md` — skill locations, routing indexes, precedence, collisions, optional resources/scripts.
+- `framework/WORKSPACE.md` — workspace files, project structure, repository boundaries, what-goes-where
+- `framework/TASKS.md` — micro and tracked tasks, task files, task patterns, separate Builder–Oracle runs, review result shape
+- `framework/SKILLS.md` — skill locations, routing indexes, precedence, collisions, optional resources/scripts
 
 ## Escalation Flow
 
@@ -126,18 +120,18 @@ Builder / Oracle / Historian
 
 Rules:
 
-- do not guess when a missing decision could change scope, correctness, or risk;
-- prefer a concise explicit question over silent assumption-making;
-- record persistent blockers or decisions in workspace/task state.
+- do not guess when a missing decision could change scope, correctness, or risk
+- prefer a concise explicit question over silent assumption-making
+- record persistent blockers or decisions in workspace/task state
 
 ## End Of Session
 
 Before ending meaningful work:
 
-1. update the relevant handoff, context, or active state files;
-2. append a timed entry to the end of today's daily brief using the real current system date/time; before creating or writing a daily brief, check whether the dated file exists and never overwrite an existing daily brief;
-3. record durable fixes in `FIXES.md` when relevant;
-4. move lasting project knowledge into `projects/[name]/library/` when relevant.
+1. update the relevant handoff, context, or active state files
+2. append a timed entry to the end of today's daily brief using the real current system date/time; before creating or writing a daily brief, check whether the dated file exists and never overwrite an existing daily brief
+3. record durable fixes in `FIXES.md` when relevant
+4. move lasting project knowledge into `projects/[name]/library/` when relevant
 
 ## Tool Agnosticism
 
