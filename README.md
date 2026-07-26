@@ -188,7 +188,7 @@ Use it when curated markdown files are not enough for a specific context questio
 ## Documentation Map
 
 - [`INSTALLATION.md`](INSTALLATION.md) — first-time setup and existing-workspace adoption.
-- [`MIGRATIONS.md`](MIGRATIONS.md) — version-specific checks for updating existing framework-managed workspaces.
+- [`MIGRATIONS.md`](MIGRATIONS.md) — how migration notes work, plus an index of the per-version files under [`migrations/`](migrations/) that existing framework-managed workspaces apply when updating.
 - [`FRAMEWORK.md`](FRAMEWORK.md) — compact agent operating protocol.
 - [`WORKSPACE.md`](WORKSPACE.md) — workspace files, project structure, repository boundaries, and state placement.
 - [`TASKS.md`](TASKS.md) — micro and tracked tasks, task files, task patterns, and review loops.

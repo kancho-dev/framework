@@ -36,7 +36,7 @@ async function main() {
     parsed = JSON.parse(await readFile(metadataPath, 'utf8'));
   } catch (error) {
     if (error?.code === 'ENOENT') {
-      const migrationHint = process.env.SESSION_BROWSER_METADATA ? '' : ' For metadata-path upgrades, see MIGRATIONS.md.';
+      const migrationHint = process.env.SESSION_BROWSER_METADATA ? '' : ' For metadata-path upgrades, see migrations/v0.14.0.md.';
       console.log(`No Session Browser metadata found at ${metadataPath}; nothing to migrate.${migrationHint}`);
       return;
     }

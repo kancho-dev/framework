@@ -35,7 +35,7 @@ export async function readMetadata(path, { allowMissing = false } = {}) {
     return normalizeMetadata(JSON.parse(await readFile(path, 'utf8')));
   } catch (error) {
     if (error.code === 'ENOENT' && allowMissing) return { version: 1, nextDisplayNumber: 1, tasks: {} };
-    if (error.code === 'ENOENT') throw new Error(`Missing metadata file: ${path}. Open/run task-browser first, run init for an existing task, or set TASK_BROWSER_METADATA. For metadata-path upgrades, see MIGRATIONS.md.`);
+    if (error.code === 'ENOENT') throw new Error(`Missing metadata file: ${path}. Open/run task-browser first, run init for an existing task, or set TASK_BROWSER_METADATA. For metadata-path upgrades, see migrations/v0.14.0.md.`);
     throw error;
   }
 }

@@ -200,11 +200,11 @@ The file shape is intentionally simple and private/local. Older metadata files u
 
 To reset bookmarks and tags, stop the server and delete the metadata file. To back them up, copy that file. Treat it as private because tags and session keys can reveal local paths, project names, or work topics.
 
-For existing-workspace upgrades from older metadata paths, use `MIGRATIONS.md` as the source of truth. Explicit `SESSION_BROWSER_METADATA` override paths remain supported.
+For existing-workspace upgrades from older metadata paths, see the metadata-path move in `migrations/v0.14.0.md`, indexed from `MIGRATIONS.md`. Explicit `SESSION_BROWSER_METADATA` override paths remain supported.
 
 The first slice is deliberately manual: the tool does not auto-tag sessions and does not expose CLI/API workflows for agents to write tags on your behalf.
 
-Update note for framework agents: when upgrading existing workspaces, follow `MIGRATIONS.md` for metadata-path migration. The tag migration command above is idempotent and creates a timestamped backup before rewriting local private metadata.
+Update note for framework agents: when upgrading existing workspaces, follow `migrations/v0.14.0.md` for metadata-path migration. The tag migration command above is idempotent and creates a timestamped backup before rewriting local private metadata.
 
 ## Privacy And Safety
 

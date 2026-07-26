@@ -24,7 +24,7 @@ Always inspect:
 
 Load only when its branch requires it:
 
-- `framework/MIGRATIONS.md`: sections between the installed and target versions;
+- `framework/MIGRATIONS.md`: its selection rule and index, then only the `framework/migrations/vX.Y.Z.md` files it lists between the installed and target versions;
 - version/tag diff: when installed and target versions differ and comparable history exists;
 - `FRAMEWORK.md`, `WORKSPACE.md`, `TASKS.md`, `SKILLS.md`, `ROLES/`, `SKILLS/`, `TEMPLATES/`, `COMMANDS.md`, `prompts/`, and tool READMEs: only when the version diff or migration guidance identifies them as relevant;
 - workspace/project skill indexes, local skills, mirrored agent entrypoints, `.gitignore`, and project boundaries: only when affected guidance or templates could make them stale.
@@ -41,7 +41,7 @@ Treat a missing `CURRENT_VERSION` as an unknown installed version. Preserve that
 
 ### 2. Build the update inventory
 
-When no newer target is available, compare the workspace only against guidance that can be established from the installed framework. Otherwise inspect the applicable migration sections and version diff. Inventory every changed framework path, classify its workspace impact, and identify any required, optional, or irrelevant adaptation.
+When no newer target is available, compare the workspace only against guidance that can be established from the installed framework. Otherwise inspect the applicable migration files and version diff. Inventory every changed framework path, classify its workspace impact, and identify any required, optional, or irrelevant adaptation.
 
 For each potentially affected workspace file, record its owner, local customization, applicable template or guidance, and proposed disposition: add, merge, leave unchanged, or escalate. Include local skills and indexes when framework skill guidance changed; include root and mirrored entrypoints when bootstrap guidance changed; include `.gitignore` and nested repository boundaries when the repository model changed.
 

@@ -205,7 +205,7 @@ Local ignored `.tools-config/task-browser/tasks.json` is the default. Shared/tea
 
 ## Migration
 
-For existing-workspace upgrades from older metadata paths, use `MIGRATIONS.md` as the source of truth. Explicit `TASK_BROWSER_METADATA` and `TASK_BROWSER_HISTORY` override paths remain supported.
+For existing-workspace upgrades from older metadata paths, see the metadata-path move in `migrations/v0.14.0.md`, indexed from `MIGRATIONS.md`. Explicit `TASK_BROWSER_METADATA` and `TASK_BROWSER_HISTORY` override paths remain supported.
 
 ## Safety And Privacy
 

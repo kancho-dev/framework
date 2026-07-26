@@ -270,7 +270,7 @@ Optional browser tools use `.tools-config/` as the default private workspace-loc
     workspaces.json
 ```
 
-Keep this directory ignored unless the workspace intentionally shares local tool state. For existing-workspace upgrades from older tool metadata paths, use `MIGRATIONS.md` as the source of truth.
+Keep this directory ignored unless the workspace intentionally shares local tool state. For existing-workspace upgrades from older tool metadata paths, follow [`migrations/v0.14.0.md`](migrations/v0.14.0.md); `MIGRATIONS.md` indexes the full set.
 
 ### `README.md`
 
