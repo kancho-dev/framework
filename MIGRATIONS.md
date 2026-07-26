@@ -8,6 +8,7 @@ If `CURRENT_VERSION` is missing, the installed version is unknown. Resolve it wi
 
 ## Index
 
+- v0.20.0 — [migrations/v0.20.0.md](migrations/v0.20.0.md)
 - v0.19.0 — [migrations/v0.19.0.md](migrations/v0.19.0.md)
 - v0.18.0 — [migrations/v0.18.0.md](migrations/v0.18.0.md)
 - v0.14.0 — [migrations/v0.14.0.md](migrations/v0.14.0.md)
