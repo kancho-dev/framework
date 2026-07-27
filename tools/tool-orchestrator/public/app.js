@@ -195,7 +195,7 @@ function renderSubscriptionLimits(limits) {
 
 function renderLimitGauge(provider) {
   const remaining = remainingFor(provider);
-  const level = gaugeLevel(remaining);
+  const level = gaugeLevel(provider);
   const value = remaining === null ? '—' : `${remaining}%`;
   const title = `${provider.label} · ${provider.windowLabel}`;
   const summary = remaining === null

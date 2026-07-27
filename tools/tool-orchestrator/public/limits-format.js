@@ -23,10 +23,27 @@ export function remainingFor(provider) {
   return provider?.status === 'ok' && typeof provider.remainingPercent === 'number' ? provider.remainingPercent : null;
 }
 
-export function gaugeLevel(remaining) {
+export function gaugeLevel(provider, now = Date.now()) {
+  const remaining = remainingFor(provider);
   if (remaining === null) return 'unknown';
-  if (remaining <= 10) return 'critical';
-  if (remaining <= 25) return 'low';
+
+  const resetAt = Date.parse(provider.resetsAt);
+  const windowMs = provider.windowDurationMins * 60_000;
+  const elapsedFraction = (now - (resetAt - windowMs)) / windowMs;
+  if (!Number.isFinite(resetAt) || !Number.isFinite(windowMs) || windowMs <= 0 || elapsedFraction < 0 || elapsedFraction >= 1) {
+    if (remaining <= 10) return 'critical';
+    if (remaining <= 25) return 'low';
+    return 'ok';
+  }
+
+  if (remaining <= 5) return 'critical';
+  if (remaining <= 15) return 'low';
+  if (elapsedFraction < 0.05) return 'ok';
+  const usedFraction = (100 - remaining) / 100;
+  const paceRatio = usedFraction / Math.max(elapsedFraction, 0.05);
+  if (paceRatio >= 1.5) return 'critical';
+  if (paceRatio >= 1.15) return 'low';
+  if (elapsedFraction >= 0.2 && paceRatio < 0.7) return 'available';
   return 'ok';
 }
 

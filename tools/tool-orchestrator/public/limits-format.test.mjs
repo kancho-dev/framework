@@ -12,14 +12,31 @@ test('reads a remaining percent only from an ok provider', () => {
   assert.equal(remainingFor(null), null);
 });
 
-test('grades urgency by remaining percent and keeps unknown distinct from empty', () => {
-  assert.equal(gaugeLevel(80), 'ok');
-  assert.equal(gaugeLevel(26), 'ok');
-  assert.equal(gaugeLevel(25), 'low');
-  assert.equal(gaugeLevel(11), 'low');
-  assert.equal(gaugeLevel(10), 'critical');
-  assert.equal(gaugeLevel(0), 'critical');
-  assert.equal(gaugeLevel(null), 'unknown');
+test('grades usage against elapsed reset-window pace', () => {
+  const provider = (remainingPercent, elapsedFraction, overrides = {}) => ({
+    status: 'ok',
+    remainingPercent,
+    windowDurationMins: 100,
+    resetsAt: new Date(NOW + (1 - elapsedFraction) * 100 * 60_000).toISOString(),
+    ...overrides,
+  });
+
+  assert.equal(gaugeLevel(provider(65, 0.5), NOW), 'ok', 'the blue boundary itself remains green');
+  assert.equal(gaugeLevel(provider(40, 0.5), NOW), 'low');
+  assert.equal(gaugeLevel(provider(25, 0.5), NOW), 'critical');
+  assert.equal(gaugeLevel(provider(90, 0.5), NOW), 'available');
+  assert.equal(gaugeLevel(provider(99, 0.1), NOW), 'ok', 'blue waits until 20% of the window has elapsed');
+  assert.equal(gaugeLevel(provider(99, 0.01), NOW), 'ok', 'early-window pace does not create noisy warnings');
+});
+
+test('applies absolute safeguards and falls back when window timing is unusable', () => {
+  const provider = (remainingPercent, overrides = {}) => ({ status: 'ok', remainingPercent, windowDurationMins: 10080, resetsAt: null, ...overrides });
+  assert.equal(gaugeLevel(provider(15, { resetsAt: new Date(NOW + 60_000).toISOString() }), NOW), 'low');
+  assert.equal(gaugeLevel(provider(5, { resetsAt: new Date(NOW + 60_000).toISOString() }), NOW), 'critical');
+  assert.equal(gaugeLevel(provider(25), NOW), 'low');
+  assert.equal(gaugeLevel(provider(10), NOW), 'critical');
+  assert.equal(gaugeLevel(provider(80), NOW), 'ok');
+  assert.equal(gaugeLevel({ status: 'unavailable', remainingPercent: null }, NOW), 'unknown');
 });
 
 test('formats reset distance and degrades unusable values to text, never silence', () => {

@@ -242,6 +242,7 @@ h3 { margin: 0; font-size: 24px; letter-spacing: -0.035em; }
 .limit-gauge { display: flex; align-items: center; gap: 16px; min-width: 0; border: 1px solid var(--line); border-radius: 18px; padding: 14px; background: rgb(255 255 255 / 0.04); }
 .gauge-ring { flex: 0 0 auto; display: grid; place-items: center; width: 68px; height: 68px; border-radius: 50%; background: conic-gradient(var(--gauge-color) calc(var(--pct, 0) * 1%), rgb(255 255 255 / 0.08) 0); }
 .gauge-ring span { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; background: var(--panel); color: var(--gauge-color); font-size: 15px; font-weight: 750; }
+.limit-gauge.level-available { --gauge-color: var(--accent); }
 .limit-gauge.level-ok { --gauge-color: var(--good); }
 .limit-gauge.level-low { --gauge-color: var(--warn); }
 .limit-gauge.level-critical { --gauge-color: var(--bad); }

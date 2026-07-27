@@ -16,9 +16,9 @@ const CLAUDE_API_BASE = 'https://api.anthropic.com';
 const CLAUDE_OAUTH_BETA = 'oauth-2025-04-20';
 
 export const PROVIDERS = [
-  { id: 'codex', label: 'Codex', windowLabel: 'Weekly' },
-  { id: 'claude-code', label: 'Claude Code', windowLabel: 'Weekly (7 day)' },
-  { id: 'claude-code-five-hour', label: 'Claude Code', windowLabel: '5 hour' },
+  { id: 'codex', label: 'Codex', windowLabel: 'Weekly', windowDurationMins: WEEKLY_WINDOW_MINS },
+  { id: 'claude-code', label: 'Claude Code', windowLabel: 'Weekly (7 day)', windowDurationMins: WEEKLY_WINDOW_MINS },
+  { id: 'claude-code-five-hour', label: 'Claude Code', windowLabel: '5 hour', windowDurationMins: 300 },
 ];
 
 const CODEX = PROVIDERS[0];
@@ -32,11 +32,11 @@ const CLAUDE_WINDOWS = [
 ];
 
 function unavailable(provider, reason, asOf) {
-  return { id: provider.id, label: provider.label, status: 'unavailable', remainingPercent: null, resetsAt: null, windowLabel: provider.windowLabel, source: null, asOf, reason };
+  return { id: provider.id, label: provider.label, status: 'unavailable', remainingPercent: null, resetsAt: null, windowLabel: provider.windowLabel, windowDurationMins: provider.windowDurationMins, source: null, asOf, reason };
 }
 
 function gauge(provider, remainingPercent, resetsAt, asOf) {
-  return { id: provider.id, label: provider.label, status: 'ok', remainingPercent, resetsAt, windowLabel: provider.windowLabel, source: 'provider-reported', asOf, reason: null };
+  return { id: provider.id, label: provider.label, status: 'ok', remainingPercent, resetsAt, windowLabel: provider.windowLabel, windowDurationMins: provider.windowDurationMins, source: 'provider-reported', asOf, reason: null };
 }
 
 function displayRemaining(usedPercent) {

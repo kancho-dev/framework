@@ -72,11 +72,18 @@ The two weekly gauges share the first row, and Claude Code's five-hour gauge
 sits below Claude Code's weekly one; narrow layouts stack all three.
 
 Remaining percent is `100 − utilization`, clamped to `0–100` for display only.
-An absent or null window is reported as unavailable, never as 100% remaining.
+Gauge color compares the used share with the elapsed share of its reset window:
+blue means usage is below 70% of elapsed-window pace and could be favored, green is on pace,
+yellow is at least 15% ahead of pace, and red is at least 50% ahead. Blue waits
+until 20% of the window has elapsed; yellow/red absolute safeguards apply at 85%
+and 95% used. Missing or invalid timing falls back to the original static
+remaining-percent thresholds. An absent or null window is unavailable, never
+100% remaining.
 
 Data comes from `GET /api/subscription-limits` (add `?refresh=1` to bypass the
 60-second server cache) and returns per provider `status` (`ok` / `unavailable`),
-`remainingPercent`, `resetsAt`, `windowLabel`, `source`, `asOf`, and a coarse
+`remainingPercent`, `resetsAt`, `windowLabel`, `windowDurationMins`, `source`,
+`asOf`, and a coarse
 `reason` when not `ok`. The widget refreshes every five minutes, on window focus,
 and on demand through its refresh button, preserving the last good values when a
 refresh fails.

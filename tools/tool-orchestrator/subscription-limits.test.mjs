@@ -63,12 +63,12 @@ test('reads both Claude windows from one usage response and keeps provider-repor
   };
   const [weekly, fiveHour] = claudeGauges(usage, ASOF);
   assert.deepEqual(
-    [weekly.id, weekly.remainingPercent, weekly.resetsAt, weekly.windowLabel, weekly.source],
-    ['claude-code', 38, '2026-07-29T09:30:00.000Z', 'Weekly (7 day)', 'provider-reported'],
+    [weekly.id, weekly.remainingPercent, weekly.resetsAt, weekly.windowLabel, weekly.windowDurationMins, weekly.source],
+    ['claude-code', 38, '2026-07-29T09:30:00.000Z', 'Weekly (7 day)', WEEKLY_WINDOW_MINS, 'provider-reported'],
   );
   assert.deepEqual(
-    [fiveHour.id, fiveHour.remainingPercent, fiveHour.resetsAt, fiveHour.windowLabel, fiveHour.source],
-    ['claude-code-five-hour', 1, '2026-07-24T22:00:00.000Z', '5 hour', 'provider-reported'],
+    [fiveHour.id, fiveHour.remainingPercent, fiveHour.resetsAt, fiveHour.windowLabel, fiveHour.windowDurationMins, fiveHour.source],
+    ['claude-code-five-hour', 1, '2026-07-24T22:00:00.000Z', '5 hour', 300, 'provider-reported'],
   );
 });
 
