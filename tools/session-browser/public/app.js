@@ -4,7 +4,7 @@ import { renderEntry } from './entry-rendering.js';
 import { fetchSessionDetail, fetchSessions, putMetadata } from './api.js';
 import { formatToolTitle } from '/shared/browser/format.js';
 import { sessionBrowserScope } from '/shared/browser/session-links.js';
-import { clearStaleRequestedSelection, requestedSelection, requestedTopic } from './selection.js';
+import { clearStaleRequestedSelection, nearestScrollTop, requestedSelection, requestedTopic } from './selection.js';
 
 const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, tagFilter: 'all', sourceErrors: [], metadataError: null };
 
@@ -210,7 +210,16 @@ function renderTagPills(tags) {
 function scrollSelectedSessionCardIntoView() {
   if (!state.selectedPath) return;
   const card = Array.from(els.sessions.querySelectorAll('.session-card')).find((node) => node.dataset.path === state.selectedPath);
-  card?.scrollIntoView({ block: 'nearest' });
+  if (!card) return;
+  const containerRect = els.sessions.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  els.sessions.scrollTop = nearestScrollTop(
+    els.sessions.scrollTop,
+    containerRect.top,
+    containerRect.bottom,
+    cardRect.top,
+    cardRect.bottom,
+  );
 }
 
 function scrollSelectedTopicLinkIntoView() {
@@ -239,6 +248,7 @@ function renderSessions() {
   ].filter(Boolean).length ? ` · ${[...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`), state.metadataError || ''].filter(Boolean).join(', ')}` : '';
   window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: state.workspaceName, root: state.workspaceRoot, tooltipPrefix: 'Workspace' });
   els.status.textContent = `${sessions.length} of ${state.sessions.length} sessions · ${workspaceDisplayName()}${errorText}`;
+  const scrollTop = els.sessions.scrollTop;
   els.sessions.innerHTML = sessions.map((session) => `
     <li>
       <button class="session-card ${session.path === state.selectedPath ? 'active' : ''} ${isBookmarked(session) ? 'bookmarked' : ''}" data-path="${escapeHtml(session.path)}">
@@ -251,6 +261,7 @@ function renderSessions() {
       </button>
     </li>
   `).join('');
+  els.sessions.scrollTop = scrollTop;
 }
 
 function relationButton(session, label) {
