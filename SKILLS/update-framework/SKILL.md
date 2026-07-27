@@ -24,7 +24,7 @@ Always inspect:
 
 Load only when its branch requires it:
 
-- `framework/MIGRATIONS.md`: its selection rule and index, then only the `framework/migrations/vX.Y.Z.md` files it lists between the installed and target versions;
+- `framework/MIGRATIONS.md`: its selection rule and index, then every `framework/migrations/vX.Y.Z.md` file it lists between the installed and target versions, and no others;
 - version/tag diff: when installed and target versions differ and comparable history exists;
 - `FRAMEWORK.md`, `WORKSPACE.md`, `TASKS.md`, `SKILLS.md`, `ROLES/`, `SKILLS/`, `TEMPLATES/`, `COMMANDS.md`, `prompts/`, and tool READMEs: only when the version diff or migration guidance identifies them as relevant;
 - workspace/project skill indexes, local skills, mirrored agent entrypoints, `.gitignore`, and project boundaries: only when affected guidance or templates could make them stale.
@@ -47,11 +47,20 @@ For each potentially affected workspace file, record its owner, local customizat
 
 **Complete when:** every changed framework path and every discovered workspace adaptation has one sourced disposition, with no unclassified item.
 
-### 3. Present a plan and stop at the gate
+### 3. Screen every traversed version for breaking changes
+
+Enumerate every framework version strictly above the installed version through the target version, then check each one against the `MIGRATIONS.md` index. Never screen only the target version: a jump from v0.18.0 to v0.21.0 screens v0.19.0, v0.20.0, and v0.21.0. An indexed version's migration file declares a breaking change when it contains a `## Breaking changes` section; read that section in full. A version absent from the index declares none.
+
+Treat evidence as insufficient — not safe — when the installed version is unknown, when `MIGRATIONS.md` or an indexed migration file cannot be read, when the index lists a file that does not exist, or when the traversed range cannot be enumerated because comparable version history is unavailable. Report the gap as an unresolved breaking-change risk and take it to the same Operator decision rather than assuming the range is clean.
+
+**Complete when:** every traversed version has one recorded outcome — declares breaking changes, declares none, or evidence is insufficient — with no version unaccounted for.
+
+### 4. Present a plan and stop at the gate
 
 Return:
 
 - installed and target versions, including comparison limitations;
+- the breaking-change screening result for every traversed version;
 - framework change inventory and workspace adaptation inventory;
 - exact proposed git operations, file edits, setup commands, and validation checks;
 - conflicts, ambiguous merges, sensitive-data risks, optional features, and files intentionally left unchanged;
@@ -59,17 +68,26 @@ Return:
 
 If no update or adaptation is needed, report a no-update result and stop without requesting execution approval. If a conflict or non-obvious merge exists, present choices and request the specific decision needed. Otherwise request explicit Operator approval for the bounded plan.
 
-**Complete when:** the run has stopped with either a checkable no-update result, a conflict decision request, or an approval-ready plan. No execution action has occurred.
+If step 3 recorded any declared breaking change or any insufficient-evidence gap, additionally stop for a distinct breaking-change decision. General approval of the update plan never satisfies this gate; the Operator must decide on the breaking changes themselves. For each one, present:
 
-### 4. Execute only the approved plan
+- the version that declares it and what it changes or removes;
+- the likely impact on this specific workspace, sourced from observed workspace state rather than assumed;
+- the migration reference that explains the adoption work;
+- the safe choices, at minimum: proceed with this update and adopt the migration work; stop at an earlier non-breaking version; or pause the update until the Operator prepares the workspace.
 
-After explicit approval, recheck repository state and target identity. Pause and re-plan if either changed. Apply only approved git operations and workspace adaptations, preserving local instructions and adapter-specific files unless the plan explicitly includes them.
+For an insufficient-evidence gap, present what could not be established and what would resolve it instead of a change description.
+
+**Complete when:** the run has stopped with either a checkable no-update result, a conflict decision request, a breaking-change decision request, or an approval-ready plan. No execution action has occurred.
+
+### 5. Execute only the approved plan
+
+After explicit approval, recheck repository state and target identity. Pause and re-plan if either changed. Do not execute while any declared breaking change or evidence gap from step 3 lacks an explicit Operator decision, and apply only the version range that decision covers. Apply only approved git operations and workspace adaptations, preserving local instructions and adapter-specific files unless the plan explicitly includes them.
 
 Surface optional prompts and tools without configuring them unless approved. Keep session data, databases, exports, logs, env files, `.tools-config/`, and legacy `.task-browser/` metadata outside the framework repository.
 
 **Complete when:** each approved operation has an observed result and the post-change inventory accounts for every modified, added, deleted, conflicted, skipped, or escalated file.
 
-### 5. Validate before marking installed
+### 6. Validate before marking installed
 
 Run the approved focused checks for affected behavior. At minimum:
 
@@ -83,7 +101,7 @@ Resolve failures or return to the conflict/approval gate with a revised plan. On
 
 **Complete when:** validation evidence passes, `CURRENT_VERSION` matches the validated framework version, and no unresolved approved item remains.
 
-### 6. Report exhaustive results
+### 7. Report exhaustive results
 
 Report old and new versions; every framework operation; every workspace file added, merged, unchanged, skipped, or escalated; validation evidence; optional capabilities discovered; and remaining follow-up. Distinguish pre-existing dirty files from this update's files.
 
@@ -93,6 +111,7 @@ Report old and new versions; every framework operation; every workspace file add
 
 - **No update:** evidence shows the installed framework and applicable workspace setup are aligned; no execution or `CURRENT_VERSION` write occurs.
 - **Planned update:** a complete bounded plan awaits explicit Operator approval; no execution occurs.
+- **Breaking change declared:** one or more traversed versions declare a breaking change, or their evidence is insufficient; the changes, workspace impact, migration references, and safe choices await a distinct Operator decision and no sync occurs.
 - **Conflict:** the exact local conflict or ambiguous merge and safe choices await a decision; unaffected inspection may be reported, but execution pauses.
 - **Approved sync:** the unchanged approved plan is applied, validated, version-marked, and exhaustively reported.
 
