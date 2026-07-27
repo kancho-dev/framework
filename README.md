@@ -52,7 +52,7 @@ The framework has three layers:
 
 1. **Core workflow** — markdown state, roles, task handoffs, security, and review.
 2. **Reference guidance** — installation, usage prompts, skills, task patterns, and workspace structure.
-3. **Optional extensions** — session browser, task browser, tokens/cost analysis, native command adapters, and memory service.
+3. **Optional extensions** — session browser, task browser, tokens/cost analysis, and native command adapters.
 
 You can start with only the core workflow. Add extensions only when they help your actual process.
 
@@ -93,7 +93,6 @@ workspace/
     ROLES/
     SKILLS/
     TEMPLATES/
-    memory-service/
     tools/
 ```
 
@@ -200,12 +199,6 @@ Read [`tools/tokens-cost-analyzer/README.md`](tools/tokens-cost-analyzer/README.
 
 Use [`COMMANDS.md`](COMMANDS.md) if you want native slash-command integration. The framework remains usable through normal prompts without these adapters.
 
-### Memory Service
-
-[`memory-service/`](memory-service/) is an optional searchable recall layer for older sessions, lessons, and imported agent history.
-
-Use it when curated markdown files are not enough for a specific context question. Markdown remains the source of truth for current state, policy, and task handoffs.
-
 ## Documentation Map
 
 - [`INSTALLATION.md`](INSTALLATION.md) — first-time setup and existing-workspace adoption.
@@ -220,7 +213,6 @@ Use it when curated markdown files are not enough for a specific context questio
 - [`SKILLS/`](SKILLS/) — optional procedural playbooks.
 - [`USAGE-PROMPTS.md`](USAGE-PROMPTS.md) — copy-friendly prompt examples.
 - [`COMMANDS.md`](COMMANDS.md) — optional native command integration.
-- [`memory-service/`](memory-service/) — optional searchable memory CLI/service.
 - [`tools/tool-orchestrator/`](tools/tool-orchestrator/) — optional local Framework Cockpit shell for small browser tools.
 - [`tools/session-browser/`](tools/session-browser/) — optional local session browser.
 - [`tools/task-browser/`](tools/task-browser/) — optional local task browser.
@@ -229,7 +221,7 @@ Use it when curated markdown files are not enough for a specific context questio
 ## Design Principles
 
 1. Curated markdown is the source of truth for active work.
-2. Searchable memory supports recall, not policy.
+2. Historical evidence supports recall, not policy.
 3. Code and project knowledge stay together.
 4. Use the smallest task structure that stays consistent.
 5. Tool-specific integrations belong in adapters, not in the framework core.

@@ -128,18 +128,6 @@ Review the active project plans and recommend the next useful implementation sli
 Decide whether this work needs a Builder–Oracle review loop
 ```
 
-## Optional Memory Search
-
-Use memory search only when current markdown files are not enough.
-
-```text
-Use `memory-search` skill to look for prior context about X
-```
-
-```text
-Use the `mem` tool to find recent discussion about this task and summarize only the parts still relevant now
-```
-
 ## Role Shortcuts
 
 ```text

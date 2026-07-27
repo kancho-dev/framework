@@ -5,7 +5,7 @@ Use this guide when setting up the framework in the current workspace.
 The goal is a clean, usable workspace setup, not a heavy installer.
 
 This is the main starting point for first-time adoption.
-`tools/`, native command templates, and `memory-service/` are optional and are not required for the basic framework workflow.
+`tools/` and native command templates are optional and are not required for the basic framework workflow.
 
 For the compact operating protocol, read `framework/FRAMEWORK.md`. Load reference docs such as `framework/WORKSPACE.md`, `framework/TASKS.md`, and `framework/SKILLS.md` only when they are relevant.
 

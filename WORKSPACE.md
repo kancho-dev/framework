@@ -94,7 +94,7 @@ Do not ignore `projects/[name]/library/` or `projects/[name]/work/` in the defau
 - current task state → task `HANDOFF.md`
 - durable project knowledge → `projects/[name]/library/*.md`
 - durable fixes and mistakes → `FIXES.md`
-- exact historical recall → optional memory service
+- exact historical recall → task, library, daily-brief, and Git history under the workspace
 - private tools config/state → `.tools-config/`
 - task-browser workflow metadata → `.tools-config/task-browser/tasks.json`
 - task-browser metadata-change history → `.tools-config/task-browser/task-history.jsonl`

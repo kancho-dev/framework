@@ -8,7 +8,7 @@ Skills are not always-read. Check relevant skill indexes before improvising when
 
 - names a known or likely workflow, command, or skill-like phrase;
 - asks to "check skills";
-- describes a repeatable framework procedure such as next best actions, task pickup, task closure, review/testing, docs sync, workspace maintenance, framework update, memory search, or creating local skills.
+- describes a repeatable framework procedure such as next best actions, task pickup, task closure, review/testing, docs sync, workspace maintenance, framework update, or creating local skills.
 
 If the prompt is simple Q&A and no repeatable workflow is implied, do not read skill indexes.
 

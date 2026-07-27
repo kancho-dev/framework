@@ -16,4 +16,3 @@ For skill precedence, local/project/workspace skill rules, collision handling, a
 | `self-check` | Audit workspace-level coordination health when shared state may have drifted. | `framework/SKILLS/self-check/SKILL.md` |
 | `project-self-check` | Reconcile a named project inconsistency or active project state; run a full historical audit only when explicitly requested. | `framework/SKILLS/project-self-check/SKILL.md` |
 | `update-framework` | Align an already framework-managed workspace with newer framework changes through an approval-gated update plan. | `framework/SKILLS/update-framework/SKILL.md` |
-| `memory-search` | Use the memory system selectively to recover relevant prior context without turning every run into a full-history read. | `framework/SKILLS/memory-search/SKILL.md` |

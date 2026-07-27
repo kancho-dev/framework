@@ -15,7 +15,7 @@ Use this framework to keep software development work coherent across main sessio
 3. Treat handoff files as working memory for task-level execution
 4. Prefer the smallest structure that stays consistent
 5. Load only the context, role files, skills, and references needed for the run
-6. Use searchable memory only as support, not as the source of truth for current state or policy
+6. Use historical retrieval only as support, not as the source of truth for current state or policy
 
 ## Runtime Model
 
@@ -63,7 +63,6 @@ Then continue with the applicable branch.
    - `framework/TASKS.md` — a task-contract question the task files and applicable skill leave unresolved
    - `framework/SKILLS.md` — skill precedence or a collision
 5. Load selected skills only when relevant
-6. Use optional memory retrieval only when markdown files leave a specific context gap
 
 ### Task-session branch
 
@@ -72,7 +71,7 @@ Then continue with the applicable branch.
    - If it contains non-whitespace Steering Notes, read and capture the payload successfully, immediately delete `NOTES.md`, and act on it once
    - Do not poll during the run; notes saved afterward belong to the following Task Run
 2. Read relevant project `library/` files
-3. Load reference docs, skills, and optional memory only when needed, using the same triggers as the main-session branch
+3. Load reference docs and skills only when needed, using the same triggers as the main-session branch
 
 ### Implementation work
 
@@ -86,7 +85,7 @@ Skills are optional playbooks under `framework/SKILLS/` or local project/workspa
 
 Do not read every skill by default. Use indexes only to choose relevant skills, then load the selected `SKILL.md`.
 
-Check relevant skill indexes before improvising when the prompt names a skill-like workflow, asks to "check skills", or describes a repeatable framework procedure such as next-best-actions, task pickup, task closure, review/testing, docs sync, workspace maintenance, framework update, memory search, or creating local skills.
+Check relevant skill indexes before improvising when the prompt names a skill-like workflow, asks to "check skills", or describes a repeatable framework procedure such as next-best-actions, task pickup, task closure, review/testing, docs sync, workspace maintenance, framework update, or creating local skills.
 
 Check indexes in local-capability precedence order when they exist:
 
