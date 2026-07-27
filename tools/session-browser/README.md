@@ -31,7 +31,7 @@ PORT=8790 npm start
 
 The tool helps you:
 
-- browse sessions by prompt, cwd, origin, source, recency, token pressure, bookmarks, and tags;
+- browse sessions by prompt, cwd, origin, source, recency, latest context load, bookmarks, and tags;
 - bookmark important sessions and add simple manual tags that persist locally;
 - skim conversations, topic anchors, assistant answers, and tool actions;
 - copy restore commands back into Pi, OpenCode, or Codex;
@@ -148,7 +148,7 @@ Sub-agent (sidechain) sessions are read-only in the browser and are not independ
 - **Origin pills**: cards for subdirectory sessions show a compact workspace-relative cwd label; hover for the full cwd. Workspace-root sessions omit the pill to reduce clutter.
 - **Session tags**: click a tag pill on a card to filter by that tag.
 - **Auto 10s**: enabled by default; refreshes session list and selected detail.
-- **Token pressure pill/bar**: visual heaviness signal from recorded token usage; not context-window percentage.
+- **Context pill/bar**: latest recorded context load (`Xk ctx`) against the tool's static 200k preferred ceiling; this is an operational handoff threshold, not the model's context-window percentage.
 - **Topics rail**: jump between user prompts in the selected session.
 - **Show tool calls**: off by default; reveal tool-only/action detail when needed.
 - **Bookmark**: mark/unmark the selected session as worth finding again.
@@ -219,20 +219,15 @@ The tool is designed to be:
 
 Do not commit private session data, copied databases, exports, logs, bookmark/tag metadata, `.env` files, or dependency/cache folders.
 
-## Token Pressure, Context, And Cost
+## Context And Lifetime Usage
 
-The tool intentionally does not estimate exact model context-window percentage or token cost.
+The context pill shows the latest completed response's recorded `input + output + cacheRead + cacheWrite` as `Xk ctx`. Its bar uses a static 200k preferred ceiling: green below 100k, yellow from 100k, and red from 150k, saturating at 200k. This is a workspace preference for considering compaction or handoff, not the model's context-window percentage. Sessions without a completed usage record show `ctx ?` rather than zero.
 
-Why:
+The detail view separately reports cumulative lifetime input, output, cache-read, cache-write, and combined total. Cached input contributes to current context even though its lifetime category remains separate for usage/cost interpretation.
 
-- Pi, OpenCode, and future adapters may record model/usage/cache/context data differently;
-- model limits can vary by provider, account, deployment, and native tool interpretation;
-- token prices change and are often absent from session data;
-- guessed context/cost values can look precise while being wrong.
+Compaction history is intentionally not inferred or displayed. The latest-context signal directly answers the tool's handoff question without adding adapter-specific compaction semantics.
 
-Instead, the UI shows **token pressure**: the largest observed non-cache-read token usage for a turn, using `input + output + cacheWrite` when available and excluding repeated `cacheRead` tokens. This preserves a useful visual signal for light vs heavy sessions without pretending to know exact context usage.
-
-OpenCode stores the same per-response usage twice — on the assistant `message` row and on that message's `step-finish` `part` rows — so a message's parts are counted only when the message row records no usage of its own. A response's explicit `tokens.total` is authoritative (it also covers `tokens.reasoning`); otherwise the total is derived from `input + output + reasoning + cache.read + cache.write`. Tokens / Cost Analyzer applies the same rule from the shared `tools/shared-web/opencode-usage.mjs` module, so both tools report the same OpenCode total.
+OpenCode stores the same per-response usage twice — on the assistant `message` row and on that message's `step-finish` `part` rows — so a message's parts are counted only when the message row records no usage of its own. A response's explicit `tokens.total` is authoritative (it also covers `tokens.reasoning`); otherwise the total is derived from `input + output + reasoning + cache.read + cache.write`. Tokens / Cost Analyzer applies the same lifetime-total rule from the shared `tools/shared-web/opencode-usage.mjs` module.
 
 ## Limitations
 
@@ -242,7 +237,7 @@ OpenCode stores the same per-response usage twice — on the assistant `message`
 - Bookmark/tag metadata is local-only and manual; no auto-tagging or sync is included.
 - No mutation of Pi, OpenCode, or Codex session data is supported.
 - OpenCode listing is capped by `SESSION_BROWSER_OPENCODE_LIMIT` after workspace filtering; large-session pagination is not implemented yet.
-- Token pressure is a triage signal, not exact context percentage.
+- Latest context load is adapter-normalized from recorded usage and is not an exact model context-window percentage.
 - Cost is omitted unless a future adapter can provide trustworthy source-derived values.
 
 ## Troubleshooting

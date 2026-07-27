@@ -108,15 +108,14 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 .relation-line { margin: -2px 0 6px; }
 .relation-badge { color: var(--warning); border: 1px solid rgba(242,204,96,.35); border-radius: 999px; padding: 1px 7px; font-size: 10px; }
 .token-pill { display: inline-block; margin-left: 6px; border-radius: 999px; padding: 1px 7px; font-size: 10px; font-weight: 700; color: var(--bg); vertical-align: baseline; }
+.token-pill.unknown { background: var(--muted); }
 .token-pill.low { background: var(--success); }
 .token-pill.medium { background: var(--warning); }
-.token-pill.high { background: #ff9f43; }
 .token-pill.critical { background: var(--error); color: #190b0b; }
 .token-bar { height: 3px; margin-top: 8px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
 .token-bar span { display: block; height: 100%; border-radius: inherit; }
 .token-bar.low span { background: var(--success); }
 .token-bar.medium span { background: var(--warning); }
-.token-bar.high span { background: #ff9f43; }
 .token-bar.critical span { background: var(--error); }
 .prompt { color: var(--text); margin-bottom: 8px; }
 .cwd, .time-pair, .meta { color: var(--muted); font-size: 11px; }

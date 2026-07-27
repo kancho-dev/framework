@@ -1,4 +1,4 @@
-import { escapeHtml, formatDate, shortPath, formatTokens, tokenPressureLevel, tokenPressurePercent, tokenPressurePill } from './formatters.js';
+import { contextLoadLevel, contextLoadPercent, contextLoadPill, escapeHtml, formatContextLoad, formatDate, shortPath, formatTokens } from './formatters.js';
 import { restoreCommand, copyRestoreCommand, copyAndFlash } from './copy-restore.js';
 import { renderEntry } from './entry-rendering.js';
 import { fetchSessionDetail, fetchSessions, putMetadata } from './api.js';
@@ -252,12 +252,12 @@ function renderSessions() {
   els.sessions.innerHTML = sessions.map((session) => `
     <li>
       <button class="session-card ${session.path === state.selectedPath ? 'active' : ''} ${isBookmarked(session) ? 'bookmarked' : ''}" data-path="${escapeHtml(session.path)}">
-        <div class="card-top"><span class="card-badges">${isBookmarked(session) ? '<span class="bookmark-mark on">★</span>' : ''}<span class="badge">${escapeHtml(sourceLabel(session.source))}</span> ${tokenPressurePill(session)}</span><span class="card-times"><span>Updated: ${escapeHtml(formatDate(session.updatedAt))}</span><span>Created: ${escapeHtml(formatDate(session.createdAt))}</span></span></div>
+        <div class="card-top"><span class="card-badges">${isBookmarked(session) ? '<span class="bookmark-mark on">★</span>' : ''}<span class="badge">${escapeHtml(sourceLabel(session.source))}</span> ${contextLoadPill(session)}</span><span class="card-times"><span>Updated: ${escapeHtml(formatDate(session.updatedAt))}</span><span>Created: ${escapeHtml(formatDate(session.createdAt))}</span></span></div>
         ${originRow(session)}
         <div class="prompt">${escapeHtml(session.name || session.firstPrompt || '(no user prompt found)')}</div>
         ${session.parentId ? '<div class="relation-line"><span class="relation-badge">child session</span></div>' : ''}
         ${renderTagPills(sessionTags(session))}
-        <div class="token-bar ${tokenPressureLevel(session)}"><span style="width: ${tokenPressurePercent(session)}%"></span></div>
+        <div class="token-bar ${contextLoadLevel(session)}"><span style="width: ${contextLoadPercent(session)}%"></span></div>
       </button>
     </li>
   `).join('');
@@ -343,7 +343,7 @@ function renderSelectedDetail({ scrollTopic = true } = {}) {
   renderRelations(detail);
   const primaryMeta = [
     `<span class="badge">${escapeHtml(sourceLabel(detail.source))}</span>`,
-    tokenPressurePill(detail),
+    contextLoadPill(detail),
     `<span><strong>Created:</strong> ${escapeHtml(formatDate(detail.createdAt))}</span>`,
     `<span><strong>Updated:</strong> ${escapeHtml(formatDate(detail.updatedAt))}</span>`,
   ];
@@ -353,7 +353,8 @@ function renderSelectedDetail({ scrollTopic = true } = {}) {
     ['Messages:', `${detail.userMessageCount} user, ${detail.assistantMessageCount} assistant`],
     ['Tool Messages:', detail.toolMessageCount || detail.toolCallCount],
     ['Tool Calls:', detail.toolCallCount],
-    ['Tokens:', formatTokens(detail.tokens)],
+    ['Lifetime:', formatTokens(detail.tokens)],
+    ['Latest Context:', formatContextLoad(detail.contextLoad)],
   ];
   els.readerMeta.innerHTML = `<div class="meta-row primary">${primaryMeta.join('')}</div><div class="meta-row secondary">${secondaryMeta.map(([label, value]) => `<span><strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}</span>`).join('')}</div>`;
   renderTagEditor(detail);

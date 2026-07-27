@@ -50,14 +50,13 @@ export function hasOpenCodeUsage(tokens) {
 }
 
 function emptyOpenCodeUsage() {
-  return { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, total: 0, pressure: 0 };
+  return { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, total: 0, latestContext: null };
 }
 
 function addOpenCodeUsage(usage, tokens) {
   const components = openCodeTokenComponents(tokens);
   for (const field of TOTAL_COMPONENTS) usage[field] += components[field];
   usage.total += openCodeTotalTokens(tokens);
-  usage.pressure = Math.max(usage.pressure, components.input + components.output + components.cacheWrite);
   return usage;
 }
 
@@ -72,19 +71,34 @@ export function openCodeSessionUsage(messages = [], parts = []) {
   }
   const usage = emptyOpenCodeUsage();
   const seenMessageIds = new Set();
+  let latestContextAt = null;
+  const add = (row, tokens) => {
+    addOpenCodeUsage(usage, tokens);
+    const components = openCodeTokenComponents(tokens);
+    const context = components.input + components.output + components.cacheRead + components.cacheWrite;
+    const createdAt = Number(row?.createdAt ?? row?.time_created ?? row?.data?.time?.created);
+    if (Number.isFinite(createdAt)) {
+      if (latestContextAt == null || createdAt >= latestContextAt) {
+        latestContextAt = createdAt;
+        usage.latestContext = context;
+      }
+    } else if (latestContextAt == null) {
+      usage.latestContext = context;
+    }
+  };
   for (const message of messages) {
     const messageId = message?.id ?? '';
     seenMessageIds.add(messageId);
     const tokens = message?.data?.tokens;
     if (hasOpenCodeUsage(tokens)) {
-      addOpenCodeUsage(usage, tokens);
+      add(message, tokens);
       continue;
     }
-    for (const part of partsByMessage.get(messageId) || []) addOpenCodeUsage(usage, part?.data?.tokens);
+    for (const part of partsByMessage.get(messageId) || []) add(part, part?.data?.tokens);
   }
   for (const [messageId, group] of partsByMessage) {
     if (seenMessageIds.has(messageId)) continue;
-    for (const part of group) addOpenCodeUsage(usage, part?.data?.tokens);
+    for (const part of group) add(part, part?.data?.tokens);
   }
   return usage;
 }
@@ -110,6 +124,6 @@ export function openCodeTokenSql(alias) {
   return {
     ...columns,
     total: `coalesce(nullif(json_extract(${alias}.data, '$.tokens.total'), 0), ${derivedTotal})`,
-    pressure: `${columns.input} + ${columns.output} + ${columns.cacheWrite}`,
+    context: `${columns.input} + ${columns.output} + ${columns.cacheRead} + ${columns.cacheWrite}`,
   };
 }

@@ -13,7 +13,7 @@ export function formatTotalTokensMillions(value) {
 }
 
 export function formatTokens(tokens) {
-  const breakdown = `↓${formatCompactNumber(tokens?.input)} ↑${formatCompactNumber(tokens?.output)} R${formatCompactNumber(tokens?.cacheRead)}`;
+  const breakdown = `↓${formatCompactNumber(tokens?.input)} ↑${formatCompactNumber(tokens?.output)} R${formatCompactNumber(tokens?.cacheRead)} W${formatCompactNumber(tokens?.cacheWrite)}`;
   const total = formatTotalTokensMillions(tokens?.total);
   return total ? `${breakdown} · ${total}` : breakdown;
 }

@@ -28,6 +28,7 @@ const execFileAsync = promisify(execFile);
 const SOURCE_TIMEOUT_MS = Number(process.env.SESSION_SOURCE_TIMEOUT_MS || '8000');
 const REQUEST_TIMEOUT_MS = Number(process.env.SESSION_REQUEST_TIMEOUT_MS || '10000');
 const OPENCODE_SESSION_LIMIT = parsePositiveInteger(process.env.SESSION_BROWSER_OPENCODE_LIMIT || '500', 'SESSION_BROWSER_OPENCODE_LIMIT');
+const PREFERRED_CONTEXT_CEILING = 200_000;
 
 function parsePort(value) {
   const port = Number(value);
@@ -216,7 +217,7 @@ function hasAssistantText(message) {
 function emptyUsage() {
   return {
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    tokenPressure: { total: 0 },
+    contextLoad: { latest: null, preferredCeiling: PREFERRED_CONTEXT_CEILING },
   };
 }
 
@@ -258,8 +259,7 @@ function collectStats(entries) {
       stats.tokens.cacheWrite += cacheWrite;
       const total = usage.totalTokens || usage.total || 0;
       stats.tokens.total += total;
-      const pressure = input + output + cacheWrite || total;
-      stats.tokenPressure.total = Math.max(stats.tokenPressure.total, pressure);
+      stats.contextLoad.latest = input + output + cacheRead + cacheWrite;
     }
     if (!Array.isArray(entry.message.content)) continue;
     for (const block of entry.message.content) {
@@ -316,7 +316,7 @@ function summarizeSession(path, fileStat, parsed) {
     toolCallCount: stats.toolCallCount,
     toolNames: stats.toolNames,
     tokens: stats.tokens,
-    tokenPressure: stats.tokenPressure,
+    contextLoad: stats.contextLoad,
     modelLabel: modelState.label,
     model: modelState,
   };
@@ -589,7 +589,7 @@ function openCodeUsage(messages, parts) {
   stats.tokens.cacheRead = usage.cacheRead;
   stats.tokens.cacheWrite = usage.cacheWrite;
   stats.tokens.total = usage.total;
-  stats.tokenPressure.total = usage.pressure;
+  stats.contextLoad.latest = usage.latestContext;
   return stats;
 }
 
@@ -658,7 +658,7 @@ function summarizeCodexSession(file, fileStat, parsed) {
     tokens.tokens.cacheRead += usage.cacheRead;
     tokens.tokens.cacheWrite += usage.cacheWrite;
     tokens.tokens.total += usage.total;
-    tokens.tokenPressure.total = Math.max(tokens.tokenPressure.total, usage.input + usage.output);
+    tokens.contextLoad.latest = usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
   }
   const timestamps = parsed.map((entry) => entry?.timestamp).filter(Boolean).sort((a, b) => new Date(b) - new Date(a));
   const model = [...contexts].reverse().find((ctx) => ctx.model)?.model || '';
@@ -683,7 +683,7 @@ function summarizeCodexSession(file, fileStat, parsed) {
     toolCallCount: toolCalls.length,
     toolNames: Array.from(new Set(toolCalls.map((entry) => codexPayload(entry).name || 'tool'))).sort(),
     tokens: tokens.tokens,
-    tokenPressure: tokens.tokenPressure,
+    contextLoad: tokens.contextLoad,
   };
 }
 
@@ -945,7 +945,7 @@ function summarizeClaudeCodeSession(file, fileStat, parsed) {
     toolCallCount: stats.toolCallCount,
     toolNames: stats.toolNames,
     tokens: stats.tokens,
-    tokenPressure: stats.tokenPressure,
+    contextLoad: stats.contextLoad,
   };
 }
 
@@ -1116,7 +1116,7 @@ function summarizeOpenCodeSession(session, messages, parts) {
     toolCallCount,
     toolNames: Array.from(new Set(parts.filter(isOpenCodeToolPart).map((part) => part.data.tool || part.data.name || 'tool'))).sort(),
     tokens: usage.tokens,
-    tokenPressure: usage.tokenPressure,
+    contextLoad: usage.contextLoad,
     archivedAt: timestampFromMs(session.archivedAt),
   };
 }
@@ -1126,15 +1126,15 @@ function summarizeOpenCodeSession(session, messages, parts) {
 function openCodeUsageSql(sessionIds) {
   const message = openCodeTokenSql('m');
   const part = openCodeTokenSql('p');
-  const columns = ['input', 'output', 'cacheRead', 'cacheWrite', 'total', 'pressure'];
+  const columns = ['input', 'output', 'cacheRead', 'cacheWrite', 'total', 'context'];
   const select = (source) => columns.map((column) => `${source[column]} as ${column}`).join(', ');
   return `
     with usage as (
-      select m.session_id as sessionId, ${select(message)}
+      select m.session_id as sessionId, m.time_created as createdAt, ${select(message)}
       from message m
       where m.session_id in (${sessionIds}) and ${message.total} > 0
       union all
-      select p.session_id as sessionId, ${select(part)}
+      select p.session_id as sessionId, p.time_created as createdAt, ${select(part)}
       from part p
       left join message m on m.id = p.message_id
       where p.session_id in (${sessionIds}) and coalesce(${message.total}, 0) = 0
@@ -1146,7 +1146,7 @@ function openCodeUsageSql(sessionIds) {
       sum(cacheRead) as cacheRead,
       sum(cacheWrite) as cacheWrite,
       sum(total) as total,
-      max(pressure) as pressure
+      (select context from usage latest where latest.sessionId = usage.sessionId order by createdAt desc limit 1) as latestContext
     from usage
     group by sessionId
   `;
@@ -1200,7 +1200,7 @@ async function listOpenCodeSessions(ctx) {
     usage.tokens.cacheRead = Number(row.cacheRead || 0);
     usage.tokens.cacheWrite = Number(row.cacheWrite || 0);
     usage.tokens.total = Number(row.total || 0);
-    usage.tokenPressure.total = Number(row.pressure || 0);
+    usage.contextLoad.latest = row.latestContext == null ? null : Number(row.latestContext);
     usageBySession.set(row.sessionId, usage);
   }
   const fallbackModelBySession = new Map();

@@ -81,7 +81,7 @@ test('session list counts duplicated message/part usage once', async (t) => {
   assert.equal(totalOf(session.tokens), 18333, 'explicit total counted once, not doubled');
   assert.equal(session.tokens.input, 795);
   assert.equal(session.tokens.cacheRead, 17408);
-  assert.equal(session.tokenPressure.total, 913, 'pressure excludes cache reads');
+  assert.deepEqual(session.contextLoad, { latest: 18321, preferredCeiling: 200000 });
 });
 
 test('session list keeps message-only and part-only usage', async (t) => {
@@ -91,6 +91,7 @@ test('session list keeps message-only and part-only usage', async (t) => {
   const session = data.sessions.find((item) => item.id === 'ses_partial');
   assert.equal(totalOf(session.tokens), 472, 'message-only 315 plus part-only 157');
   assert.equal(session.tokens.input, 150);
+  assert.deepEqual(session.contextLoad, { latest: 155, preferredCeiling: 200000 }, 'uses the latest response rather than the lifetime sum');
 });
 
 test('session detail counts duplicated message/part usage once', async (t) => {

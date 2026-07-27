@@ -59,7 +59,17 @@ test('parts orphaned from their message row are not dropped', () => {
   assert.equal(usage.total, 18333);
 });
 
-test('token pressure ignores cache reads', () => {
+test('older orphan parts do not replace a newer message context', () => {
+  const older = { input: 10, output: 10 };
+  const newer = { input: 50_000, output: 1_100 };
+  const usage = openCodeSessionUsage(
+    [{ ...message('msg_new', newer), createdAt: 200 }],
+    [{ ...part('prt_old', 'msg_gone', older), createdAt: 100 }],
+  );
+  assert.equal(usage.latestContext, 51_100);
+});
+
+test('latest context includes cached input but excludes provider-specific reasoning', () => {
   const usage = openCodeSessionUsage([message('msg_1', responseTokens)], [part('prt_1', 'msg_1', responseTokens)]);
-  assert.equal(usage.pressure, 913);
+  assert.equal(usage.latestContext, 18321);
 });
