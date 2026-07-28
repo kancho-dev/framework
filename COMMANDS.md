@@ -23,6 +23,7 @@ The first portable commands are intentionally small:
 
 - `next-best-actions` — high-value because it is the common entry point for resuming or prioritizing work.
 - `no-context` — answer a bounded request with no framework reads and no framework-managed state writes.
+- `scout` — search bounded workspace history and return a compact, source-linked context packet.
 - `slc` — shape product concepts, design/architecture specs, and implementation slices as Simple, Lovable, and Complete before execution.
 - `update-framework` — high-value because framework-managed workspaces need a repeatable update/alignment flow with merge safety.
 - `workspace-maintenance` — high-value because it captures recurring Historian cleanup without implying project-code changes.
@@ -37,6 +38,7 @@ This repository ships the command bodies once, as plain Markdown in [`prompts/`]
 | --- | --- | --- |
 | next-best-actions | [`prompts/next-best-actions.md`](prompts/next-best-actions.md) | `/next-best-actions` |
 | no-context | [`prompts/no-context.md`](prompts/no-context.md) | `/no-context` |
+| scout | [`prompts/scout.md`](prompts/scout.md) | `/scout` |
 | slc | [`prompts/slc.md`](prompts/slc.md) | `/slc` |
 | update-framework | [`prompts/update-framework.md`](prompts/update-framework.md) | `/update-framework` |
 | workspace-maintenance | [`prompts/workspace-maintenance.md`](prompts/workspace-maintenance.md) | `/workspace-maintenance` |
@@ -52,7 +54,7 @@ Pi, OpenCode, and Claude Code read commands from a **workspace** directory two l
 ```bash
 DIR=.claude/commands   # or .pi/prompts, or .opencode/commands
 mkdir -p "$DIR"
-for f in next-best-actions no-context slc update-framework workspace-maintenance; do
+for f in next-best-actions no-context scout slc update-framework workspace-maintenance; do
   ln -s "../../framework/prompts/$f.md" "$DIR/$f.md"
 done
 ```

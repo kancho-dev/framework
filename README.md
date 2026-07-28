@@ -195,7 +195,7 @@ Read [`tools/tokens-cost-analyzer/README.md`](tools/tokens-cost-analyzer/README.
 
 ### Native Commands
 
-[`prompts/`](prompts/) contains optional command templates for Pi, OpenCode, and Claude Code such as `/next-best-actions`, `/no-context`, `/slc`, `/update-framework`, and `/workspace-maintenance`.
+[`prompts/`](prompts/) contains optional command templates for Pi, OpenCode, and Claude Code such as `/next-best-actions`, `/no-context`, `/scout`, `/slc`, `/update-framework`, and `/workspace-maintenance`.
 
 Use [`COMMANDS.md`](COMMANDS.md) if you want native slash-command integration. The framework remains usable through normal prompts without these adapters.
 
