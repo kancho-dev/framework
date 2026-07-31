@@ -2,6 +2,7 @@ import { escapeHtml } from '/shared/browser/dom.js';
 import { formatDateTime, formatTokens, money } from '/shared/browser/format.js';
 import { sessionBrowserHrefFor, storeSessionBrowserSelection } from '/shared/browser/session-links.js';
 
+const AUTO_REFRESH_MS = 10 * 60 * 1000;
 const state = { data: null, dailyYear: null };
 const statusEl = document.querySelector('#status');
 const workspaceEl = document.querySelector('#workspace-name');
@@ -19,6 +20,7 @@ document.addEventListener('click', (event) => {
   storeSessionBrowserSelection(link.dataset.sessionBrowserPath, link.dataset.sessionTopicId, { workspaceRoot: state.data?.workspaceRoot });
 });
 load(false);
+setInterval(() => load(true), AUTO_REFRESH_MS);
 
 async function load(refresh) {
   statusEl.textContent = refresh ? 'Refreshing local analysis…' : 'Loading local analysis…';
