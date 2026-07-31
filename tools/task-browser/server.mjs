@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
-import { readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { open, readdir, readFile, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,7 @@ const DEFAULT_HISTORY_PATH = historyPathFor(DEFAULT_WORKSPACE_ROOT, DEFAULT_META
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 const STEERING_NOTES_MAX_BYTES = 16_000;
+const PREVIEW_MAX_BYTES = 1_000_000;
 function parsePort(value) {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid PORT: ${value}`);
@@ -34,15 +36,16 @@ async function discoverTasks(ctx) {
       const taskPath = join(taskDir, 'TASK.md');
       if (!(await exists(taskPath))) continue;
       const handoffPath = join(taskDir, 'HANDOFF.md');
-      const [taskText, handoffText, contextText, steeringNotes, runs, handoffStat] = await Promise.all([
+      const [taskText, handoffText, contextText, steeringNotes, runs, artifacts, handoffStat] = await Promise.all([
         readFile(taskPath, 'utf8').catch(() => ''),
         readFile(handoffPath, 'utf8').catch(() => ''),
         readFile(join(taskDir, 'CONTEXT.md'), 'utf8').catch(() => ''),
         readSteeringNotes(taskDir),
         summarizeRuns(ctx, join(taskDir, 'runs')),
+        inventoryTaskFiles(taskDir),
         stat(handoffPath).catch(() => null),
       ]);
-      tasks.push(summarizeTask(ctx, projectEntry.name, taskEntry.name, taskDir, taskText, handoffText, contextText, steeringNotes, runs, handoffStat));
+      tasks.push(summarizeTask(ctx, projectEntry.name, taskEntry.name, taskDir, taskText, handoffText, contextText, steeringNotes, runs, artifacts, handoffStat));
     }
   }
   return tasks.sort((a, b) => a.key.localeCompare(b.key));
@@ -95,7 +98,7 @@ async function updateSteeringNotes(ctx, key, body) {
   return readSteeringNotes(taskDir);
 }
 
-function summarizeTask(ctx, project, slug, taskDir, taskText, handoffText, contextText, steeringNotes, runs, handoffStat) {
+function summarizeTask(ctx, project, slug, taskDir, taskText, handoffText, contextText, steeringNotes, runs, artifacts, handoffStat) {
   const relPath = relativePath(ctx, taskDir);
   const title = firstHeading(taskText) || slug;
   const latestRunAt = runTimestamp(runs[0]?.file) || handoffStat?.mtime?.toISOString() || null;
@@ -115,12 +118,7 @@ function summarizeTask(ctx, project, slug, taskDir, taskText, handoffText, conte
     hasPendingSteeringNotes: Boolean(steeringNotes.content.trim()),
     hasRunLogs: runs.length > 0,
     runs,
-    files: {
-      task: `${relPath}/TASK.md`,
-      handoff: `${relPath}/HANDOFF.md`,
-      context: `${relPath}/CONTEXT.md`,
-      runs: `${relPath}/runs/`,
-    },
+    artifacts,
   };
 }
 
@@ -155,14 +153,65 @@ async function summarizeRuns(ctx, runsDir) {
   const entries = (await safeReadDir(runsDir)).filter((entry) => entry.isFile() && entry.name.endsWith('.md')).sort((a, b) => b.name.localeCompare(a.name));
   return Promise.all(entries.map(async (entry) => {
     const path = join(runsDir, entry.name);
-    const text = await readFile(path, 'utf8').catch(() => '');
     return {
       file: entry.name,
       path: relativePath(ctx, path),
-      title: runTitle(entry.name, firstHeading(text)),
-      goal: compact(sectionText(text, 'Goal') || sectionText(text, 'Purpose') || '', 360),
+      title: runTitle(entry.name, await readFirstHeading(path)),
     };
   }));
+}
+
+async function readFirstHeading(path) {
+  const handle = await open(path, 'r').catch(() => null);
+  if (!handle) return '';
+  try {
+    const buffer = Buffer.alloc(8192);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    return firstHeading(buffer.subarray(0, bytesRead).toString('utf8')) || '';
+  } finally {
+    await handle.close();
+  }
+}
+
+async function inventoryTaskFiles(taskDir) {
+  const entries = (await safeReadDir(taskDir)).filter((entry) => entry.isFile() && entry.name !== 'NOTES.md');
+  return entries.map((entry) => ({ name: entry.name, path: entry.name, previewable: entry.name.toLowerCase().endsWith('.md') }))
+    .sort((a, b) => Number(b.previewable) - Number(a.previewable) || a.name.localeCompare(b.name));
+}
+
+async function selectedTaskDir(ctx, key) {
+  const match = String(key || '').match(/^([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+)$/);
+  if (!match || ['.', '..'].includes(match[1]) || ['.', '..'].includes(match[2])) throw Object.assign(new Error('Unknown task'), { statusCode: 404 });
+  const expected = resolve(ctx.workspaceRoot, 'projects', match[1], 'work', match[2]);
+  const actual = await realpath(expected).catch(() => null);
+  if (!actual || actual !== expected || !(await exists(join(expected, 'TASK.md')))) throw Object.assign(new Error('Unknown task'), { statusCode: 404 });
+  return expected;
+}
+
+async function readTaskPreview(ctx, key, requestedPath, run = false) {
+  if (typeof requestedPath !== 'string' || !requestedPath || basename(requestedPath) !== requestedPath || !requestedPath.toLowerCase().endsWith('.md')) {
+    throw Object.assign(new Error('Only task-local Markdown files can be previewed'), { statusCode: 400 });
+  }
+  const taskDir = await selectedTaskDir(ctx, key);
+  const parent = run ? join(taskDir, 'runs') : taskDir;
+  const target = resolve(parent, requestedPath);
+  if (dirname(target) !== parent) throw Object.assign(new Error('Unsafe file path'), { statusCode: 400 });
+  let handle;
+  try {
+    handle = await open(target, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  } catch (error) {
+    if (error?.code === 'ENOENT') throw Object.assign(new Error('File not found'), { statusCode: 404 });
+    if (error?.code === 'ELOOP') throw Object.assign(new Error('Unsafe file path'), { statusCode: 400 });
+    throw error;
+  }
+  try {
+    const info = await handle.stat();
+    if (!info.isFile()) throw Object.assign(new Error('File not found'), { statusCode: 404 });
+    if (info.size > PREVIEW_MAX_BYTES) throw Object.assign(new Error('File is too large to preview'), { statusCode: 413 });
+    return { name: requestedPath, path: run ? `runs/${requestedPath}` : requestedPath, content: await handle.readFile('utf8') };
+  } finally {
+    await handle.close();
+  }
 }
 
 async function syncMetadata(ctx, discovered) {
@@ -172,9 +221,10 @@ async function syncMetadata(ctx, discovered) {
 }
 
 function runTitle(fileName, heading) {
+  if (heading) return heading;
   const stem = fileName.replace(/\.md$/, '');
   const match = stem.match(/^(\d{4}-\d{2}-\d{2})-(\d{4})-(.+)$/);
-  if (!match) return heading || fileName;
+  if (!match) return fileName;
   const [, date, time, slug] = match;
   const label = slug.split('-').map((part) => part ? `${part[0].toUpperCase()}${part.slice(1)}` : '').join(' ');
   return `${date} ${time.slice(0, 2)}:${time.slice(2)} — ${label}`;
@@ -300,6 +350,14 @@ export function createTaskBrowserHandler({ basePath = '/', cockpit = null, works
       }
       if (pathname === '/api/summary') {
         sendJson(res, 200, await taskSummaryPayload(ctx));
+        return true;
+      }
+      if (pathname === '/api/task-file' && req.method === 'GET') {
+        sendJson(res, 200, await readTaskPreview(ctx, url.searchParams.get('key'), url.searchParams.get('path')));
+        return true;
+      }
+      if (pathname === '/api/run-file' && req.method === 'GET') {
+        sendJson(res, 200, await readTaskPreview(ctx, url.searchParams.get('key'), url.searchParams.get('path'), true));
         return true;
       }
       if (pathname === '/api/steering-notes' && req.method === 'PUT') {

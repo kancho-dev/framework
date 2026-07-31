@@ -56,12 +56,16 @@
           <section><h3>Purpose</h3><p id="detail-purpose"></p></section>
           <section><h3>Next steps</h3><p id="detail-next-steps"></p></section>
           <section><h3>Run timeline</h3><div id="detail-runs" class="run-timeline"></div></section>
-          <section><h3>Current state</h3><p id="detail-handoff"></p></section>
+          <section><h3>Files</h3><div id="task-files" class="file-shelf"></div></section>
           <section><h3>Success / Acceptance</h3><p id="detail-success"></p></section>
-          <section><h3>Resume</h3><ul id="resume-files"></ul></section>
-          <section><h3>Context</h3><p id="detail-context"></p></section>
           <section><h3>Metadata history</h3><div id="detail-history" class="metadata-history"></div></section>
         </div>
+      </article>
+    </section>
+    <section id="reader" class="reader hidden" role="dialog" aria-modal="true" aria-labelledby="reader-title">
+      <article class="reader-window">
+        <header><div><p id="reader-task" class="eyebrow"></p><h2 id="reader-title">File reader</h2><p id="reader-path" class="reader-path"></p></div><button id="close-reader" type="button" aria-label="Back to task details">×</button></header>
+        <div id="reader-content" class="reader-content markdown-body"></div>
       </article>
     </section>
   </main>

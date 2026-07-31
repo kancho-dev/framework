@@ -40,12 +40,10 @@ export function renderDetail(task) {
   const draft = state.steeringDrafts[task.key];
   els.steeringNotesDisclosure.open = steeringDisclosureOpen({ preference: state.steeringOpen[task.key], pending: task.hasPendingSteeringNotes, dirty: draft?.dirty });
   els.steeringNotesDisclosure.querySelector('.steering-summary-state').textContent = task.hasPendingSteeringNotes ? 'Pending for next run' : 'No note pending';
-  els.resumeFiles.innerHTML = Object.entries(task.files).map(([label, path]) => `<li><strong>${escapeHtml(label)}</strong>: <code>${escapeHtml(path)}</code></li>`).join('');
-  els.detailHandoff.textContent = task.handoff || 'No current-state summary found.';
+  els.taskFiles.innerHTML = renderFiles(task.artifacts || []);
   els.detailPurpose.textContent = task.purpose || 'No purpose section found.';
   els.detailNextSteps.textContent = task.nextSteps || 'No next steps section found.';
   els.detailSuccess.textContent = task.success || 'No success/acceptance section found.';
-  els.detailContext.textContent = task.context || 'No context excerpt found.';
   els.detailRuns.innerHTML = renderRuns(task.runs || []);
   els.detailHistory.innerHTML = renderHistory(task.metadataHistory || []);
 }
@@ -133,7 +131,16 @@ function relationItems(label, keys) {
 
 function renderRuns(runs) {
   if (runs.length === 0) return '<p class="muted">No run logs found.</p>';
-  return runs.map((run) => `<article class="timeline-item"><div class="timeline-dot"></div><div class="timeline-card"><strong>${escapeHtml(run.title)}</strong><p>${escapeHtml(run.goal || 'No goal section found.')}</p><span class="run-path" title="${escapeHtml(run.path)}">${escapeHtml(run.file)}</span></div></article>`).join('');
+  return runs.map((run) => `<article class="timeline-item"><div class="timeline-dot"></div><button type="button" class="timeline-card open-preview" data-preview-kind="run" data-preview-path="${escapeHtml(run.file)}"><strong>${escapeHtml(run.title)}</strong></button></article>`).join('');
+}
+
+function renderFiles(files) {
+  if (files.length === 0) return '<p class="muted">No task files found.</p>';
+  return files.map((file) => {
+    const contents = `<strong>${escapeHtml(file.name)}</strong><span>${escapeHtml(file.path)}</span>`;
+    if (!file.previewable) return `<div class="file-card">${contents}</div>`;
+    return `<button type="button" class="file-card open-preview" data-preview-kind="file" data-preview-path="${escapeHtml(file.path)}">${contents}</button>`;
+  }).join('');
 }
 
 function renderHistory(events) {

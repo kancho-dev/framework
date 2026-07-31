@@ -4,7 +4,8 @@ import { unique, sortTasks } from './task-utils.js';
 import { restoreFilters, persistFilters, resetFilters, renderStatusFilters, matches, fillSelect } from './filters.js';
 import { captureBoardScroll, restoreBoardScroll, renderBoard, showSelectedTaskInBoard as revealSelectedTaskInBoard, scrollSelectedCardIntoView, shouldRevealRestoredSelection } from './board.js';
 import { captureDetailFocus, isEditingAutocompleteInput, restoreDetailFocus, renderDetail, attachDetailAutocompletes, continuePrompt } from './detail.js';
-import { fetchTasks, saveMetadata, saveSteeringNotes } from './api.js';
+import { fetchPreview, fetchTasks, saveMetadata, saveSteeringNotes } from './api.js';
+import { renderMarkdown } from './markdown.js';
 import { editSteeringDraft, savedSteeringDraft } from './steering-notes.js';
 import { addRelationPatch, currentTags, relationInput, removeRelationPatch, taskKeyFromRelationInput } from './relations.js';
 import { clearRequestedSelection, requestedSelection } from './selection.js';
@@ -148,7 +149,48 @@ els.projectFilter.addEventListener('change', () => { persistFilters(); render();
 els.priorityFilter.addEventListener('change', () => { persistFilters(); render(); });
 els.clear.addEventListener('click', () => { resetFilters(); render(); });
 
+let readerReturnFocus = null;
+function setReaderBackgroundInert(inert) {
+  document.querySelector('.tasks-pane').inert = inert;
+  els.detailPane.inert = inert;
+}
+
+function returnFocusTarget() {
+  if (!readerReturnFocus) return null;
+  return [...els.detail.querySelectorAll('.open-preview')].find((button) => button.dataset.previewKind === readerReturnFocus.kind && button.dataset.previewPath === readerReturnFocus.path);
+}
+
+function closeReader() {
+  if (els.reader.classList.contains('hidden')) return;
+  els.reader.classList.add('hidden');
+  setReaderBackgroundInert(false);
+  returnFocusTarget()?.focus();
+  readerReturnFocus = null;
+}
+
+async function openReader(button) {
+  const task = selectedTask();
+  if (!task) return;
+  readerReturnFocus = { kind: button.dataset.previewKind, path: button.dataset.previewPath };
+  els.reader.classList.remove('hidden');
+  setReaderBackgroundInert(true);
+  els.readerTask.textContent = `${task.metadata?.displayId || ''} · ${task.slug}`;
+  els.readerTitle.textContent = button.querySelector('strong')?.textContent || button.dataset.previewPath;
+  els.readerPath.textContent = button.dataset.previewKind === 'run' ? `runs/${button.dataset.previewPath}` : button.dataset.previewPath;
+  els.readerContent.innerHTML = '<p class="muted">Loading preview…</p>';
+  els.closeReader.focus();
+  try {
+    const preview = await fetchPreview(task.key, button.dataset.previewPath, button.dataset.previewKind);
+    els.readerPath.textContent = preview.path;
+    els.readerContent.innerHTML = renderMarkdown(preview.content) || '<p class="muted">This Markdown file is empty.</p>';
+  } catch (error) {
+    els.readerContent.innerHTML = `<p class="reader-error"></p>`;
+    els.readerContent.querySelector('p').textContent = error.message;
+  }
+}
+
 function closeDetail() {
+  closeReader();
   selectTaskKey(null);
   const url = clearRequestedSelection(new URL(location.href));
   history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
@@ -156,6 +198,11 @@ function closeDetail() {
 }
 
 els.closeDetail.addEventListener('click', closeDetail);
+els.closeReader.addEventListener('click', closeReader);
+els.detail.addEventListener('click', (event) => {
+  const preview = event.target.closest('.open-preview');
+  if (preview) openReader(preview);
+});
 els.detailMeta.addEventListener('input', (event) => {
   const form = event.target.closest('.inline-metadata-editor');
   if (!form) return;
@@ -287,7 +334,24 @@ els.detailMeta.addEventListener('submit', (event) => {
 });
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && state.selectedKey) closeDetail();
+  const readerOpen = !els.reader.classList.contains('hidden');
+  if (event.key === 'Escape') {
+    if (readerOpen) closeReader();
+    else if (state.selectedKey) closeDetail();
+    return;
+  }
+  if (event.key !== 'Tab' || !readerOpen) return;
+  const focusable = [...els.reader.querySelectorAll('button:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')];
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 });
 
 for (const select of [els.projectFilter, els.priorityFilter]) {

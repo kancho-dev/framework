@@ -7,6 +7,14 @@ export async function fetchTasks() {
   return res.json();
 }
 
+export async function fetchPreview(key, path, kind) {
+  const query = new URLSearchParams({ key, path });
+  const res = await fetch(`api/${kind === 'run' ? 'run-file' : 'task-file'}?${query}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Preview failed: ${res.status}`);
+  return data;
+}
+
 export async function saveSteeringNotes(key, content, revision) {
   const res = await fetch('api/steering-notes', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, content, revision }) });
   const data = await res.json().catch(() => ({}));

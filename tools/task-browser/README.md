@@ -2,7 +2,7 @@
 
 A local browser for framework tracked tasks across workspace projects.
 
-Use it to scan `projects/*/work/*/TASK.md`, initialize task-browser-owned metadata, and browse tasks by status, priority, type, tags, relationships, and resume files.
+Use it to scan `projects/*/work/*/TASK.md`, initialize task-browser-owned metadata, and browse tasks by status, priority, type, tags, relationships, and task-local files.
 
 ## Quick Start
 
@@ -39,7 +39,10 @@ No npm install is needed for the current dependency-free tool.
 - auto-refresh every 10 seconds by default, plus manual Refresh;
 - search by display ID, project/slug/key, title, and tags;
 - project and priority filters;
-- task detail drawer with Purpose, Next steps, Run timeline, Current state, Success/Acceptance, Resume files, Context, and Metadata history; Next steps are read from `HANDOFF.md` `## Next Action` with `## Next Steps` fallback;
+- compact canonical slugs on task cards;
+- task detail drawer with Purpose, Next steps, clickable Run timeline, Files, Success/Acceptance, and Metadata history; Next steps are read from `HANDOFF.md` `## Next Action` with `## Next Steps` fallback;
+- on-demand, safely rendered Markdown readers for root task files and individual run logs; non-Markdown root artifacts remain discoverable but are never fetched for preview;
+- run cards prefer the run file's first `#` heading, then a readable title derived from timestamped filenames, then the raw filename;
 - editable status, priority, type, next actor, tags, and optional positive-integer order metadata;
 - an icon-only person/robot badge beside each task display ID when Operator/Agent action is next;
 - relationship metadata (`blockedBy`, derived `blocks`, `parent`, `children`, `related`) when present, with links to known tasks;
@@ -180,4 +183,4 @@ For existing-workspace upgrades from older metadata paths, see the metadata-path
 
 ## Safety And Privacy
 
-The tool is local-only and reads task markdown from the configured workspace. It writes task-browser metadata/history and, only through the Steering Notes endpoint, safely replaces or deletes `NOTES.md` inside a currently discovered canonical task directory. Task keys, payload type and size, canonical confinement, and stale revisions are validated server-side; the payload is not logged or copied to metadata/history. Task names, note contents, paths, tags, relationships, timing, provenance, and handoff text can reveal private work details. Protect task files, and do not commit `.tools-config/task-browser/tasks.json` or `.tools-config/task-browser/task-history.jsonl` unless that workspace state is intended to be shared.
+The tool is local-only and reads task markdown from the configured workspace. Task-file inventory is limited to immediate regular files in the selected task root; run logs are listed separately. Preview endpoints accept only basename-only `.md` paths, reject symlinks and traversal, enforce a 1 MB limit, and load bodies only on demand. Files are opened without following a final symlink and verified/read through that same handle to avoid validation/read races. Markdown is escaped before the small supported formatting subset is rendered, and only `http`/`https` links become anchors. It writes task-browser metadata/history and, only through the Steering Notes endpoint, safely replaces or deletes `NOTES.md` inside a currently discovered canonical task directory. Task keys, payload type and size, canonical confinement, and stale revisions are validated server-side; the payload is not logged or copied to metadata/history. Task names, note contents, paths, tags, relationships, timing, provenance, and handoff text can reveal private work details. Protect task files, and do not commit `.tools-config/task-browser/tasks.json` or `.tools-config/task-browser/task-history.jsonl` unless that workspace state is intended to be shared.

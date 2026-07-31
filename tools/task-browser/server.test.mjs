@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createTaskBrowserHandler } from './server.mjs';
@@ -42,6 +42,56 @@ async function putSteeringNotes(base, key, content, revision) {
 async function patch(base, nextActor) {
   return fetch(`${base}/api/task-metadata`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: 'demo/task', metadata: { nextActor } }) });
 }
+
+test('task inventory and on-demand previews enforce Markdown and task boundaries', async () => {
+  const ctx = await fixture();
+  const taskDir = join(ctx.root, 'projects/demo/work/task');
+  await writeFile(join(taskDir, 'DESIGN.md'), '# Design\n\n<script>alert(1)</script>\n');
+  await writeFile(join(taskDir, 'data.bin'), Buffer.from([0, 1, 2]));
+  await writeFile(join(taskDir, 'NOTES.md'), '# Steering note\n');
+  await writeFile(join(taskDir, 'runs', '2026-01-01-1200-builder.md'), '# Secret run heading\n');
+  await symlink(join(ctx.root, 'outside.md'), join(taskDir, 'escape.md'));
+  await writeFile(join(ctx.root, 'outside.md'), '# Outside\n');
+
+  await withServer(ctx, async (base) => {
+    const tasks = await (await fetch(`${base}/api/tasks`)).json();
+    const task = tasks.tasks[0];
+    assert.deepEqual(task.artifacts.map((file) => file.name), ['CONTEXT.md', 'DESIGN.md', 'HANDOFF.md', 'TASK.md', 'data.bin']);
+    assert.equal(task.runs[0].title, 'Secret run heading');
+    assert.doesNotMatch(JSON.stringify(task), /# Secret run heading/);
+
+    let response = await fetch(`${base}/api/task-file?key=demo%2Ftask&path=DESIGN.md`);
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /<script>/);
+    assert.equal((await fetch(`${base}/api/task-file?key=demo%2Ftask&path=data.bin`)).status, 400);
+    assert.equal((await fetch(`${base}/api/task-file?key=demo%2Ftask&path=..%2Foutside.md`)).status, 400);
+    assert.equal((await fetch(`${base}/api/task-file?key=demo%2Ftask&path=escape.md`)).status, 400);
+
+    response = await fetch(`${base}/api/run-file?key=demo%2Ftask&path=2026-01-01-1200-builder.md`);
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).content, /Secret run heading/);
+  });
+});
+
+test('preview APIs reject dot-segment task keys even when escaped targets resemble tasks', async () => {
+  const ctx = await fixture();
+  const projectEscape = join(ctx.root, 'work', 'sneaky');
+  const slugEscape = join(ctx.root, 'projects', 'demo');
+  await mkdir(join(projectEscape, 'runs'), { recursive: true });
+  await mkdir(join(slugEscape, 'runs'), { recursive: true });
+  for (const dir of [projectEscape, slugEscape]) {
+    await writeFile(join(dir, 'TASK.md'), '# Decoy task\n');
+    await writeFile(join(dir, 'private.md'), '# Private\n');
+    await writeFile(join(dir, 'runs', 'private.md'), '# Private run\n');
+  }
+
+  await withServer(ctx, async (base) => {
+    for (const endpoint of ['task-file', 'run-file']) {
+      assert.equal((await fetch(`${base}/api/${endpoint}?key=..%2Fsneaky&path=private.md`)).status, 404);
+      assert.equal((await fetch(`${base}/api/${endpoint}?key=demo%2F..&path=private.md`)).status, 404);
+    }
+  });
+});
 
 test('Steering Notes API safely saves, detects conflicts, clears, and exposes pending state', async () => {
   const ctx = await fixture();
