@@ -34,7 +34,7 @@ function renderCard(task) {
   const active = task.key === state.selectedKey ? ' active' : '';
   const tags = (meta.tags || []).slice(0, 4).map((tag) => labelPill(tag)).join('');
   const steering = pendingSteeringIndicator(task.hasPendingSteeringNotes);
-  return `<button class="task-card${active}" draggable="true" data-key="${escapeHtml(task.key)}"><div class="card-top"><span class="card-identity"><span class="display-id">${escapeHtml(meta.displayId)}</span>${nextActorBadge(meta.nextActor)}${steering}</span>${projectPill(task.project)}</div><span class="card-slug" title="${escapeHtml(task.slug)}">${escapeHtml(task.slug)}</span><strong>${escapeHtml(task.title)}</strong><p>${escapeHtml(task.nextSteps || task.handoff || task.purpose || 'No handoff summary.')}</p><div class="card-meta">${metaPill('priority', meta.priority, `priority ${meta.priority}`)}${metaPill('type', meta.type, 'type')}${tags}</div></button>`;
+  return `<button class="task-card${active}" draggable="true" data-key="${escapeHtml(task.key)}"><div class="card-top"><span class="card-identity"><span class="display-id">${escapeHtml(meta.displayId)}</span>${nextActorBadge(meta.nextActor)}${steering}</span>${projectPill(task.project)}</div><strong>${escapeHtml(task.title)}</strong><span class="card-slug" title="${escapeHtml(task.slug)}">${escapeHtml(task.slug)}</span><div class="card-meta">${metaPill('priority', meta.priority, `priority ${meta.priority}`)}${metaPill('type', meta.type, 'type')}${tags}</div></button>`;
 }
 
 export function showSelectedTaskInBoard() {
