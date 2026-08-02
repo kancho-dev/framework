@@ -199,6 +199,12 @@ function closeDetail() {
 
 els.closeDetail.addEventListener('click', closeDetail);
 els.closeReader.addEventListener('click', closeReader);
+let readerPointerDownOnBackdrop = false;
+els.reader.addEventListener('mousedown', (event) => { readerPointerDownOnBackdrop = event.target === els.reader; });
+els.reader.addEventListener('click', (event) => {
+  if (event.target === els.reader && readerPointerDownOnBackdrop) closeReader();
+  readerPointerDownOnBackdrop = false;
+});
 els.detail.addEventListener('click', (event) => {
   const preview = event.target.closest('.open-preview');
   if (preview) openReader(preview);
