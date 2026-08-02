@@ -4,6 +4,8 @@ A local browser for framework tracked tasks across workspace projects.
 
 Use it to scan `projects/*/work/*/TASK.md`, initialize task-browser-owned metadata, and browse tasks by status, priority, type, tags, relationships, and task-local files.
 
+Task-file previews use the safe shared renderer documented in [`../shared-web/MARKDOWN.md`](../shared-web/MARKDOWN.md), while Task Browser retains document-level heading presentation and adds scoped code-block chrome with a Copy control.
+
 ## Quick Start
 
 From a workspace that has this framework cloned as `framework/`:

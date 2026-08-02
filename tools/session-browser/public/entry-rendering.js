@@ -1,3 +1,4 @@
+import { renderMarkdown } from '/shared/browser/markdown.js';
 import { escapeHtml, textFromContent, formatDate } from './formatters.js';
 
 function roleLabel(entry) {
@@ -5,124 +6,17 @@ function roleLabel(entry) {
   return entry.message?.role || 'message';
 }
 
-function renderMarkdownInline(text) {
-  let html = escapeHtml(text);
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-  html = html.replace(/(^|\W)\*([^*\n]+)\*/g, '$1<em>$2</em>');
-  html = html.replace(/(^|\W)_([^_\n]+)_/g, '$1<em>$2</em>');
-  return html;
-}
-
-function splitMarkdownTableRow(line) {
-  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
-  const cells = [];
-  let cell = '';
-  let inCode = false;
-  for (const char of trimmed) {
-    if (char === '`') inCode = !inCode;
-    if (char === '|' && !inCode) {
-      cells.push(cell.trim());
-      cell = '';
-    } else {
-      cell += char;
-    }
-  }
-  cells.push(cell.trim());
-  return cells;
-}
-
-function parseMarkdownTableSeparator(line) {
-  const cells = splitMarkdownTableRow(line);
-  if (cells.length < 2) return null;
-  const alignments = [];
-  for (const cell of cells) {
-    const marker = cell.replace(/\s+/g, '');
-    if (!/^:?-{3,}:?$/.test(marker)) return null;
-    alignments.push(marker.startsWith(':') && marker.endsWith(':') ? 'center' : marker.endsWith(':') ? 'right' : 'left');
-  }
-  return alignments;
-}
-
-function renderMarkdownTable(lines, tableKey = '') {
-  if (lines.length < 2 || !lines[0].includes('|') || !lines[1].includes('|')) return '';
-  const header = splitMarkdownTableRow(lines[0]);
-  const alignments = parseMarkdownTableSeparator(lines[1]);
-  if (!alignments || header.length < 2 || header.length !== alignments.length) return '';
-  const bodyLines = lines.slice(2);
-  if (!bodyLines.every((line) => line.includes('|'))) return '';
-  const renderCell = (tag, value, index) => `<${tag} class="align-${alignments[index] || 'left'}">${renderMarkdownInline(value || '')}</${tag}>`;
-  const normalizeRow = (line) => {
-    const cells = splitMarkdownTableRow(line);
-    return Array.from({ length: header.length }, (_, index) => cells[index] || '');
-  };
-  const thead = `<thead><tr>${header.map((cell, index) => renderCell('th', cell, index)).join('')}</tr></thead>`;
-  const tbody = bodyLines.length
-    ? `<tbody>${bodyLines.map((line) => `<tr>${normalizeRow(line).map((cell, index) => renderCell('td', cell, index)).join('')}</tr>`).join('')}</tbody>`
-    : '';
-  const keyAttr = tableKey ? ` data-table-key="${escapeHtml(tableKey)}"` : '';
-  return `<div class="markdown-table-wrap"${keyAttr}><table>${thead}${tbody}</table></div>`;
-}
-
-function renderMarkdownBlock(block, tableKey = '') {
-  const lines = block.split('\n');
-  if (/^\s*(?:-{3,}|_{3,}|\*{3,})\s*$/.test(block)) return '<hr>';
-  const table = renderMarkdownTable(lines, tableKey);
-  if (table) return table;
-  const heading = block.match(/^(#{1,6})\s+(.+)$/);
-  if (heading) {
-    const level = Math.min(6, heading[1].length + 1);
-    return `<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`;
-  }
-  if (lines.every((line) => /^\s*[-*+]\s+/.test(line))) {
-    return `<ul>${lines.map((line) => `<li>${renderMarkdownInline(line.replace(/^\s*[-*+]\s+/, ''))}</li>`).join('')}</ul>`;
-  }
-  if (lines.every((line) => /^\s*\d+[.)]\s+/.test(line))) {
-    return `<ol>${lines.map((line) => `<li>${renderMarkdownInline(line.replace(/^\s*\d+[.)]\s+/, ''))}</li>`).join('')}</ol>`;
-  }
-  if (lines.every((line) => /^\s*>\s?/.test(line))) {
-    return `<blockquote>${lines.map((line) => renderMarkdownInline(line.replace(/^\s*>\s?/, ''))).join('<br>')}</blockquote>`;
-  }
-  return `<p>${lines.map(renderMarkdownInline).join('<br>')}</p>`;
-}
-
-function renderMarkdown(text, keyBase = '') {
-  let tableIndex = 0;
-  return text
-    .trim()
-    .split(/\n{2,}/)
-    .filter((block) => block.trim())
-    .map((block) => renderMarkdownBlock(block.trim(), keyBase ? `${keyBase}:table:${tableIndex++}` : ''))
-    .join('');
-}
-
-function renderAssistantText(text, keyBase = '') {
-  const parts = [];
-  const pattern = /```([^\n`]*)\n([\s\S]*?)```/g;
-  let lastIndex = 0;
-  let match;
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      const markdown = renderMarkdown(text.slice(lastIndex, match.index), `${keyBase}:md:${parts.length}`);
-      if (markdown) parts.push(`<div class="assistant-block markdown-body">${markdown}</div>`);
-    }
-    const language = match[1].trim();
-    const code = match[2].replace(/\n$/, '');
-    parts.push(`
+function renderAssistantText(text) {
+  const html = renderMarkdown(text, {
+    headingOffset: 1,
+    renderCodeBlock: ({ languageHtml, codeHtml }) => `
       <div class="code-block">
-        <div class="code-block-header"><span>${escapeHtml(language || 'code')}</span><button type="button" class="copy-code">Copy</button></div>
-        <pre><code>${escapeHtml(code)}</code></pre>
+        <div class="code-block-header"><span>${languageHtml || 'code'}</span><button type="button" class="copy-code">Copy</button></div>
+        <pre><code>${codeHtml}</code></pre>
       </div>
-    `);
-    lastIndex = pattern.lastIndex;
-  }
-  if (lastIndex < text.length) {
-    const markdown = renderMarkdown(text.slice(lastIndex), `${keyBase}:md:${parts.length}`);
-    if (markdown) parts.push(`<div class="assistant-block markdown-body">${markdown}</div>`);
-  }
-  return parts.join('');
+    `,
+  });
+  return html ? `<div class="assistant-block markdown-body">${html}</div>` : '';
 }
 
 function renderToolResult(entries, toolCallId) {

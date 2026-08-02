@@ -4,6 +4,8 @@ A local, read-only browser for AI coding-agent sessions.
 
 Use it to quickly find, skim, and restore past Pi, OpenCode, Codex, and Claude Code coding sessions for the current workspace.
 
+Assistant Markdown uses the safe shared renderer documented in [`../shared-web/MARKDOWN.md`](../shared-web/MARKDOWN.md). Session Browser keeps its heading offset and code-copy presentation as scoped adapters.
+
 ## Quick Start
 
 From a workspace that has this framework cloned as `framework/`:

@@ -9,6 +9,7 @@ import { renderMarkdown } from './markdown.js';
 import { editSteeringDraft, savedSteeringDraft } from './steering-notes.js';
 import { addRelationPatch, currentTags, relationInput, removeRelationPatch, taskKeyFromRelationInput } from './relations.js';
 import { clearRequestedSelection, requestedSelection } from './selection.js';
+import { copyText as copyClipboardText, flashButton } from '/shared/browser/clipboard.js';
 import { formatToolTitle } from '/shared/browser/format.js';
 
 window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
@@ -199,6 +200,13 @@ function closeDetail() {
 
 els.closeDetail.addEventListener('click', closeDetail);
 els.closeReader.addEventListener('click', closeReader);
+els.readerContent.addEventListener('click', async (event) => {
+  const button = event.target.closest('.copy-code');
+  if (!button) return;
+  const code = button.closest('.code-block')?.querySelector('code')?.textContent || '';
+  await copyClipboardText(code);
+  flashButton(button);
+});
 let readerPointerDownOnBackdrop = false;
 els.reader.addEventListener('mousedown', (event) => { readerPointerDownOnBackdrop = event.target === els.reader; });
 els.reader.addEventListener('click', (event) => {

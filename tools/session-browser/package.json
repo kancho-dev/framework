@@ -1,11 +1,11 @@
 {
   "name": "agent-session-browser",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
     "migrate-metadata": "node migrate-metadata.mjs",
-    "test": "node --test pi.test.mjs claude-code.test.mjs opencode.test.mjs codex.test.mjs public/formatters.test.mjs public/selection.test.mjs ../shared-web/opencode-usage.test.mjs"
+    "test": "node --test pi.test.mjs claude-code.test.mjs opencode.test.mjs codex.test.mjs public/formatters.test.mjs public/selection.test.mjs ../shared-web/opencode-usage.test.mjs ../shared-web/browser/markdown.test.mjs"
   }
 }
