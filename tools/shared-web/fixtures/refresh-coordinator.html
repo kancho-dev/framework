@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Shared refresh coordinator browser fixture</title>
+<style>
+  body { font: 14px system-ui; max-width: 900px; margin: 2rem auto; }
+  #scroll { width: 260px; overflow: auto; white-space: nowrap; }
+  #scroll span { display: inline-block; width: 900px; }
+  .pass { color: #087830; } .fail { color: #b00020; }
+</style>
+<h1>Shared refresh coordinator browser fixture</h1>
+<button id="run">Run checks</button>
+<ol id="results"></ol>
+<section id="target" data-state-key="fixture:target">
+  <label>Draft <input id="draft" data-state-adapter="focused-input" value="server value"></label>
+  <details id="details" data-state-adapter="disclosure" open><summary>Disclosure</summary><p>Nested <strong>rendered Markdown</strong></p></details>
+  <div id="scroll"><span>Horizontally scrollable keyed content</span></div>
+  <p id="selection" data-refresh-scope="defer" data-refresh-defer="incidental">Select this stable text across a refresh.</p>
+</section>
+<section id="integration" data-refresh-scope="defer" data-refresh-defer="authored">
+  <label>Clean authored field <input id="integration-input"></label>
+  <output id="integration-value">old</output>
+</section>
+<script type="module" src="./refresh-coordinator-fixture.js"></script>
