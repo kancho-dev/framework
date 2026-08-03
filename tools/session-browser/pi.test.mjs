@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -54,4 +54,41 @@ test('Pi detail reports latest active-branch context', async (t) => {
   t.after(() => server.close());
   const detail = await getJson(server, `/api/session?ref=${encodeURIComponent(join(sessionRoot, 'compact.jsonl'))}`);
   assert.deepEqual(detail.contextLoad, { latest: 50000, preferredCeiling: 200000 });
+});
+
+test('a repeated list scan reflects appended, added, and removed sessions', async (t) => {
+  const server = await startServer();
+  t.after(() => server.close());
+  const added = join(sessionRoot, 'cache-check.jsonl');
+  t.after(() => rm(added, { force: true }));
+
+  const before = await getJson(server, '/api/sessions');
+  assert.ok(before.sessions.some((session) => session.id === 'PI-COMPACT'));
+  assert.ok(!before.sessions.some((session) => session.id === 'PI-CACHE-CHECK'));
+
+  await writeFile(added, jsonl([
+    { type: 'session', version: 3, id: 'PI-CACHE-CHECK', cwd: workspaceRoot, timestamp: '2026-01-02T00:00:00.000Z' },
+    { type: 'message', id: 'c1', parentId: null, timestamp: '2026-01-02T00:00:01.000Z', message: { role: 'user', content: 'added later' } },
+  ]));
+  const withAdded = await getJson(server, '/api/sessions');
+  const appearing = withAdded.sessions.find((session) => session.id === 'PI-CACHE-CHECK');
+  assert.equal(appearing?.userMessageCount, 1);
+
+  await appendFile(added, jsonl([
+    { type: 'message', id: 'c2', parentId: 'c1', timestamp: '2026-01-02T00:00:02.000Z', message: { role: 'user', content: 'appended' } },
+  ]));
+  const withAppend = await getJson(server, '/api/sessions');
+  assert.equal(withAppend.sessions.find((session) => session.id === 'PI-CACHE-CHECK')?.userMessageCount, 2);
+
+  await rm(added);
+  const afterRemoval = await getJson(server, '/api/sessions');
+  assert.ok(!afterRemoval.sessions.some((session) => session.id === 'PI-CACHE-CHECK'));
+});
+
+test('overlapping list requests return the same sessions', async (t) => {
+  const server = await startServer();
+  t.after(() => server.close());
+  const [sessions, summary] = await Promise.all([getJson(server, '/api/sessions'), getJson(server, '/api/summary')]);
+  assert.ok(sessions.sessions.length > 0);
+  assert.equal(summary.latestUpdatedSession?.id, sessions.sessions[0].id);
 });

@@ -6,6 +6,6 @@
   "scripts": {
     "start": "node server.mjs",
     "migrate-metadata": "node migrate-metadata.mjs",
-    "test": "node --test pi.test.mjs claude-code.test.mjs opencode.test.mjs codex.test.mjs public/formatters.test.mjs public/selection.test.mjs ../shared-web/opencode-usage.test.mjs ../shared-web/browser/markdown.test.mjs"
+    "test": "node --test summary-cache.test.mjs pi.test.mjs claude-code.test.mjs opencode.test.mjs codex.test.mjs public/formatters.test.mjs public/selection.test.mjs ../shared-web/opencode-usage.test.mjs ../shared-web/browser/markdown.test.mjs"
   }
 }

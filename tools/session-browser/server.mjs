@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { exists, normalizeBasePath, readStaticText, safeError, sendHtml, sendJson, serveStaticPath, stripBasePath } from '../shared-web/http.mjs';
 import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel, piModelState } from '../shared-web/model-normalization.mjs';
 import { openCodeSessionUsage, openCodeTokenSql } from '../shared-web/opencode-usage.mjs';
+import { createSingleFlight, createSummaryCache } from './summary-cache.mjs';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = parsePort(process.env.PORT || '8787');
@@ -340,14 +341,32 @@ async function loadSessionFile(path) {
   return { ...summary, entries, activeEntries, topicAnchors };
 }
 
-async function listPiSessions(ctx) {
-  const files = await walkJsonlFiles(PI_SESSION_ROOT);
-  const settled = await Promise.allSettled(files.map(async (file) => loadSessionFile(file)));
+const SUMMARY_CACHES = {
+  pi: createSummaryCache(),
+  codex: createSummaryCache(),
+  'claude-code': createSummaryCache(),
+};
+const singleFlight = createSingleFlight();
+
+function sessionSummary({ entries, activeEntries, topicAnchors, ...summary }) {
+  return summary;
+}
+
+async function listFileSessions(ctx, root, cache, load) {
+  const files = await walkJsonlFiles(root);
+  const settled = await Promise.allSettled(
+    files.map((file) => cache.summarize(file, async (path) => sessionSummary(await load(path))))
+  );
+  cache.prune(files);
   return settled
     .filter((result) => result.status === 'fulfilled')
     .map((result) => result.value)
     .filter((session) => isUnderRoot(session.cwd, ctx.workspaceRoot))
     .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+}
+
+async function listPiSessions(ctx) {
+  return listFileSessions(ctx, PI_SESSION_ROOT, SUMMARY_CACHES.pi, loadSessionFile);
 }
 
 function opencodeRef(sessionId) {
@@ -781,13 +800,7 @@ async function loadCodexFile(file) {
 }
 
 async function listCodexSessions(ctx) {
-  const files = await walkJsonlFiles(CODEX_SESSION_ROOT);
-  const settled = await Promise.allSettled(files.map((file) => loadCodexFile(file)));
-  return settled
-    .filter((result) => result.status === 'fulfilled')
-    .map((result) => result.value)
-    .filter((session) => isUnderRoot(session.cwd, ctx.workspaceRoot))
-    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  return listFileSessions(ctx, CODEX_SESSION_ROOT, SUMMARY_CACHES.codex, loadCodexFile);
 }
 
 async function loadCodexSession(ctx, ref) {
@@ -967,13 +980,7 @@ async function loadClaudeCodeFile(file) {
 }
 
 async function listClaudeCodeSessions(ctx) {
-  const files = await walkJsonlFiles(CLAUDE_PROJECTS_ROOT);
-  const settled = await Promise.allSettled(files.map((file) => loadClaudeCodeFile(file)));
-  return settled
-    .filter((result) => result.status === 'fulfilled')
-    .map((result) => result.value)
-    .filter((session) => isUnderRoot(session.cwd, ctx.workspaceRoot))
-    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  return listFileSessions(ctx, CLAUDE_PROJECTS_ROOT, SUMMARY_CACHES['claude-code'], loadClaudeCodeFile);
 }
 
 function claudeCodeRelation(session) {
@@ -1284,8 +1291,7 @@ function sessionDashboardSummary(sessions) {
   return { latestBookmarkedSession: compact(latestBookmarkedSession), latestUpdatedSession: compact(latestUpdatedSession) };
 }
 
-async function listSessions(ctx) {
-  const { metadata, error: metadataError } = await readMetadata(ctx);
+async function scanSources(ctx) {
   const sources = [
     ['pi', () => listPiSessions(ctx)],
     ['opencode', () => listOpenCodeSessions(ctx)],
@@ -1302,6 +1308,12 @@ async function listSessions(ctx) {
     else sourceErrors.push(sourceError(source, result.reason));
   }
   sessions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  return { sessions, sourceErrors };
+}
+
+async function listSessions(ctx) {
+  const { metadata, error: metadataError } = await readMetadata(ctx);
+  const { sessions, sourceErrors } = await singleFlight(ctx.workspaceRoot, () => scanSources(ctx));
   return { sessions: sessions.map((session) => attachMetadata(session, metadata)), sourceErrors, metadataError, metadataPath: ctx.metadataPath };
 }
 
@@ -1324,7 +1336,7 @@ export function createSessionBrowserHandler({ basePath = '/', cockpit = null, wo
       if (pathname === '/api/sessions') {
         const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(ctx), '/api/sessions', REQUEST_TIMEOUT_MS)
           .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: ctx.metadataPath }));
-        sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(({ entries, activeEntries, topicAnchors, ...summary }) => summary) });
+        sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(sessionSummary) });
         return true;
       }
       if (pathname === '/api/summary') {
