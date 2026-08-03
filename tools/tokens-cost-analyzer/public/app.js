@@ -1,14 +1,19 @@
 import { escapeHtml } from '/shared/browser/dom.js';
 import { formatDateTime, formatTokens, money } from '/shared/browser/format.js';
 import { sessionBrowserHrefFor, storeSessionBrowserSelection } from '/shared/browser/session-links.js';
+import { createMorphCommit } from '/shared/browser/refresh-commit.js';
+import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
+import { startAutomaticRefresh } from './refresh.js';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
 const state = { data: null, dailyYear: null };
-const statusEl = document.querySelector('#status');
-const workspaceEl = document.querySelector('#workspace-name');
+const $ = (selector, root = document) => root.querySelector(selector);
+const statusEl = $('#status');
+const workspaceEl = $('#workspace-name');
+const reportEl = $('#report');
 const tokenAnalyzerWorkspaceFilter = (workspace) => workspace?.tools?.['tokens-cost-analyzer'] === true;
 window.FrameworkWorkspaceBadge?.set(workspaceEl, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace', workspaceFilter: tokenAnalyzerWorkspaceFilter });
-document.querySelector('#refresh').addEventListener('click', () => load(true));
+$('#refresh').addEventListener('click', () => refresh.request({ reason: 'manual', force: true }));
 document.addEventListener('click', (event) => {
   const yearLink = event.target.closest('[data-daily-year]');
   if (yearLink) {
@@ -19,46 +24,64 @@ document.addEventListener('click', (event) => {
   if (!link) return;
   storeSessionBrowserSelection(link.dataset.sessionBrowserPath, link.dataset.sessionTopicId, { workspaceRoot: state.data?.workspaceRoot });
 });
-load(false);
-setInterval(() => load(true), AUTO_REFRESH_MS);
+const commitReport = createMorphCommit({
+  root: reportEl,
+  render: ({ data }) => {
+    state.data = data;
+    const next = reportEl.cloneNode(true);
+    render(data, next);
+    return next;
+  },
+});
+const refresh = createRefreshCoordinator({
+  fetchData: fetchReport,
+  onStatus: ({ phase, error }) => {
+    if (phase === 'loading') statusEl.textContent = 'Loading local analysis…';
+    if (phase === 'refreshing') statusEl.textContent = 'Refreshing local analysis…';
+    if (phase === 'error') statusEl.textContent = `Error: ${error.message}`;
+  },
+});
+refresh.registerCommitUnit({
+  key: 'report',
+  commit: async (transaction) => {
+    await commitReport(transaction);
+    const data = transaction.data;
+    window.FrameworkWorkspaceBadge?.set(workspaceEl, { root: data.workspaceRoot, tooltipPrefix: 'Workspace', workspaceFilter: tokenAnalyzerWorkspaceFilter });
+    statusEl.textContent = `Generated ${formatDateTime(data.generatedAt)} · ${analysisLabel(data.analysis)} · ${data.workspaceRoot}`;
+  },
+});
+refresh.request({ reason: 'initial' });
+startAutomaticRefresh(refresh, AUTO_REFRESH_MS);
 
-async function load(refresh) {
-  statusEl.textContent = refresh ? 'Refreshing local analysis…' : 'Loading local analysis…';
-  try {
-    const params = new URLSearchParams(location.search);
-    if (refresh) params.set('refresh', '1');
-    const res = await fetch(`api/report${params.toString() ? `?${params}` : ''}`);
-    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
-    state.data = await res.json();
-    window.FrameworkWorkspaceBadge?.set(workspaceEl, { root: state.data.workspaceRoot, tooltipPrefix: 'Workspace', workspaceFilter: tokenAnalyzerWorkspaceFilter });
-    render(state.data);
-    statusEl.textContent = `Generated ${formatDateTime(state.data.generatedAt)} · ${analysisLabel(state.data.analysis)} · ${state.data.workspaceRoot}`;
-  } catch (error) {
-    statusEl.textContent = `Error: ${error.message}`;
-  }
+async function fetchReport({ signal, force }) {
+  const params = new URLSearchParams(location.search);
+  if (force) params.set('refresh', '1');
+  const res = await fetch(`api/report${params.toString() ? `?${params}` : ''}`, { signal });
+  if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+  return res.json();
 }
 
-function render(data) {
-  renderWarnings(data.warnings || []);
-  renderTotals(data.totals, data.subscriptions?.currency || 'EUR');
-  renderMonthly(data.monthly || [], data.subscriptions?.currency || 'EUR');
-  renderDaily(data.daily || []);
-  renderSourceUsage(data.bySource || [], data.totals?.tokens || 0);
-  renderBars('#model-chart', (data.byModel || []).slice(0, 5), 'tokens', (row) => formatTokens(row.tokens));
-  renderBars('#subscription-chart', (data.subscriptions?.byService || []).slice(0, 8).map((r) => ({ key: r.service, amount: r.amount })), 'amount', (row) => money(row.amount, data.subscriptions?.currency || 'EUR'));
-  renderDrivers('#drivers', data.topDrivers || []);
-  renderDrivers('#message-drivers', data.topMessageDrivers || []);
-  renderTrustInspector(data.trustIssues || []);
+function render(data, root = document) {
+  renderWarnings(data.warnings || [], root);
+  renderTotals(data.totals, data.subscriptions?.currency || 'EUR', root);
+  renderMonthly(data.monthly || [], data.subscriptions?.currency || 'EUR', root);
+  renderDaily(data.daily || [], null, root);
+  renderSourceUsage(data.bySource || [], data.totals?.tokens || 0, root);
+  renderBars('#model-chart', (data.byModel || []).slice(0, 5), 'tokens', (row) => formatTokens(row.tokens), root);
+  renderBars('#subscription-chart', (data.subscriptions?.byService || []).slice(0, 8).map((r) => ({ key: r.service, amount: r.amount })), 'amount', (row) => money(row.amount, data.subscriptions?.currency || 'EUR'), root);
+  renderDrivers('#drivers', data.topDrivers || [], root);
+  renderDrivers('#message-drivers', data.topMessageDrivers || [], root);
+  renderTrustInspector(data.trustIssues || [], root);
 }
 
-function renderWarnings(warnings) {
-  const el = document.querySelector('#warnings');
+function renderWarnings(warnings, root) {
+  const el = $('#warnings', root);
   el.classList.toggle('hidden', warnings.length === 0);
   el.innerHTML = warnings.length ? `<strong>Trust flags</strong><ul>${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul>` : '';
 }
 
-function renderTotals(totals, subCurrency) {
-  document.querySelector('#totals').innerHTML = [
+function renderTotals(totals, subCurrency, root) {
+  $('#totals', root).innerHTML = [
     metric('Tokens', formatTokens(totals.tokens), `${totals.records} normalized records`),
     metric('Recorded cost', money(totals.recordedCost, 'USD'), 'native tool/provider facts'),
     metric('Estimated cost', money(totals.estimatedCost, 'USD'), 'local pricing table'),
@@ -67,10 +90,10 @@ function renderTotals(totals, subCurrency) {
   ].join('');
 }
 
-function renderMonthly(monthly, currency) {
+function renderMonthly(monthly, currency, root) {
   const max = Math.max(1, ...monthly.map((m) => m.estimatedCost + m.subscriptionCost));
   const recent = monthly.slice(-18);
-  document.querySelector('#monthly-chart').innerHTML = recent.map((m) => {
+  $('#monthly-chart', root).innerHTML = recent.map((m) => {
     const estimated = barHeight(m.estimatedCost, max);
     const subscription = barHeight(m.subscriptionCost, max);
     const totalHeight = Math.min(100, estimated + subscription);
@@ -85,7 +108,7 @@ function renderMonthly(monthly, currency) {
   }).join('');
 }
 
-function renderDaily(daily, selectedYear = null) {
+function renderDaily(daily, selectedYear = null, root = document) {
   const years = [...new Set(daily.map((row) => Number(row.date.slice(0, 4))))].filter(Boolean).sort((a, b) => b - a);
   const requestedYear = selectedYear || state.dailyYear;
   const year = years.includes(requestedYear) ? requestedYear : (years[0] || new Date().getUTCFullYear());
@@ -117,12 +140,12 @@ function renderDaily(daily, selectedYear = null) {
   ];
   const legend = legendLabels.map((label, level) => `<i class="day level-${level}" title="${label}" aria-label="${label}" tabindex="0"></i>`).join('');
   const yearLinks = years.map((value) => `<button class="heatmap-year${value === year ? ' active' : ''}" data-daily-year="${value}"${value === year ? ' aria-current="true"' : ''}>${value}</button>`).join('');
-  document.querySelector('#daily-heatmap').innerHTML = `<div class="heatmap-days"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="heatmap-scroll"><div class="heatmap-grid">${cells.join('')}</div></div><div class="heatmap-footer"><div class="heatmap-years">${yearLinks}</div><div class="heatmap-legend"><span>Less</span>${legend}<span>More</span></div></div>`;
-  document.querySelector('#daily-summary').textContent = `${formatTokens(yearTokens)} across ${activeDays} active UTC days`;
-  renderDailyStats([...usage.values()], yearTokens, activeDays);
+  $('#daily-heatmap', root).innerHTML = `<div class="heatmap-days"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="heatmap-scroll"><div class="heatmap-grid">${cells.join('')}</div></div><div class="heatmap-footer"><div class="heatmap-years">${yearLinks}</div><div class="heatmap-legend"><span>Less</span>${legend}<span>More</span></div></div>`;
+  $('#daily-summary', root).textContent = `${formatTokens(yearTokens)} across ${activeDays} active UTC days`;
+  renderDailyStats([...usage.values()], yearTokens, activeDays, root);
 }
 
-function renderDailyStats(rows, totalTokens, activeDays) {
+function renderDailyStats(rows, totalTokens, activeDays, root) {
   const sorted = rows.slice().sort((a, b) => a.date.localeCompare(b.date));
   const first = sorted[0]?.date;
   const last = sorted.at(-1)?.date;
@@ -133,29 +156,29 @@ function renderDailyStats(rows, totalTokens, activeDays) {
   const recent = end ? windowTokens(0) : 0;
   const previous = end ? windowTokens(30) : 0;
   const change = previous ? `${recent >= previous ? '+' : ''}${Math.round((recent - previous) / previous * 100)}%` : '—';
-  document.querySelector('#daily-stats').innerHTML = [
+  $('#daily-stats', root).innerHTML = [
     compactStat('Average/day', formatTokens(calendarDays ? totalTokens / calendarDays : 0), `${calendarDays} observed calendar days`),
     compactStat('Average/active day', formatTokens(activeDays ? totalTokens / activeDays : 0), `${activeDays} days with usage`),
     compactStat('Recent 30-day change', change, 'Latest 30 calendar days versus the prior 30'),
   ].join('');
 }
 
-function renderSourceUsage(rows, totalTokens) {
-  renderBars('#source-chart', rows, 'tokens', (row) => `${formatTokens(row.tokens)} · ${totalTokens ? Math.round(row.tokens / totalTokens * 100) : 0}%`);
+function renderSourceUsage(rows, totalTokens, root) {
+  renderBars('#source-chart', rows, 'tokens', (row) => `${formatTokens(row.tokens)} · ${totalTokens ? Math.round(row.tokens / totalTokens * 100) : 0}%`, root);
 }
 
-function renderBars(selector, rows, field, labelFn) {
+function renderBars(selector, rows, field, labelFn, root) {
   const max = Math.max(1, ...rows.map((r) => Number(r[field]) || 0));
-  document.querySelector(selector).innerHTML = rows.map((row) => `<div class="bar-row"><div class="name" title="${escapeHtml(row.key)}">${escapeHtml(row.key)}</div><div class="bar"><div class="fill" style="width:${Math.max(2, ((Number(row[field]) || 0) / max) * 100)}%"></div></div><div class="amount">${labelFn(row)}</div></div>`).join('') || '<p class="status">No data yet.</p>';
+  $(selector, root).innerHTML = rows.map((row) => `<div class="bar-row"><div class="name" title="${escapeHtml(row.key)}">${escapeHtml(row.key)}</div><div class="bar"><div class="fill" style="width:${Math.max(2, ((Number(row[field]) || 0) / max) * 100)}%"></div></div><div class="amount">${labelFn(row)}</div></div>`).join('') || '<p class="status">No data yet.</p>';
 }
 
 function sessionBrowserHref(driver) {
   return sessionBrowserHrefFor(driver, { fallbackRoute: '../sessions/' });
 }
 
-function renderTrustInspector(issues) {
-  const panel = document.querySelector('#trust-inspector-panel');
-  const el = document.querySelector('#trust-inspector');
+function renderTrustInspector(issues, root) {
+  const panel = $('#trust-inspector-panel', root);
+  const el = $('#trust-inspector', root);
   panel.classList.toggle('hidden', issues.length === 0);
   el.innerHTML = issues.map((issue) => {
     const model = issue.modelLabel || issue.model || 'unknown-model';
@@ -167,8 +190,8 @@ function renderTrustInspector(issues) {
   }).join('');
 }
 
-function renderDrivers(selector, drivers) {
-  document.querySelector(selector).innerHTML = drivers.map((r) => {
+function renderDrivers(selector, drivers, root) {
+  $(selector, root).innerHTML = drivers.map((r) => {
     const model = r.modelLabel || r.model || 'unknown-model';
     const count = r.recordCount ? `<span class="pill">${r.recordCount} records</span>` : '';
     const body = `<div class="driver-top"><span>${escapeHtml(r.date || 'unknown')}</span><span>${escapeHtml(r.source || '')}</span></div><strong title="${escapeHtml(model)}">${escapeHtml(model)}</strong><div class="pills"><span class="pill">${formatTokens(r.totalTokens || 0)}</span><span class="pill">recorded ${money(r.recordedCost, 'USD')}</span><span class="pill ${r.estimatedCost == null ? 'warn' : ''}">estimated ${money(r.estimatedCost, 'USD')}</span>${count}<span class="pill ${r.confidence === 'unknown' ? 'warn' : ''}">${escapeHtml(r.confidence || 'unknown')}</span></div>`;

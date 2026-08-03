@@ -68,4 +68,8 @@ test('server report endpoint analyzes fixture data and returns dashboard totals'
     { key: 'pi', records: 1, tokens: 13 },
   ]);
   assert.ok(report.warnings.some((warning) => warning.startsWith('opencode:')));
+
+  const browserModule = await fetch(`http://127.0.0.1:${port}/shared/refresh-coordinator.mjs`);
+  assert.equal(browserModule.status, 200);
+  assert.equal(browserModule.headers.get('content-type'), 'text/javascript; charset=utf-8');
 });

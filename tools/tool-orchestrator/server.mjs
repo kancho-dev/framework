@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTaskBrowserHandler } from '../task-browser/server.mjs';
 import { createSessionBrowserHandler } from '../session-browser/server.mjs';
@@ -16,6 +16,13 @@ const baseToolNav = [
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
+const SHARED_WEB_DIR = join(TOOL_DIR, '..', 'shared-web');
+const TOOL_PUBLIC_DIRS = new Map([
+  ['task-browser', join(TOOL_DIR, '..', 'task-browser', 'public')],
+  ['session-browser', join(TOOL_DIR, '..', 'session-browser', 'public')],
+  ['tokens-cost-analyzer', join(TOOL_DIR, '..', 'tokens-cost-analyzer', 'public')],
+]);
+const TOOL_ASSET_EXTENSIONS = new Set(['.js', '.css', '.svg', '.png', '.ico', '.webp', '.woff', '.woff2', '.map']);
 const PORT = parsePort(process.env.TOOL_ORCHESTRATOR_PORT || process.env.PORT || '8789');
 const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
 const DEFAULT_WORKSPACE_CONFIG_PATH = join(WORKSPACE_ROOT, '.tools-config', 'tool-orchestrator', 'workspaces.json');
@@ -267,6 +274,27 @@ function publicWorkspace(workspace) {
   return { id: workspace.id, name: workspace.name, root: workspace.root, tools: workspace.tools || {} };
 }
 
+async function routeToMountedToolAsset(req, res) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  const pathname = new URL(req.url || '/', 'http://localhost').pathname;
+  for (const tool of baseToolNav) {
+    const basePath = tool.route.slice(0, -1);
+    if (!pathname.startsWith(`${basePath}/`)) continue;
+    const rawAssetPath = pathname.slice(basePath.length);
+    let assetPath;
+    try { assetPath = decodeURIComponent(rawAssetPath); }
+    catch { sendJson(res, 400, { error: 'Invalid asset path' }); return true; }
+    if (assetPath.startsWith('/shared/')) {
+      await serveStaticPath(res, SHARED_WEB_DIR, rawAssetPath.slice('/shared'.length));
+      return true;
+    }
+    if (!TOOL_ASSET_EXTENSIONS.has(extname(assetPath).toLowerCase())) return false;
+    await serveStaticPath(res, TOOL_PUBLIC_DIRS.get(tool.id), rawAssetPath);
+    return true;
+  }
+  return false;
+}
+
 async function routeToMountedTool(req, res, workspace) {
   const workspaceHandlers = handlers.get(workspace.id);
   for (const tool of baseToolNav) {
@@ -290,7 +318,8 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/api/dashboard-config' && req.method === 'GET') return sendJson(res, 200, await readDashboardConfig(workspace));
     if (url.pathname === '/api/dashboard-config' && req.method === 'PUT') return sendJson(res, 200, await writeDashboardConfig(workspace, await readJsonBody(req)));
     if (url.pathname === '/api/subscription-limits') return sendJson(res, 200, await readSubscriptionLimits({ force: url.searchParams.get('refresh') === '1' }));
-    if (url.pathname.startsWith('/shared/')) return serveStaticPath(res, join(TOOL_DIR, '..', 'shared-web'), url.pathname.replace('/shared', '') || '/');
+    if (url.pathname.startsWith('/shared/')) return serveStaticPath(res, SHARED_WEB_DIR, url.pathname.replace('/shared', '') || '/');
+    if (await routeToMountedToolAsset(req, res)) return;
     if (await routeToMountedTool(req, res, workspace)) return;
     await serveStaticPath(res, PUBLIC_DIR, url.pathname);
   } catch (error) {
