@@ -15,10 +15,11 @@ test('dirty Steering Notes drafts survive refresh and detect remote changes', ()
   assert.equal(draft.state, 'conflict');
 });
 
-test('empty Steering Notes collapse after consumption while pending notes and dirty drafts stay open', () => {
+test('Steering Notes defaults follow note state while live disclosure preference survives refresh', () => {
   assert.equal(steeringDisclosureOpen({ pending: false, dirty: false }), false);
-  assert.equal(steeringDisclosureOpen({ preference: true, pending: false, dirty: false }), false);
+  assert.equal(steeringDisclosureOpen({ preference: true, pending: false, dirty: false }), true);
   assert.equal(steeringDisclosureOpen({ pending: true, dirty: false }), true);
+  assert.equal(steeringDisclosureOpen({ preference: false, pending: true, dirty: false }), false);
   assert.equal(steeringDisclosureOpen({ preference: false, pending: false, dirty: true }), true);
 });
 

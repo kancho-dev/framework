@@ -1,8 +1,8 @@
 import { els } from './dom-elements.js';
 import { state } from './state.js';
 
-export async function fetchTasks() {
-  const res = await fetch('api/tasks');
+export async function fetchTasks({ signal } = {}) {
+  const res = await fetch('api/tasks', { signal });
   if (!res.ok) throw new Error(`Load failed: ${res.status}`);
   return res.json();
 }

@@ -9,7 +9,6 @@ export const state = {
   tagDrafts: {},
   relationDrafts: {},
   steeringDrafts: {},
-  steeringOpen: {},
   relationEditorOpen: false,
   revealSelectedInBoard: false,
 };

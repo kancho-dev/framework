@@ -3,7 +3,7 @@ import { state, selectedTask, selectTaskKey, continuityKey, persistSelectedKey }
 import { unique, sortTasks } from './task-utils.js';
 import { restoreFilters, persistFilters, resetFilters, renderStatusFilters, matches, fillSelect } from './filters.js';
 import { captureBoardScroll, restoreBoardScroll, renderBoard, showSelectedTaskInBoard as revealSelectedTaskInBoard, scrollSelectedCardIntoView, shouldRevealRestoredSelection } from './board.js';
-import { captureDetailFocus, isEditingAutocompleteInput, restoreDetailFocus, renderDetail, attachDetailAutocompletes, continuePrompt } from './detail.js';
+import { captureDetailFocus, restoreDetailFocus, renderDetail, renderDetailStatic, renderDetailMetadata, renderDetailSteering, attachDetailAutocompletes, continuePrompt } from './detail.js';
 import { fetchPreview, fetchTasks, saveMetadata, saveSteeringNotes } from './api.js';
 import { renderMarkdown } from './markdown.js';
 import { editSteeringDraft, savedSteeringDraft } from './steering-notes.js';
@@ -11,6 +11,8 @@ import { addRelationPatch, currentTags, relationInput, removeRelationPatch, task
 import { clearRequestedSelection, requestedSelection } from './selection.js';
 import { copyText as copyClipboardText, flashButton } from '/shared/browser/clipboard.js';
 import { formatToolTitle } from '/shared/browser/format.js';
+import { createRefreshInteractionRegistry } from '/shared/browser/refresh-interactions.js';
+import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
 
 window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
 
@@ -42,38 +44,109 @@ function showSelectedTaskInBoard() {
   renderStatusFilters();
 }
 
-async function load() {
-  els.status.textContent = 'Scanning tasks…';
-  await loadTasks({ preserveScroll: true });
-}
-
-async function loadTasks({ preserveScroll = false, revealRestoredSelection = true } = {}) {
-  if (isEditingAutocompleteInput()) return;
-  const boardScroll = preserveScroll ? captureBoardScroll() : null;
-  const data = await fetchTasks();
-  Object.assign(state, data);
-  if (state.selectedStatuses.size === 0) state.selectedStatuses = new Set(data.statuses.filter((status) => !['done', 'paused'].includes(status)));
-  restoreSelectedKey();
-  document.title = formatToolTitle(data.workspaceName, 'Tasks');
-  window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: data.workspaceName, root: data.workspaceRoot, tooltipPrefix: 'Workspace' });
-  renderStatusFilters();
-  fillSelect(els.projectFilter, unique(data.tasks.map((task) => task.project)), 'All projects');
-  fillSelect(els.priorityFilter, data.priorities, 'All priorities');
-  restoreFilters();
-  renderStatusFilters();
-  if (revealRestoredSelection && shouldRevealRestoredSelection(continuityKey())) state.revealSelectedInBoard = true;
-  render({ preserveScroll: boardScroll });
-}
-
-function render({ preserveScroll = null } = {}) {
-  const boardScroll = preserveScroll === true ? captureBoardScroll() : preserveScroll;
-  const focus = captureDetailFocus();
-  const visible = state.tasks.filter(matches);
+function reconcileSelectedTask() {
   if (state.selectedKey && !state.tasks.some((task) => task.key === state.selectedKey)) {
     state.selectedKey = null;
     persistSelectedKey();
   }
   document.body.classList.toggle('detail-open', Boolean(state.selectedKey));
+}
+
+let appliedGeneration = 0;
+function applyRefreshData({ data, generation, reason }) {
+  if (appliedGeneration >= generation) return;
+  appliedGeneration = generation;
+  Object.assign(state, data);
+  if (state.selectedStatuses.size === 0) state.selectedStatuses = new Set(data.statuses.filter((status) => !['done', 'paused'].includes(status)));
+  restoreSelectedKey();
+  reconcileSelectedTask();
+  document.title = formatToolTitle(data.workspaceName, 'Tasks');
+  window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: data.workspaceName, root: data.workspaceRoot, tooltipPrefix: 'Workspace' });
+  fillSelect(els.projectFilter, unique(data.tasks.map((task) => task.project)), 'All projects');
+  fillSelect(els.priorityFilter, data.priorities, 'All priorities');
+  restoreFilters();
+  renderStatusFilters();
+  if (reason !== 'poll' && shouldRevealRestoredSelection(continuityKey())) state.revealSelectedInBoard = true;
+}
+
+function renderTaskCountStatus() {
+  const visible = state.tasks.filter(matches);
+  els.status.textContent = `${visible.length} of ${state.tasks.length} tasks • metadata: ${state.metadataPath}`;
+}
+
+function renderBoardUnit(transaction, boardScroll = captureBoardScroll()) {
+  applyRefreshData(transaction);
+  const visible = state.tasks.filter(matches);
+  renderTaskCountStatus();
+  renderBoard(visible);
+  if (!state.revealSelectedInBoard) restoreBoardScroll(boardScroll);
+  requestAnimationFrame(scrollSelectedCardIntoView);
+}
+
+const refresh = createRefreshCoordinator({
+  fetchData: fetchTasks,
+  onStatus: ({ phase, error }) => {
+    if (phase === 'loading') els.status.textContent = 'Scanning tasks…';
+    if (phase === 'refreshing') els.status.textContent = 'Refreshing tasks…';
+    if (phase === 'update-ready') els.status.textContent = 'Fresh task data is ready; finish the active interaction to update.';
+    if (phase === 'committed') renderTaskCountStatus();
+    if (phase === 'error') els.status.textContent = error.message;
+  },
+});
+function releaseUnit(key) {
+  refresh.release(key).catch((error) => { els.status.textContent = error.message; });
+}
+const boardInteractions = createRefreshInteractionRegistry({ root: els.board, onRelease: () => releaseUnit('board') });
+const metadataInteractions = createRefreshInteractionRegistry({ root: els.detailMeta, onRelease: () => releaseUnit('detail-metadata') });
+const steeringInteractions = createRefreshInteractionRegistry({ root: els.steeringNotes, onRelease: () => releaseUnit('detail-steering') });
+refresh.registerCommitUnit({ key: 'board', isDeferred: () => boardInteractions.isDeferred(els.board), commit: async (transaction) => renderBoardUnit(transaction) });
+function hasStaticDetailSelection() {
+  const selection = document.getSelection();
+  if (!selection || selection.isCollapsed || !selection.anchorNode || !selection.focusNode) return false;
+  const contains = (root, node) => root.contains(node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+  if (!contains(els.detail, selection.anchorNode) || !contains(els.detail, selection.focusNode)) return false;
+  return !contains(els.detailMeta, selection.anchorNode)
+    && !contains(els.detailMeta, selection.focusNode)
+    && !contains(els.steeringNotes, selection.anchorNode)
+    && !contains(els.steeringNotes, selection.focusNode);
+}
+
+let staticDetailSelectionActive = false;
+document.addEventListener('selectionchange', () => {
+  const active = hasStaticDetailSelection();
+  if (staticDetailSelectionActive && !active) releaseUnit('detail');
+  staticDetailSelectionActive = active;
+});
+refresh.registerCommitUnit({
+  key: 'detail',
+  isDeferred: () => Boolean(selectedTask()) && hasStaticDetailSelection(),
+  commit: async (transaction) => { applyRefreshData(transaction); renderDetailStatic(selectedTask()); },
+});
+refresh.registerCommitUnit({
+  key: 'detail-metadata',
+  isDeferred: () => metadataInteractions.isDeferred(els.detailMeta),
+  commit: async (transaction) => {
+    applyRefreshData(transaction);
+    const focus = captureDetailFocus();
+    window.FrameworkAutocomplete?.cleanup(els.detailMeta);
+    renderDetailMetadata(selectedTask());
+    attachDetailAutocompletes();
+    restoreDetailFocus(focus);
+  },
+});
+refresh.registerCommitUnit({
+  key: 'detail-steering',
+  isDeferred: () => steeringInteractions.isDeferred(els.steeringNotes)
+    || els.steeringNotes.contains(document.activeElement)
+    || Boolean(state.selectedKey && state.steeringDrafts[state.selectedKey]?.dirty),
+  commit: async (transaction) => { applyRefreshData(transaction); renderDetailSteering(selectedTask()); },
+});
+
+function render({ preserveScroll = null } = {}) {
+  const boardScroll = preserveScroll === true ? captureBoardScroll() : preserveScroll;
+  const focus = captureDetailFocus();
+  const visible = state.tasks.filter(matches);
+  reconcileSelectedTask();
   els.status.textContent = `${visible.length} of ${state.tasks.length} tasks • metadata: ${state.metadataPath}`;
   renderBoard(visible);
   window.FrameworkAutocomplete?.cleanup(els.detailMeta);
@@ -133,10 +206,9 @@ els.board.addEventListener('drop', async (event) => {
   }
 });
 
-els.refresh.addEventListener('click', () => load().catch((error) => { els.status.textContent = error.message; }));
+els.refresh.addEventListener('click', () => refresh.request({ reason: 'manual', force: true }));
 setInterval(() => {
-  if (!els.autoRefresh.checked) return;
-  loadTasks({ preserveScroll: true, revealRestoredSelection: false }).catch((error) => { els.status.textContent = error.message; });
+  if (els.autoRefresh.checked) refresh.request({ reason: 'poll' });
 }, 10_000);
 els.filter.addEventListener('input', () => { persistFilters(); render(); });
 els.statusFilter.addEventListener('change', (event) => {
@@ -297,10 +369,6 @@ function removeRelation(form, label, relatedKey) {
   saveMetadataPatch(form, patch).catch((error) => { els.status.textContent = error.message; });
 }
 
-els.steeringNotesDisclosure.addEventListener('toggle', () => {
-  if (state.selectedKey) state.steeringOpen[state.selectedKey] = els.steeringNotesDisclosure.open;
-});
-
 els.steeringNotes.addEventListener('input', (event) => {
   if (event.target.name !== 'steeringNotes') return;
   const form = event.target.closest('.steering-notes-editor');
@@ -317,8 +385,8 @@ async function persistSteeringNotes(form, content) {
   try {
     const note = await saveSteeringNotes(key, content, draft.revision);
     state.steeringDrafts[key] = savedSteeringDraft(note);
-    state.steeringOpen[key] = Boolean(note.content.trim());
     render({ preserveScroll: true });
+    releaseUnit('detail-steering');
   } catch (error) {
     draft.state = error.status === 409 ? 'conflict' : 'error';
     draft.message = error.message;
@@ -372,4 +440,4 @@ for (const select of [els.projectFilter, els.priorityFilter]) {
   window.FrameworkSelect?.attach(select, { maxVisible: 12 });
 }
 
-load().catch((error) => { els.status.textContent = error.message; });
+refresh.request({ reason: 'initial' });
