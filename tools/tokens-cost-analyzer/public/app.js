@@ -211,4 +211,8 @@ function compactCurrency(value, currency) {
   const amount = Number(value) || 0;
   return new Intl.NumberFormat('en', { style: 'currency', currency, notation: 'compact', maximumFractionDigits: Math.abs(amount) >= 100 ? 0 : 1 }).format(amount);
 }
-function barHeight(value, max) { return Math.max(value > 0 ? 7 : 0, (Number(value) || 0) / max * 86); }
+function barHeight(value, max) {
+  const amount = Number(value) || 0;
+  if (amount <= 0) return 0;
+  return 7 + (amount / Math.max(1, max)) * 72;
+}
