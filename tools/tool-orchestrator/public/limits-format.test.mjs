@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatReset, gaugeLevel, isStale, limitReasonText, remainingFor } from './limits-format.js';
+import { formatReset, gaugeLevel, isStale, limitReasonText, LIMITS_REFRESH_MS, remainingFor } from './limits-format.js';
 
 const NOW = Date.parse('2026-07-24T20:00:00.000Z');
 
@@ -56,10 +56,11 @@ test('explains every coarse unavailable reason without echoing provider detail',
   assert.equal(limitReasonText(undefined), 'no available source');
 });
 
-test('marks data stale after the refresh interval lapses or a refresh fails', () => {
-  const data = { refreshIntervalMs: 300_000, providers: [] };
-  assert.equal(isStale({ data, failed: false, fetchedAt: NOW - 60_000 }, NOW), false);
-  assert.equal(isStale({ data, failed: false, fetchedAt: NOW - 600_000 }, NOW), true);
+test('marks data stale after 1.5 refresh intervals or when a refresh fails', () => {
+  const data = { refreshIntervalMs: 600_000, providers: [] };
+  assert.equal(LIMITS_REFRESH_MS, 600_000);
+  assert.equal(isStale({ data, failed: false, fetchedAt: NOW - 899_999 }, NOW), false);
+  assert.equal(isStale({ data, failed: false, fetchedAt: NOW - 900_001 }, NOW), true);
   assert.equal(isStale({ data, failed: true, fetchedAt: NOW }, NOW), true);
   assert.equal(isStale({ data: null, failed: true, fetchedAt: 0 }, NOW), false);
 });

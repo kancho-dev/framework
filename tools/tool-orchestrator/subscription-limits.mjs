@@ -9,7 +9,7 @@ import { join } from 'node:path';
 // coarse `unavailable` reason instead of surfacing provider payloads.
 
 export const WEEKLY_WINDOW_MINS = 10080;
-export const CACHE_TTL_MS = 60_000;
+export const CACHE_TTL_MS = 540_000;
 const CODEX_TIMEOUT_MS = 8000;
 const CLAUDE_TIMEOUT_MS = 5000;
 const CLAUDE_API_BASE = 'https://api.anthropic.com';
@@ -196,16 +196,23 @@ export async function subscriptionLimits({ readCodex = readCodexRateLimits, read
     providerGauges([CODEX], readCodex, (response, at) => [codexGauge(response, at)], asOf),
     providerGauges(CLAUDE_WINDOWS.map((window) => window.provider), readClaude, claudeGauges, asOf),
   ]);
-  return { asOf, refreshIntervalMs: 300_000, providers: [...codex, ...claude] };
+  return { asOf, refreshIntervalMs: 600_000, providers: [...codex, ...claude] };
 }
 
 export function createSubscriptionLimitsReader(options = {}) {
   let cached = null;
+  let inFlight = null;
   return async function read({ force = false } = {}) {
     const fresh = cached && Date.now() - cached.at < CACHE_TTL_MS;
     if (fresh && !force) return cached.value;
-    const value = await subscriptionLimits(options);
-    cached = { at: Date.now(), value };
-    return value;
+    if (inFlight) return inFlight;
+
+    inFlight = subscriptionLimits(options)
+      .then((value) => {
+        cached = { at: Date.now(), value };
+        return value;
+      })
+      .finally(() => { inFlight = null; });
+    return inFlight;
   };
 }

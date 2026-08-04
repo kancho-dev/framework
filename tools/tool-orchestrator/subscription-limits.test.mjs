@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { claudeGauges, codexGauge, selectCodexWeeklyWindow, subscriptionLimits, WEEKLY_WINDOW_MINS } from './subscription-limits.mjs';
+import { CACHE_TTL_MS, claudeGauges, codexGauge, createSubscriptionLimitsReader, selectCodexWeeklyWindow, subscriptionLimits, WEEKLY_WINDOW_MINS } from './subscription-limits.mjs';
 
 const [weeklyGauge, fiveHourGauge] = [
   (usage, asOf) => claudeGauges(usage, asOf)[0],
@@ -153,5 +153,61 @@ test('stamps every provider with the same as-of time so staleness is comparable'
     now: () => new Date(ASOF),
   });
   assert.deepEqual(summary.providers.map((provider) => provider.asOf), [ASOF, ASOF, ASOF]);
-  assert.equal(summary.refreshIntervalMs, 300_000);
+  assert.equal(summary.refreshIntervalMs, 600_000);
+  assert.equal(CACHE_TTL_MS, 540_000);
+});
+
+test('collapses concurrent normal and forced reads onto one provider fetch', async () => {
+  let resolveCodex;
+  let codexReads = 0;
+  const read = createSubscriptionLimitsReader({
+    readCodex: () => {
+      codexReads += 1;
+      return new Promise((resolve) => { resolveCodex = resolve; });
+    },
+    readClaude: async () => ({}),
+    now: () => new Date(ASOF),
+  });
+
+  const first = read();
+  const concurrent = read();
+  const forced = read({ force: true });
+  assert.equal(codexReads, 1);
+  resolveCodex({ rateLimits: {} });
+  const [firstValue, concurrentValue, forcedValue] = await Promise.all([first, concurrent, forced]);
+  assert.strictEqual(concurrentValue, firstValue);
+  assert.strictEqual(forcedValue, firstValue);
+});
+
+test('serves fresh cached data normally while manual refresh bypasses freshness', async () => {
+  let codexReads = 0;
+  const read = createSubscriptionLimitsReader({
+    readCodex: async () => { codexReads += 1; return { rateLimits: {} }; },
+    readClaude: async () => ({}),
+    now: () => new Date(ASOF),
+  });
+
+  await read();
+  await read();
+  assert.equal(codexReads, 1);
+  await read({ force: true });
+  assert.equal(codexReads, 2);
+});
+
+test('clears a rejected in-flight read so the next attempt can recover', async () => {
+  let attempts = 0;
+  const read = createSubscriptionLimitsReader({
+    readCodex: async () => ({ rateLimits: {} }),
+    readClaude: async () => ({}),
+    now: () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('clock-unavailable');
+      return new Date(ASOF);
+    },
+  });
+
+  await assert.rejects(read(), /clock-unavailable/);
+  const recovered = await read();
+  assert.equal(attempts, 2);
+  assert.equal(recovered.asOf, ASOF);
 });

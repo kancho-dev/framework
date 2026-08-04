@@ -81,10 +81,10 @@ remaining-percent thresholds. An absent or null window is unavailable, never
 100% remaining.
 
 Data comes from `GET /api/subscription-limits` (add `?refresh=1` to bypass the
-60-second server cache) and returns per provider `status` (`ok` / `unavailable`),
+nine-minute server cache) and returns per provider `status` (`ok` / `unavailable`),
 `remainingPercent`, `resetsAt`, `windowLabel`, `windowDurationMins`, `source`,
 `asOf`, and a coarse
-`reason` when not `ok`. The widget refreshes every five minutes, on window focus,
+`reason` when not `ok`. The widget refreshes every ten minutes, on window focus,
 and on demand through its refresh button, preserving the last good values when a
 refresh fails.
 

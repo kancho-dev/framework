@@ -1,4 +1,4 @@
-export const LIMITS_REFRESH_MS = 300_000;
+export const LIMITS_REFRESH_MS = 600_000;
 
 const REASON_TEXT = {
   'codex-unavailable': 'Codex CLI not available',
