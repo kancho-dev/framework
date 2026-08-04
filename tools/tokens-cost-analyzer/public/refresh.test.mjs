@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { startAutomaticRefresh } from './refresh.js';
+import { reportRequestUrl, startAutomaticRefresh } from './refresh.js';
+
+test('report request marks only manual refreshes as manual', () => {
+  assert.equal(reportRequestUrl('?workspace=main', { force: true, reason: 'manual' }), 'api/report?workspace=main&refresh=1&manual=1');
+  assert.equal(reportRequestUrl('?workspace=main', { force: true, reason: 'poll' }), 'api/report?workspace=main&refresh=1');
+  assert.equal(reportRequestUrl('?workspace=main', { reason: 'initial' }), 'api/report?workspace=main');
+});
 
 test('automatic refresh forces report analysis on each poll', () => {
   const requests = [];

@@ -15,6 +15,8 @@ const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspace
 const OUTPUT_DIR = resolve(process.env.TOKENS_COST_ANALYZER_OUT || join(WORKSPACE_ROOT, '.tools-config', 'tokens-cost-analyzer'));
 const BASE_PATH = normalizeBasePath(process.env.BASE_PATH || '');
 const ANALYSIS_LIMIT = parseAnalysisLimit(process.env.TOKENS_COST_ANALYZER_LIMIT);
+const MIN_ARTIFACT_AGE_MS = 9 * 60 * 1000;
+const analysisFlights = new Map();
 
 export function createTokensCostAnalyzerHandler(options = {}) {
   const workspaceRoot = resolve(options.workspaceRoot || WORKSPACE_ROOT);
@@ -32,7 +34,10 @@ export function createTokensCostAnalyzerHandler(options = {}) {
     const pathname = stripBasePath(url.pathname, basePath);
     if (pathname === null) return false;
     try {
-      if (pathname === '/api/report') { sendJson(res, 200, await loadReport({ workspaceRoot, outputDir, refresh: url.searchParams.get('refresh') === '1', analysisLimit })); return true; }
+      const refresh = url.searchParams.get('refresh') === '1';
+      const manual = url.searchParams.get('manual') === '1';
+      if (pathname === '/api/report') { sendJson(res, 200, await loadReport({ workspaceRoot, outputDir, refresh, manual, analysisLimit })); return true; }
+      if (pathname === '/api/daily-usage') { sendJson(res, 200, await loadDailyUsage({ workspaceRoot, outputDir, refresh, manual, analysisLimit })); return true; }
       if (pathname.startsWith('/shared/')) { await serveStaticPath(res, SHARED_WEB_DIR, pathname.replace('/shared', '')); return true; }
       if (pathname === '/') {
         const html = await readStaticText(PUBLIC_DIR, '/index.html');
@@ -55,16 +60,47 @@ export function createTokensCostAnalyzerHandler(options = {}) {
   };
 }
 
-async function loadReport({ workspaceRoot, outputDir, refresh, analysisLimit }) {
+async function loadReport(options) {
+  await ensureArtifacts(options);
+  const normalized = JSON.parse(await readFile(join(options.outputDir, 'normalized.json'), 'utf8'));
+  const dailyArtifact = JSON.parse(await readFile(join(options.outputDir, 'daily.json'), 'utf8'));
+  const subscriptions = await readSubscriptions(join(options.outputDir, 'subscriptions.json'));
+  return summarize(normalized, dailyArtifact.daily || [], subscriptions);
+}
+
+async function loadDailyUsage(options) {
+  await ensureArtifacts(options);
+  return JSON.parse(await readFile(join(options.outputDir, 'daily.json'), 'utf8'));
+}
+
+export async function ensureArtifacts({ workspaceRoot, outputDir, refresh, manual, analysisLimit, runAnalysis = executeAnalysis, now = Date.now }) {
   const normalizedPath = join(outputDir, 'normalized.json');
-  if (refresh || !(await exists(normalizedPath))) {
-    const analyzeArgs = [join(TOOL_DIR, 'analyze.mjs'), '--workspace', workspaceRoot, '--out', outputDir];
-    if (analysisLimit) analyzeArgs.push('--limit', analysisLimit);
-    await execFileAsync(process.execPath, analyzeArgs, { maxBuffer: 1024 * 1024 * 20 });
+  const dailyPath = join(outputDir, 'daily.json');
+  const artifactsExist = await exists(normalizedPath) && await exists(dailyPath);
+  if (artifactsExist && (!refresh || (!manual && await artifactIsFresh(dailyPath, now)))) return;
+  let flight = analysisFlights.get(outputDir);
+  if (!flight) {
+    flight = runAnalysis({ workspaceRoot, outputDir, analysisLimit });
+    analysisFlights.set(outputDir, flight);
+    flight.finally(() => analysisFlights.delete(outputDir)).catch(() => {});
   }
-  const normalized = JSON.parse(await readFile(normalizedPath, 'utf8'));
-  const subscriptions = await readSubscriptions(join(outputDir, 'subscriptions.json'));
-  return summarize(normalized, subscriptions);
+  await flight;
+}
+
+async function executeAnalysis({ workspaceRoot, outputDir, analysisLimit }) {
+  const analyzeArgs = [join(TOOL_DIR, 'analyze.mjs'), '--workspace', workspaceRoot, '--out', outputDir];
+  if (analysisLimit) analyzeArgs.push('--limit', analysisLimit);
+  await execFileAsync(process.execPath, analyzeArgs, { maxBuffer: 1024 * 1024 * 20 });
+}
+
+async function artifactIsFresh(path, now) {
+  try {
+    const artifact = JSON.parse(await readFile(path, 'utf8'));
+    const generatedAt = Date.parse(artifact.generatedAt);
+    return Number.isFinite(generatedAt) && now() - generatedAt < MIN_ARTIFACT_AGE_MS;
+  } catch {
+    return false;
+  }
 }
 
 function parseAnalysisLimit(value) {
@@ -99,15 +135,9 @@ async function readSubscriptions(path) {
   };
 }
 
-function summarize(normalized, subscriptions) {
+function summarize(normalized, daily, subscriptions) {
   const records = normalized.records || [];
   const byMonth = group(records, (r) => (r.date || 'unknown').slice(0, 7));
-  const byDay = group(records.filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date || '')), (r) => r.date);
-  const daily = [...byDay.entries()].map(([date, rows]) => ({
-    date,
-    tokens: sum(rows, 'totalTokens'),
-    records: rows.length,
-  })).sort((a, b) => a.date.localeCompare(b.date));
   const monthly = [...byMonth.entries()].map(([month, rows]) => {
     const tokens = sum(rows, 'totalTokens');
     const recorded = sum(rows, 'recordedCost');

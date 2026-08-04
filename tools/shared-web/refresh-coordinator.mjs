@@ -60,7 +60,7 @@ export function createRefreshCoordinator({ fetchData, isValid = () => true, getI
     status(request.reason === 'initial' ? 'loading' : 'refreshing', { reason: request.reason });
 
     try {
-      const data = await fetchData({ signal: controller.signal, force: request.force, identity: request.identity });
+      const data = await fetchData({ signal: controller.signal, force: request.force, reason: request.reason, identity: request.identity });
       if (request.generation !== generation || controller.signal.aborted) return;
       if (!identityIsCurrent(request.identity)) {
         status('idle', { reason: request.reason, dropped: 'identity-mismatch' });

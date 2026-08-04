@@ -49,6 +49,14 @@ test('tool assets load without a workspace query while pages and APIs remain gat
   const origin = `http://127.0.0.1:${port}`;
   await waitFor(origin, child);
 
+  const disabledConfig = await (await fetch(`${origin}/api/dashboard-config`)).json();
+  assert.ok(!disabledConfig.catalog.some((widget) => widget.type === 'daily-usage'));
+  const enabledConfig = await (await fetch(`${origin}/api/dashboard-config?workspace=enabled`)).json();
+  assert.ok(enabledConfig.catalog.some((widget) => widget.type === 'daily-usage' && widget.size === 'wide'));
+  assert.ok(!enabledConfig.layout.some((widget) => widget.type === 'daily-usage'), 'daily usage is available but not shipped by default');
+  assert.equal((await fetch(`${origin}/shared/browser/daily-usage-heatmap.js`)).status, 200);
+  assert.equal((await fetch(`${origin}/shared/daily-usage-heatmap.css`)).status, 200);
+
   const tools = [
     { base: '/tools/tasks', asset: 'selection.js', api: 'api/tasks', sharedAsset: 'cockpit-nav.js' },
     { base: '/tools/sessions', asset: 'formatters.js', api: 'api/sessions', sharedAsset: 'select.css' },

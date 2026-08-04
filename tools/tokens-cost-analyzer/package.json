@@ -6,6 +6,6 @@
   "scripts": {
     "start": "node server.mjs",
     "analyze": "node analyze.mjs",
-    "test": "node --test adapters.test.mjs server.test.mjs opencode.test.mjs public/refresh.test.mjs ../shared-web/opencode-usage.test.mjs"
+    "test": "node --test adapters.test.mjs server.test.mjs opencode.test.mjs public/refresh.test.mjs ../shared-web/opencode-usage.test.mjs ../shared-web/browser/daily-usage-heatmap.test.mjs"
   }
 }

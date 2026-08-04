@@ -1,4 +1,5 @@
 import { fetchJson } from '/shared/browser/api.js';
+import { createDailyUsageHeatmap } from '/shared/browser/daily-usage-heatmap.js';
 import { escapeHtml } from '/shared/browser/dom.js';
 import { formatDate, formatToolTitle } from '/shared/browser/format.js';
 import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
@@ -10,6 +11,8 @@ const editButton = document.querySelector('#edit-dashboard');
 const saveButton = document.querySelector('#save-dashboard');
 const cancelButton = document.querySelector('#cancel-dashboard');
 const AUTO_REFRESH_MS = 60_000;
+const DAILY_USAGE_REFRESH_MS = 10 * 60_000;
+const dailyUsageHeatmap = createDailyUsageHeatmap({ showYearSwitcher: false });
 
 let widgetCatalog = {
   'task-counts': { title: 'Task states', size: 'small' },
@@ -17,6 +20,7 @@ let widgetCatalog = {
   'latest-bookmarked-session': { title: 'Bookmarked session', size: 'small' },
   'latest-updated-session': { title: 'Latest session', size: 'small' },
   'subscription-limits': { title: 'Subscription limits', size: 'wide' },
+  'daily-usage': { title: 'Daily token usage', size: 'wide' },
   tools: { title: 'Tools', size: 'wide' },
 };
 const DEFAULT_LAYOUT = [
@@ -27,7 +31,7 @@ const DEFAULT_LAYOUT = [
   { id: 'subscription-limits', type: 'subscription-limits', size: 'wide' },
   { id: 'tools', type: 'tools', size: 'wide' },
 ];
-let state = { layout: DEFAULT_LAYOUT, editLayout: null, editing: false, data: null, limits: { data: null, loading: false, failed: false, fetchedAt: 0 } };
+let state = { layout: DEFAULT_LAYOUT, editLayout: null, editing: false, data: null, limits: { data: null, loading: false, failed: false, fetchedAt: 0 }, dailyUsage: { data: null, loading: false, failed: false } };
 let pendingDashboardError = null;
 let dashboardRevision = 0;
 setWorkspaceBadge({ placeholder: 'Loading workspace…' });
@@ -60,6 +64,16 @@ const limitsRefresh = createRefreshCoordinator({
 });
 limitsRefresh.registerCommitUnit({ key: 'limits', isDeferred: () => state.editing, commit: commitLimits });
 
+const dailyUsageRefresh = createRefreshCoordinator({
+  fetchData: fetchDailyUsage,
+  onStatus: ({ phase }) => {
+    if (phase === 'loading' || phase === 'refreshing') state.dailyUsage = { ...state.dailyUsage, loading: true };
+    if (phase === 'error') state.dailyUsage = { ...state.dailyUsage, loading: false, failed: true };
+    if (!state.editing && dailyUsageVisible()) renderDashboard();
+  },
+});
+dailyUsageRefresh.registerCommitUnit({ key: 'daily-usage', isDeferred: () => state.editing, commit: commitDailyUsage });
+
 dashboardRefresh.request({ reason: 'initial' });
 dashboardRefresh.startPolling(AUTO_REFRESH_MS);
 
@@ -71,6 +85,7 @@ window.addEventListener('focus', () => {
   if (!state.editing && limitsVisible() && Date.now() - state.limits.fetchedAt >= LIMITS_REFRESH_MS) loadLimits();
 });
 setInterval(() => { if (limitsVisible()) limitsRefresh.request({ reason: 'poll' }); }, LIMITS_REFRESH_MS);
+setInterval(() => { if (dailyUsageVisible()) dailyUsageRefresh.request({ reason: 'poll', force: true }); }, DAILY_USAGE_REFRESH_MS);
 
 dashboardEl.addEventListener('click', async (event) => {
   const action = event.target.closest('[data-action]')?.dataset.action;
@@ -115,10 +130,26 @@ function commitDashboard({ data: { tools, config, taskSummary, sessionSummary } 
   setWorkspaceBadge({ name: tools.workspaceName, root: tools.workspaceRoot, workspaces: tools.workspaces, currentWorkspace: tools.currentWorkspace });
   renderDashboard();
   if (limitsVisible() && !state.limits.data) limitsRefresh.request({ reason: 'initial' });
+  if (dailyUsageVisible() && !state.dailyUsage.data) dailyUsageRefresh.request({ reason: 'initial' });
 }
 
 function limitsVisible() {
   return state.layout.some((widget) => widget.type === 'subscription-limits');
+}
+
+function dailyUsageVisible() {
+  return state.layout.some((widget) => widget.type === 'daily-usage');
+}
+
+function fetchDailyUsage({ signal, force }) {
+  const params = new URLSearchParams(location.search);
+  if (force) params.set('refresh', '1');
+  return fetchJson(`/tools/tokens-cost-analyzer/api/daily-usage${params.size ? `?${params}` : ''}`, { signal });
+}
+
+function commitDailyUsage({ data }) {
+  state.dailyUsage = { data, loading: false, failed: false };
+  renderDashboard();
 }
 
 function loadLimits({ force = false } = {}) {
@@ -156,6 +187,7 @@ function setEditing(editing) {
   if (!editing) {
     dashboardRefresh.release('dashboard');
     limitsRefresh.release('limits');
+    dailyUsageRefresh.release('daily-usage');
     if (pendingDashboardError) {
       showRefreshNotice(pendingDashboardError);
       pendingDashboardError = null;
@@ -198,6 +230,7 @@ async function addWidget(type) {
   if ((selected === 'latest-bookmarked-session' || selected === 'latest-updated-session') && !state.data.sessionSummary) {
     state.data.sessionSummary = await fetchJson(`/tools/sessions/api/summary${workspaceQuery()}`);
   }
+  if (selected === 'daily-usage' && !state.dailyUsage.data) dailyUsageRefresh.request({ reason: 'initial' });
   if (state.editing && !state.editLayout.some((widget) => widget.type === selected)) {
     state.editLayout.push({ id: selected, type: selected, size: widgetCatalog[selected].size });
   }
@@ -206,6 +239,8 @@ async function addWidget(type) {
 function renderDashboard() {
   const layout = state.editing ? state.editLayout : state.layout;
   dashboardEl.innerHTML = layout.map(renderWidget).join('') + (state.editing ? renderAddCard(layout) : '');
+  const dailyRoot = dashboardEl.querySelector('.daily-usage-component');
+  if (dailyRoot && state.dailyUsage.data?.daily?.length) dailyUsageHeatmap.render(dailyRoot, state.dailyUsage.data.daily);
   requestAnimationFrame(updateOverflowTooltips);
 }
 
@@ -233,8 +268,18 @@ function renderWidgetContent(type) {
   if (type === 'latest-bookmarked-session') return renderSession('Bookmarked session', state.data.sessionSummary.latestBookmarkedSession);
   if (type === 'latest-updated-session') return renderSession('Latest session', state.data.sessionSummary.latestUpdatedSession);
   if (type === 'subscription-limits') return renderSubscriptionLimits(state.limits);
+  if (type === 'daily-usage') return renderDailyUsage(state.dailyUsage);
   if (type === 'tools') return renderTools(state.data.tools.tools || []);
   return '<p>Unknown widget.</p>';
+}
+
+function renderDailyUsage(usage) {
+  const analyzerHref = `/tools/tokens-cost-analyzer/${workspaceQuery()}`;
+  const header = `<p class="kicker">tokens / cost analyzer</p><h3><a class="widget-title-link" href="${escapeHtml(analyzerHref)}">Daily token usage</a></h3>`;
+  if (!usage.data) return `${header}<p class="empty">${usage.loading ? 'Loading daily usage…' : 'Daily usage unavailable.'}</p>`;
+  const generated = `<p class="daily-usage-generated">Generated ${escapeHtml(formatDate(usage.data.generatedAt))}${usage.loading ? ' · refreshing…' : ''}${usage.failed ? ' · refresh failed; showing previous data' : ''}</p>`;
+  if (!Array.isArray(usage.data.daily) || usage.data.daily.length === 0) return `${header}${generated}<p class="empty">No token usage recorded for this workspace yet.</p>`;
+  return `${header}${generated}<div class="daily-usage-component"></div>`;
 }
 
 function renderSubscriptionLimits(limits) {

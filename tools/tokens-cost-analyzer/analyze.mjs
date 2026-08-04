@@ -51,8 +51,11 @@ if (sourceRequested(args.source, 'claude-code')) {
 }
 
 records.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
+const generatedAt = new Date().toISOString();
+const daily = dailyUsage(records);
 await mkdir(outDir, { recursive: true });
-await writeFile(join(outDir, 'normalized.json'), JSON.stringify({ generatedAt: new Date().toISOString(), workspaceRoot, analysis, pricingPath, pricingSources: pricing.pricingSources || [], warnings, records }, null, 2));
+await writeFile(join(outDir, 'normalized.json'), JSON.stringify({ generatedAt, workspaceRoot, analysis, pricingPath, pricingSources: pricing.pricingSources || [], warnings, records }, null, 2));
+await writeFile(join(outDir, 'daily.json'), JSON.stringify({ generatedAt, workspaceRoot, analysis, daily }, null, 2));
 await writeFile(join(outDir, 'report.md'), renderReport(records, warnings, analysis));
 console.log(`Wrote ${records.length} records to ${outDir}`);
 
@@ -532,6 +535,18 @@ function sessionDrivers(records) {
   return [...bySession.values()]
     .map((driver) => ({ ...driver, recordedCost: driver.recordedCost || null, estimatedCost: driver.estimatedCost || null }))
     .sort(compareTopDrivers);
+}
+
+function dailyUsage(records) {
+  const byDay = new Map();
+  for (const record of records) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(record.date || '')) continue;
+    const current = byDay.get(record.date) || { date: record.date, tokens: 0, records: 0 };
+    current.tokens += Number(record.totalTokens) || 0;
+    current.records += 1;
+    byDay.set(record.date, current);
+  }
+  return [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function groupBy(records, keyFn) {

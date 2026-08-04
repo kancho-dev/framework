@@ -128,6 +128,7 @@ const widgetCatalog = {
   'latest-bookmarked-session': { id: 'latest-bookmarked-session', type: 'latest-bookmarked-session', size: 'small', tool: 'session-browser' },
   'latest-updated-session': { id: 'latest-updated-session', type: 'latest-updated-session', size: 'small', tool: 'session-browser' },
   'subscription-limits': { id: 'subscription-limits', type: 'subscription-limits', size: 'wide' },
+  'daily-usage': { id: 'daily-usage', type: 'daily-usage', size: 'wide', tool: 'tokens-cost-analyzer', default: false },
   tools: { id: 'tools', type: 'tools', size: 'wide' },
 };
 
@@ -139,7 +140,7 @@ function availableWidgets(workspace) {
 }
 
 function defaultDashboardLayout(workspace) {
-  const available = availableWidgets(workspace);
+  const available = availableWidgets(workspace).filter((widget) => widget.default !== false);
   return available.some((widget) => widget.type === 'tools') ? available : [widgetCatalog.tools];
 }
 

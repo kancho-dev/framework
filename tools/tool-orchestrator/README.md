@@ -122,6 +122,14 @@ Before implementation, define:
 
 Fetch a domain summary only when at least one visible widget needs it. Capability or source changes must fail soft rather than breaking unrelated dashboard content.
 
+### Shared full-fidelity widget decisions
+
+The `daily-usage` widget establishes a deliberate exception to reduced widget variants: when a shared component is already glanceable and its interaction is bounded, render it at full fidelity in both the owning tool and Cockpit rather than maintaining a compact fork. Host-visible variation should stay minimal; daily usage only hides the analyzer's year switcher and otherwise renders the same grid, summary, legend, and stats.
+
+Use a generated artifact as the domain boundary when two hosts consume the same focused rollup. The analyzer writes `daily.json`; both its report API and Cockpit widget consume that artifact rather than recomputing daily interpretation in Cockpit or extracting it from a broader response.
+
+When a widget independently forces expensive regeneration, coordinate client cadence with a server age guard. Daily usage polls every ten minutes while the analyzer rejects non-manual regeneration of artifacts younger than nine minutes. The one-minute offset avoids nearly-expired cache hits doubling worst-case staleness; manual refresh bypasses age but still joins single-flight work.
+
 ### Registration checklist
 
 The registry and renderers intentionally remain embedded. A new widget normally touches these points:

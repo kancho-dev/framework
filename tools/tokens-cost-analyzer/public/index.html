@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/shared/workspace-badge.css">
   <link rel="stylesheet" href="/shared/select.css">
   <link rel="stylesheet" href="/shared/cockpit-nav.css">
+  <link rel="stylesheet" href="/shared/daily-usage-heatmap.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -24,7 +25,7 @@
     <section class="usage-layout">
       <article class="panel monthly-panel"><div class="panel-title"><h2>Monthly spend cockpit</h2><div class="panel-legend"><span><i class="dot" style="background:var(--accent)"></i>estimated token cost</span><span><i class="dot" style="background:var(--purple)"></i>subscriptions</span></div></div><div id="monthly-chart" class="chart"></div></article>
       <div class="usage-stack">
-        <article class="panel"><div class="panel-title"><div><h2>Daily token usage</h2><span id="daily-summary">UTC calendar days</span></div></div><div id="daily-heatmap" class="heatmap"></div><div id="daily-stats" class="daily-stats"></div></article>
+        <article class="panel"><div class="panel-title"><h2>Daily token usage</h2></div><div id="daily-usage"></div></article>
         <article class="panel"><div class="panel-title"><h2>Usage by agent tool</h2><span>normalized token share</span></div><div id="source-chart" class="bars compact-bars"></div></article>
       </div>
     </section>
