@@ -6,6 +6,7 @@ import { captureBoardScroll, restoreBoardScroll, renderBoard, showSelectedTaskIn
 import { captureDetailFocus, restoreDetailFocus, renderDetail, renderDetailStatic, renderDetailMetadata, renderDetailSteering, attachDetailAutocompletes, continuePrompt } from './detail.js';
 import { fetchPreview, fetchTasks, saveMetadata, saveSteeringNotes } from './api.js';
 import { renderMarkdown } from './markdown.js';
+import { outlineEntries } from './reader-outline.js';
 import { editSteeringDraft, savedSteeringDraft } from './steering-notes.js';
 import { addRelationPatch, currentTags, relationInput, removeRelationPatch, taskKeyFromRelationInput } from './relations.js';
 import { clearRequestedSelection, requestedSelection } from './selection.js';
@@ -223,6 +224,37 @@ els.priorityFilter.addEventListener('change', () => { persistFilters(); render()
 els.clear.addEventListener('click', () => { resetFilters(); render(); });
 
 let readerReturnFocus = null;
+
+function setOutlineOpen(open) {
+  els.reader.classList.toggle('outline-open', open);
+  els.readerOutlineToggle.setAttribute('aria-expanded', String(open));
+  els.readerOutline.inert = !open;
+}
+
+function buildReaderOutline() {
+  const headings = [...els.readerContent.querySelectorAll('h1,h2,h3,h4,h5,h6')];
+  const entries = outlineEntries(headings);
+  els.readerOutlineList.replaceChildren();
+  if (entries.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'reader-outline-empty';
+    empty.textContent = 'No headings in this document.';
+    els.readerOutlineList.append(empty);
+    return;
+  }
+  entries.forEach((entry, index) => {
+    headings[index].id = entry.id;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'reader-outline-item';
+    button.dataset.level = String(entry.level);
+    button.textContent = entry.text;
+    button.title = entry.text;
+    button.addEventListener('click', () => headings[index].scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    els.readerOutlineList.append(button);
+  });
+}
+
 function setReaderBackgroundInert(inert) {
   document.querySelector('.tasks-pane').inert = inert;
   els.detailPane.inert = inert;
@@ -246,6 +278,8 @@ async function openReader(button) {
   if (!task) return;
   readerReturnFocus = { kind: button.dataset.previewKind, path: button.dataset.previewPath };
   els.reader.classList.remove('hidden');
+  setOutlineOpen(false);
+  els.readerOutlineList.replaceChildren();
   setReaderBackgroundInert(true);
   els.readerTask.textContent = `${task.metadata?.displayId || ''} · ${task.slug}`;
   els.readerTitle.textContent = button.querySelector('strong')?.textContent || button.dataset.previewPath;
@@ -256,9 +290,11 @@ async function openReader(button) {
     const preview = await fetchPreview(task.key, button.dataset.previewPath, button.dataset.previewKind);
     els.readerPath.textContent = preview.path;
     els.readerContent.innerHTML = renderMarkdown(preview.content) || '<p class="muted">This Markdown file is empty.</p>';
+    buildReaderOutline();
   } catch (error) {
     els.readerContent.innerHTML = `<p class="reader-error"></p>`;
     els.readerContent.querySelector('p').textContent = error.message;
+    buildReaderOutline();
   }
 }
 
@@ -272,6 +308,11 @@ function closeDetail() {
 
 els.closeDetail.addEventListener('click', closeDetail);
 els.closeReader.addEventListener('click', closeReader);
+els.readerOutlineToggle.addEventListener('click', () => setOutlineOpen(!els.reader.classList.contains('outline-open')));
+els.readerOutlineClose.addEventListener('click', () => {
+  setOutlineOpen(false);
+  els.readerOutlineToggle.focus();
+});
 els.readerContent.addEventListener('click', async (event) => {
   const button = event.target.closest('.copy-code');
   if (!button) return;
@@ -284,6 +325,8 @@ els.reader.addEventListener('mousedown', (event) => { readerPointerDownOnBackdro
 els.reader.addEventListener('click', (event) => {
   if (event.target === els.reader && readerPointerDownOnBackdrop) closeReader();
   readerPointerDownOnBackdrop = false;
+  if (els.reader.classList.contains('outline-open')
+    && !event.target.closest('#reader-outline, #reader-outline-toggle')) setOutlineOpen(false);
 });
 els.detail.addEventListener('click', (event) => {
   const preview = event.target.closest('.open-preview');
@@ -418,12 +461,16 @@ els.detailMeta.addEventListener('submit', (event) => {
 document.addEventListener('keydown', (event) => {
   const readerOpen = !els.reader.classList.contains('hidden');
   if (event.key === 'Escape') {
-    if (readerOpen) closeReader();
+    if (readerOpen && els.reader.classList.contains('outline-open')) {
+      setOutlineOpen(false);
+      els.readerOutlineToggle.focus();
+    } else if (readerOpen) closeReader();
     else if (state.selectedKey) closeDetail();
     return;
   }
   if (event.key !== 'Tab' || !readerOpen) return;
-  const focusable = [...els.reader.querySelectorAll('button:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')];
+  const focusable = [...els.reader.querySelectorAll('button:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')]
+    .filter((element) => !element.closest('[inert]'));
   if (focusable.length === 0) return;
   const first = focusable[0];
   const last = focusable.at(-1);

@@ -28,5 +28,9 @@ export const els = {
   readerTitle: document.querySelector('#reader-title'),
   readerPath: document.querySelector('#reader-path'),
   readerContent: document.querySelector('#reader-content'),
+  readerOutlineToggle: document.querySelector('#reader-outline-toggle'),
+  readerOutline: document.querySelector('#reader-outline'),
+  readerOutlineList: document.querySelector('#reader-outline-list'),
+  readerOutlineClose: document.querySelector('#reader-outline-close'),
   closeReader: document.querySelector('#close-reader'),
 };

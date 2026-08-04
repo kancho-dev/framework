@@ -65,8 +65,11 @@
     </section>
     <section id="reader" class="reader hidden" role="dialog" aria-modal="true" aria-labelledby="reader-title">
       <article class="reader-window">
-        <header><div><p id="reader-task" class="eyebrow"></p><h2 id="reader-title">File reader</h2><p id="reader-path" class="reader-path"></p></div><button id="close-reader" type="button" aria-label="Back to task details">×</button></header>
-        <div id="reader-content" class="reader-content markdown-body"></div>
+        <header><div><p id="reader-task" class="eyebrow"></p><h2 id="reader-title">File reader</h2><p id="reader-path" class="reader-path"></p></div><div class="reader-actions"><button id="reader-outline-toggle" type="button" aria-expanded="false" aria-controls="reader-outline">☷ <span>Contents</span></button><button id="close-reader" type="button" aria-label="Back to task details">×</button></div></header>
+        <div class="reader-layout">
+          <aside id="reader-outline" class="reader-outline" aria-label="Document contents" inert><div class="reader-outline-heading"><strong>Contents</strong><button id="reader-outline-close" type="button" aria-label="Close contents">×</button></div><nav id="reader-outline-list"></nav></aside>
+          <div id="reader-content" class="reader-content markdown-body"></div>
+        </div>
       </article>
     </section>
   </main>

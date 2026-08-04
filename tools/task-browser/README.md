@@ -43,7 +43,7 @@ No npm install is needed for the current dependency-free tool.
 - project and priority filters;
 - compact canonical slugs on task cards;
 - task detail drawer with Purpose, Next steps, clickable Run timeline, Files, Success/Acceptance, and Metadata history; Next steps are read from `HANDOFF.md` `## Next Action` with `## Next Steps` fallback;
-- on-demand, safely rendered Markdown readers for root task files and individual run logs; non-Markdown root artifacts remain discoverable but are never fetched for preview;
+- on-demand, safely rendered Markdown readers for root task files and individual run logs; a labelled Contents control opens a right-side heading outline for repeated jumps through long documents, while non-Markdown root artifacts remain discoverable but are never fetched for preview;
 - run cards prefer the run file's first `#` heading, then a readable title derived from timestamped filenames, then the raw filename;
 - editable status, priority, type, next actor, tags, and optional positive-integer order metadata;
 - an icon-only person/robot badge beside each task display ID when Operator/Agent action is next;

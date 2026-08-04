@@ -6,6 +6,6 @@
   "scripts": {
     "start": "node server.mjs",
     "metadata": "node metadata-cli.mjs",
-    "test": "node --test metadata-helpers.test.mjs metadata-cli.test.mjs server.test.mjs public/next-actor.test.mjs public/selection.test.mjs public/steering-notes.test.mjs ../shared-web/browser/markdown.test.mjs"
+    "test": "node --test metadata-helpers.test.mjs metadata-cli.test.mjs server.test.mjs public/next-actor.test.mjs public/reader-outline.test.mjs public/selection.test.mjs public/steering-notes.test.mjs ../shared-web/browser/markdown.test.mjs"
   }
 }
