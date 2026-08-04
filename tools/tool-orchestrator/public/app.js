@@ -1,6 +1,7 @@
 import { fetchJson } from '/shared/browser/api.js';
 import { escapeHtml } from '/shared/browser/dom.js';
 import { formatDate, formatToolTitle } from '/shared/browser/format.js';
+import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
 import { formatReset, gaugeLevel, isStale, limitReasonText, LIMITS_REFRESH_MS, remainingFor } from './limits-format.js';
 
 const dashboardEl = document.querySelector('#dashboard');
@@ -27,9 +28,40 @@ const DEFAULT_LAYOUT = [
   { id: 'tools', type: 'tools', size: 'wide' },
 ];
 let state = { layout: DEFAULT_LAYOUT, editLayout: null, editing: false, data: null, limits: { data: null, loading: false, failed: false, fetchedAt: 0 } };
+let pendingDashboardError = null;
+let dashboardRevision = 0;
 setWorkspaceBadge({ placeholder: 'Loading workspace…' });
-loadDashboard();
-setInterval(() => { if (!state.editing) loadDashboard(); }, AUTO_REFRESH_MS);
+
+const dashboardRefresh = createRefreshCoordinator({
+  fetchData: fetchDashboard,
+  getIdentity: () => dashboardRevision,
+  onStatus: ({ phase, error }) => {
+    if (phase === 'loading' && !state.data) dashboardEl.innerHTML = '<article class="widget muted">Loading dashboard…</article>';
+    if (phase === 'error') {
+      if (state.editing) {
+        pendingDashboardError = error;
+        return;
+      }
+      setWorkspaceBadge({ unavailable: true });
+      if (!state.data) dashboardEl.innerHTML = `<article class="widget danger"><h3>Dashboard unavailable</h3><p>${escapeHtml(error.message || 'Unknown error')}</p></article>`;
+      else showRefreshNotice(error);
+    }
+  },
+});
+dashboardRefresh.registerCommitUnit({ key: 'dashboard', isDeferred: () => state.editing, commit: commitDashboard });
+
+const limitsRefresh = createRefreshCoordinator({
+  fetchData: fetchLimits,
+  onStatus: ({ phase }) => {
+    if (phase === 'loading' || phase === 'refreshing') state.limits = { ...state.limits, loading: true };
+    if (phase === 'error') state.limits = { ...state.limits, loading: false, failed: true };
+    if (!state.editing && limitsVisible()) renderDashboard();
+  },
+});
+limitsRefresh.registerCommitUnit({ key: 'limits', isDeferred: () => state.editing, commit: commitLimits });
+
+dashboardRefresh.request({ reason: 'initial' });
+dashboardRefresh.startPolling(AUTO_REFRESH_MS);
 
 editButton.addEventListener('click', () => setEditing(true));
 cancelButton.addEventListener('click', () => setEditing(false));
@@ -38,9 +70,9 @@ saveButton.addEventListener('click', saveLayout);
 window.addEventListener('focus', () => {
   if (!state.editing && limitsVisible() && Date.now() - state.limits.fetchedAt >= LIMITS_REFRESH_MS) loadLimits();
 });
-setInterval(() => { if (!state.editing && limitsVisible()) loadLimits(); }, LIMITS_REFRESH_MS);
+setInterval(() => { if (limitsVisible()) limitsRefresh.request({ reason: 'poll' }); }, LIMITS_REFRESH_MS);
 
-dashboardEl.addEventListener('click', (event) => {
+dashboardEl.addEventListener('click', async (event) => {
   const action = event.target.closest('[data-action]')?.dataset.action;
   const id = event.target.closest('[data-widget-id]')?.dataset.widgetId;
   if (action === 'refresh-limits' && !state.editing) return loadLimits({ force: true });
@@ -48,7 +80,10 @@ dashboardEl.addEventListener('click', (event) => {
   if (action === 'remove') state.editLayout = state.editLayout.filter((widget) => widget.id !== id);
   if (action === 'up') moveWidget(id, -1);
   if (action === 'down') moveWidget(id, 1);
-  if (action === 'add') addWidget(event.target.closest('[data-widget-type]')?.dataset.widgetType);
+  if (action === 'add') {
+    try { await addWidget(event.target.closest('[data-widget-type]')?.dataset.widgetType); }
+    catch (error) { showRefreshNotice(error); }
+  }
   renderDashboard();
 });
 
@@ -57,48 +92,45 @@ function workspaceQuery() {
   return params.toString() ? `?${params}` : '';
 }
 
-async function loadDashboard() {
-  const firstLoad = !state.data;
-  if (firstLoad) dashboardEl.innerHTML = '<article class="widget muted">Loading dashboard…</article>';
-  try {
-    const [tools, config] = await Promise.all([
-      fetchJson(`api/tools${workspaceQuery()}`),
-      fetchJson(`api/dashboard-config${workspaceQuery()}`),
-    ]);
-    widgetCatalog = catalogFromConfig(config.catalog);
-    const hasTaskWidgets = config.layout.some((widget) => widget.type === 'task-counts' || widget.type === 'priority-tasks');
-    const hasSessionWidgets = config.layout.some((widget) => widget.type === 'latest-bookmarked-session' || widget.type === 'latest-updated-session');
-    const [taskSummary, sessionSummary] = await Promise.all([
-      hasTaskWidgets ? fetchJson(`/tools/tasks/api/summary${workspaceQuery()}`) : null,
-      hasSessionWidgets ? fetchJson(`/tools/sessions/api/summary${workspaceQuery()}`) : null,
-    ]);
-    state.layout = normalizeLayout(config.layout);
-    state.data = { tools, taskSummary, sessionSummary };
-    document.title = formatToolTitle(tools.workspaceName, 'Cockpit');
-    setWorkspaceBadge({ name: tools.workspaceName, root: tools.workspaceRoot, workspaces: tools.workspaces, currentWorkspace: tools.currentWorkspace });
-    renderDashboard();
-    if (limitsVisible() && !state.limits.data) loadLimits();
-  } catch (error) {
-    setWorkspaceBadge({ unavailable: true });
-    if (firstLoad) dashboardEl.innerHTML = `<article class="widget danger"><h3>Dashboard unavailable</h3><p>${escapeHtml(error.message || 'Unknown error')}</p></article>`;
-    else showRefreshNotice(error);
-  }
+async function fetchDashboard({ signal }) {
+  const [tools, config] = await Promise.all([
+    fetchJson(`api/tools${workspaceQuery()}`, { signal }),
+    fetchJson(`api/dashboard-config${workspaceQuery()}`, { signal }),
+  ]);
+  const hasTaskWidgets = config.layout.some((widget) => widget.type === 'task-counts' || widget.type === 'priority-tasks');
+  const hasSessionWidgets = config.layout.some((widget) => widget.type === 'latest-bookmarked-session' || widget.type === 'latest-updated-session');
+  const [taskSummary, sessionSummary] = await Promise.all([
+    hasTaskWidgets ? fetchJson(`/tools/tasks/api/summary${workspaceQuery()}`, { signal }) : null,
+    hasSessionWidgets ? fetchJson(`/tools/sessions/api/summary${workspaceQuery()}`, { signal }) : null,
+  ]);
+  return { tools, config, taskSummary, sessionSummary };
+}
+
+function commitDashboard({ data: { tools, config, taskSummary, sessionSummary } }) {
+  pendingDashboardError = null;
+  widgetCatalog = catalogFromConfig(config.catalog);
+  state.layout = normalizeLayout(config.layout);
+  state.data = { tools, taskSummary, sessionSummary };
+  document.title = formatToolTitle(tools.workspaceName, 'Cockpit');
+  setWorkspaceBadge({ name: tools.workspaceName, root: tools.workspaceRoot, workspaces: tools.workspaces, currentWorkspace: tools.currentWorkspace });
+  renderDashboard();
+  if (limitsVisible() && !state.limits.data) limitsRefresh.request({ reason: 'initial' });
 }
 
 function limitsVisible() {
   return state.layout.some((widget) => widget.type === 'subscription-limits');
 }
 
-async function loadLimits({ force = false } = {}) {
-  if (state.limits.loading) return;
-  state.limits = { ...state.limits, loading: true };
-  renderDashboard();
-  try {
-    const data = await fetchJson(`api/subscription-limits${force ? '?refresh=1' : ''}`);
-    state.limits = { data, loading: false, failed: false, fetchedAt: Date.now() };
-  } catch {
-    state.limits = { ...state.limits, loading: false, failed: true };
-  }
+function loadLimits({ force = false } = {}) {
+  return limitsRefresh.request({ reason: force ? 'manual' : 'poll', force });
+}
+
+function fetchLimits({ signal, force }) {
+  return fetchJson(`api/subscription-limits${force ? '?refresh=1' : ''}`, { signal });
+}
+
+function commitLimits({ data }) {
+  state.limits = { data, loading: false, failed: false, fetchedAt: Date.now() };
   renderDashboard();
 }
 
@@ -121,6 +153,14 @@ function setEditing(editing) {
   saveButton.hidden = !editing;
   cancelButton.hidden = !editing;
   renderDashboard();
+  if (!editing) {
+    dashboardRefresh.release('dashboard');
+    limitsRefresh.release('limits');
+    if (pendingDashboardError) {
+      showRefreshNotice(pendingDashboardError);
+      pendingDashboardError = null;
+    }
+  }
 }
 
 async function saveLayout() {
@@ -129,8 +169,10 @@ async function saveLayout() {
     const res = await fetch(`api/dashboard-config${workspaceQuery()}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ layout: state.editLayout }) });
     if (!res.ok) throw new Error(`Save failed: ${res.status}`);
     const config = await res.json();
+    dashboardRevision += 1;
     state.layout = normalizeLayout(config.layout);
     setEditing(false);
+    dashboardRefresh.request({ reason: 'mutation' });
   } finally {
     saveButton.disabled = false;
   }
@@ -144,12 +186,21 @@ function moveWidget(id, delta) {
   state.editLayout.splice(to, 0, widget);
 }
 
-function addWidget(type) {
+async function addWidget(type) {
   const current = new Set(state.editLayout.map((widget) => widget.type));
   const selected = type && widgetCatalog[type] && !current.has(type)
     ? type
     : Object.keys(widgetCatalog).find((candidate) => !current.has(candidate));
-  if (selected) state.editLayout.push({ id: selected, type: selected, size: widgetCatalog[selected].size });
+  if (!selected) return;
+  if ((selected === 'task-counts' || selected === 'priority-tasks') && !state.data.taskSummary) {
+    state.data.taskSummary = await fetchJson(`/tools/tasks/api/summary${workspaceQuery()}`);
+  }
+  if ((selected === 'latest-bookmarked-session' || selected === 'latest-updated-session') && !state.data.sessionSummary) {
+    state.data.sessionSummary = await fetchJson(`/tools/sessions/api/summary${workspaceQuery()}`);
+  }
+  if (state.editing && !state.editLayout.some((widget) => widget.type === selected)) {
+    state.editLayout.push({ id: selected, type: selected, size: widgetCatalog[selected].size });
+  }
 }
 
 function renderDashboard() {
