@@ -5,8 +5,10 @@ import { fetchSessionDetail, fetchSessions, putMetadata } from './api.js';
 import { formatToolTitle } from '/shared/browser/format.js';
 import { sessionBrowserScope } from '/shared/browser/session-links.js';
 import { clearStaleRequestedSelection, nearestScrollTop, requestedSelection, requestedTopic } from './selection.js';
+import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
 
 const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, tagFilter: 'all', sourceErrors: [], metadataError: null };
+let detailUpdatePending = false;
 
 const els = {
   refresh: document.querySelector('#refresh'),
@@ -239,15 +241,21 @@ function scheduleSelectedTopicLinkScroll() {
   });
 }
 
+function renderSessionCountStatus() {
+  if (detailUpdatePending) return;
+  const visibleCount = state.sessions.filter((session) => matches(session, els.filter.value)).length;
+  const errors = [
+    ...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`),
+    state.metadataError || '',
+  ].filter(Boolean);
+  els.status.textContent = `${visibleCount} of ${state.sessions.length} sessions · ${workspaceDisplayName()}${errors.length ? ` · ${errors.join(', ')}` : ''}`;
+}
+
 function renderSessions() {
   const query = els.filter.value;
   const sessions = sortSessions(state.sessions.filter((session) => matches(session, query)));
-  const errorText = [
-    ...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`),
-    state.metadataError || '',
-  ].filter(Boolean).length ? ` · ${[...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`), state.metadataError || ''].filter(Boolean).join(', ')}` : '';
   window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: state.workspaceName, root: state.workspaceRoot, tooltipPrefix: 'Workspace' });
-  els.status.textContent = `${sessions.length} of ${state.sessions.length} sessions · ${workspaceDisplayName()}${errorText}`;
+  renderSessionCountStatus();
   const scrollTop = els.sessions.scrollTop;
   els.sessions.innerHTML = sessions.map((session) => `
     <li>
@@ -331,6 +339,17 @@ function restoreTableScrollPositions(positions) {
   }
 }
 
+function captureCodeBlockScrollPositions() {
+  return Array.from(els.messages.querySelectorAll('.code-block pre'), (node) => node.scrollLeft);
+}
+
+function restoreCodeBlockScrollPositions(positions) {
+  for (const [index, node] of Array.from(els.messages.querySelectorAll('.code-block pre')).entries()) {
+    const scrollLeft = positions?.[index];
+    if (scrollLeft) node.scrollLeft = scrollLeft;
+  }
+}
+
 function renderSelectedDetail({ scrollTopic = true } = {}) {
   const detail = state.selectedDetail;
   if (!detail) return;
@@ -365,12 +384,14 @@ function renderSelectedDetail({ scrollTopic = true } = {}) {
   scheduleSelectedTopicLinkScroll();
   const openDetails = new Set(Array.from(els.messages.querySelectorAll('details[data-detail-key][open]')).map((node) => node.dataset.detailKey));
   const tableScrollPositions = captureTableScrollPositions();
+  const codeBlockScrollPositions = captureCodeBlockScrollPositions();
   els.messages.classList.toggle('hide-tools', !els.showTools.checked);
   els.messages.innerHTML = detail.activeEntries.map((entry) => renderEntry(entry, detail.entries)).join('');
   for (const node of els.messages.querySelectorAll('details[data-detail-key]')) {
     if (openDetails.has(node.dataset.detailKey)) node.open = true;
   }
   restoreTableScrollPositions(tableScrollPositions);
+  restoreCodeBlockScrollPositions(codeBlockScrollPositions);
   if (scrollTopic) requestAnimationFrame(scrollSelectedTopicIntoView);
 }
 
@@ -404,11 +425,113 @@ function updateSelectedSummary(detail) {
   }
 }
 
+function hasReaderTextSelection() {
+  const selection = window.getSelection?.();
+  if (!selection || selection.isCollapsed) return false;
+  const pane = document.querySelector('.reader-pane');
+  return Boolean(pane && selection.rangeCount && pane.contains(selection.anchorNode) && pane.contains(selection.focusNode));
+}
+
+let readerSelectionActive = false;
+document.addEventListener('selectionchange', () => {
+  const active = hasReaderTextSelection();
+  if (readerSelectionActive && !active) {
+    detailRefresh.release('detail').catch((error) => { els.readerTitle.textContent = error.message; });
+  }
+  readerSelectionActive = active;
+});
+
+const listRefresh = createRefreshCoordinator({
+  fetchData: ({ signal }) => fetchSessions({ signal }),
+  onStatus: ({ phase, error }) => {
+    if (phase === 'loading' && !detailUpdatePending) els.status.textContent = 'Loading sessions…';
+    if (phase === 'refreshing' && !detailUpdatePending) els.status.textContent = 'Refreshing sessions…';
+    if (phase === 'error' && !detailUpdatePending) els.status.textContent = error.message;
+  },
+});
+
+let listHasCommitted = false;
+listRefresh.registerCommitUnit({
+  key: 'list',
+  commit: async ({ data, reason }) => {
+    state.sessions = data.sessions;
+    state.sessionRoot = data.sessionRoot;
+    state.sourceErrors = data.sourceErrors || [];
+    state.workspaceRoot = data.workspaceRoot;
+    state.workspaceName = data.workspaceName;
+    updateDocumentTitle();
+    state.metadataError = data.metadataError || null;
+    state.metadataPath = data.metadataPath;
+    restoreFilterState();
+    renderSourceFilter();
+    renderCwdFilter();
+    renderTagFilter();
+    applyFilterControlValues();
+    const hadSelection = Boolean(state.selectedPath);
+    restoreSelectedPath();
+    const restoredPath = !hadSelection ? state.selectedPath : null;
+    renderSessions();
+    if (reason !== 'poll') requestAnimationFrame(scrollSelectedSessionCardIntoView);
+    if (state.selectedPath && !state.sessions.some((session) => session.path === state.selectedPath)) {
+      clearSelectedTopic();
+      state.selectedPath = null;
+      state.selectedDetail = null;
+      persistSelectedPath();
+      revealSelectedTopic = false;
+      stopDetailPolling?.();
+      stopDetailPolling = null;
+    }
+    const shouldReloadRestored = listHasCommitted && restoredPath && state.selectedPath === restoredPath;
+    listHasCommitted = true;
+    if (shouldReloadRestored) {
+      queueMicrotask(() => selectSession(restoredPath).catch((error) => { els.readerTitle.textContent = error.message; }));
+    }
+  },
+});
+
+let revealSelectedTopic = false;
+const detailRefresh = createRefreshCoordinator({
+  fetchData: ({ signal, identity }) => fetchSessionDetail(identity, { signal }),
+  getIdentity: () => state.selectedPath,
+  onStatus: ({ phase, error, dropped }) => {
+    if (phase === 'update-ready') {
+      detailUpdatePending = true;
+      els.status.textContent = 'Fresh session data is ready; clear the text selection to update.';
+    }
+    if (phase === 'committed' || phase === 'idle') {
+      detailUpdatePending = false;
+      if (dropped) revealSelectedTopic = false;
+      renderSessionCountStatus();
+    }
+    if (phase === 'error') {
+      detailUpdatePending = false;
+      revealSelectedTopic = false;
+      els.readerTitle.textContent = error.message;
+    }
+  },
+});
+
+detailRefresh.registerCommitUnit({
+  key: 'detail',
+  isDeferred: hasReaderTextSelection,
+  commit: async ({ data, reason }) => {
+    state.selectedDetail = data;
+    if (state.selectedTopicId && !data.topicAnchors?.some((anchor) => anchor.id === state.selectedTopicId)) state.selectedTopicId = null;
+    updateSelectedSummary(data);
+    if (reason !== 'poll') requestAnimationFrame(scrollSelectedSessionCardIntoView);
+    renderSelectedDetail({ scrollTopic: revealSelectedTopic });
+    revealSelectedTopic = false;
+    persistSelectedTopic();
+    requestAnimationFrame(updateReaderHeaderHeight);
+  },
+});
+
 async function selectSession(path, options = {}) {
   const url = new URL(location.href);
   if (clearStaleRequestedSelection(url, path)) history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
   if (state.selectedPath !== path) clearSelectedTopic(state.selectedPath);
   state.selectedPath = path;
+  state.selectedDetail = null;
   if (options.topicId) state.selectedTopicId = options.topicId;
   persistSelectedPath();
   setBrowseMode(false);
@@ -422,76 +545,29 @@ async function selectSession(path, options = {}) {
   els.readerRelations.classList.add('hidden');
   els.messages.innerHTML = '';
   els.topics.innerHTML = '';
-
-  const detail = await fetchSessionDetail(path);
-  state.selectedDetail = detail;
-  if (state.selectedTopicId && !detail.topicAnchors?.some((anchor) => anchor.id === state.selectedTopicId)) state.selectedTopicId = null;
-  updateSelectedSummary(detail);
-  renderSelectedDetail();
-  persistSelectedTopic();
-  requestAnimationFrame(updateReaderHeaderHeight);
+  revealSelectedTopic = true;
+  await detailRefresh.request({ reason: 'manual' });
+  if (els.autoRefresh.checked && !stopDetailPolling) stopDetailPolling = detailRefresh.startPolling(10_000);
 }
 
-function hasReaderTextSelection() {
-  const selection = window.getSelection?.();
-  if (!selection || selection.isCollapsed) return false;
-  const pane = document.querySelector('.reader-pane');
-  return Boolean(pane && selection.rangeCount && pane.contains(selection.anchorNode) && pane.contains(selection.focusNode));
-}
-
-async function reloadSelectedSession({ scrollSelected = true } = {}) {
-  if (!state.selectedPath || hasReaderTextSelection()) return;
-  const detail = await fetchSessionDetail(state.selectedPath);
-  state.selectedDetail = detail;
-  if (state.selectedTopicId && !detail.topicAnchors?.some((anchor) => anchor.id === state.selectedTopicId)) state.selectedTopicId = null;
-  updateSelectedSummary(detail);
-  if (scrollSelected) requestAnimationFrame(scrollSelectedSessionCardIntoView);
-  renderSelectedDetail({ scrollTopic: false });
-  persistSelectedTopic();
-}
-
-async function loadSessions({ reloadSelected = false, scrollSelected = true } = {}) {
-  els.status.textContent = 'Loading sessions…';
-  const data = await fetchSessions();
-  state.sessions = data.sessions;
-  state.sessionRoot = data.sessionRoot;
-  state.sourceErrors = data.sourceErrors || [];
-  state.workspaceRoot = data.workspaceRoot;
-  state.workspaceName = data.workspaceName;
-  updateDocumentTitle();
-  state.metadataError = data.metadataError || null;
-  state.metadataPath = data.metadataPath;
-  restoreFilterState();
-  renderSourceFilter();
-  renderCwdFilter();
-  renderTagFilter();
-  applyFilterControlValues();
-  restoreSelectedPath();
-  renderSessions();
-  if (scrollSelected) requestAnimationFrame(scrollSelectedSessionCardIntoView);
-  if (state.selectedPath && !state.sessions.some((session) => session.path === state.selectedPath)) {
-    clearSelectedTopic();
-    state.selectedPath = null;
-    state.selectedDetail = null;
-    persistSelectedPath();
-  }
-  if (reloadSelected && state.selectedPath) await reloadSelectedSession({ scrollSelected });
-}
-
-let autoRefreshTimer;
+let stopListPolling;
+let stopDetailPolling;
 function setAutoRefresh(enabled) {
-  clearInterval(autoRefreshTimer);
+  stopListPolling?.();
+  stopDetailPolling?.();
+  stopListPolling = null;
+  stopDetailPolling = null;
   if (enabled) {
-    autoRefreshTimer = setInterval(() => {
-      loadSessions({ reloadSelected: true, scrollSelected: false }).catch((error) => { els.status.textContent = error.message; });
-    }, 10_000);
+    stopListPolling = listRefresh.startPolling(10_000);
+    if (state.selectedPath) stopDetailPolling = detailRefresh.startPolling(10_000);
   }
 }
 
 els.refresh.addEventListener('click', (event) => {
   event.preventDefault();
   event.stopPropagation();
-  loadSessions({ reloadSelected: true }).catch((error) => { els.status.textContent = error.message; });
+  listRefresh.request({ reason: 'manual' });
+  if (state.selectedPath) detailRefresh.request({ reason: 'manual' });
 });
 els.autoRefresh.addEventListener('change', () => setAutoRefresh(els.autoRefresh.checked));
 els.filter.addEventListener('focus', () => setBrowseMode(true));
@@ -625,9 +701,9 @@ for (const select of [els.tagFilter, els.sourceFilter, els.cwdFilter, els.sortMo
 }
 setBrowseMode(true);
 updateReaderHeaderHeight();
-setAutoRefresh(els.autoRefresh.checked);
-loadSessions()
+listRefresh.request({ reason: 'initial' })
   .then(() => {
     if (state.selectedPath) return selectSession(state.selectedPath);
   })
-  .catch((error) => { els.status.textContent = error.message; });
+  .catch((error) => { els.status.textContent = error.message; })
+  .finally(() => setAutoRefresh(els.autoRefresh.checked));
