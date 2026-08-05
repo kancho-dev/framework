@@ -23,6 +23,15 @@ export function remainingFor(provider) {
   return provider?.status === 'ok' && typeof provider.remainingPercent === 'number' ? provider.remainingPercent : null;
 }
 
+export function expectedRemainingFor(provider, now = Date.now()) {
+  if (remainingFor(provider) === null) return null;
+  const resetAt = Date.parse(provider.resetsAt);
+  const windowMs = provider.windowDurationMins * 60_000;
+  const remainingFraction = (resetAt - now) / windowMs;
+  if (!Number.isFinite(resetAt) || !Number.isFinite(windowMs) || windowMs <= 0 || remainingFraction < 0 || remainingFraction > 1) return null;
+  return remainingFraction * 100;
+}
+
 export function gaugeLevel(provider, now = Date.now()) {
   const remaining = remainingFor(provider);
   if (remaining === null) return 'unknown';

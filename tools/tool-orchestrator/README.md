@@ -61,7 +61,7 @@ other or the rest of the dashboard.
   are started, so no model runs. The weekly bucket is selected by
   `windowDurationMins == 10080` rather than by the `primary` position, which
   often carries the five-hour window.
-- **Claude Code · Weekly (7 day)** and **Claude Code · 5 hour** — read from
+- **Claude Code · Weekly** and **Claude Code · 5 hour** — read from
   `GET https://api.anthropic.com/api/oauth/usage` using Claude Code's own local
   OAuth token, taking the `seven_day` and `five_hour` windows. Both gauges come
   from a single request per refresh, so they share one read and fail together;
@@ -72,6 +72,9 @@ The two weekly gauges share the first row, and Claude Code's five-hour gauge
 sits below Claude Code's weekly one; narrow layouts stack all three.
 
 Remaining percent is `100 − utilization`, clamped to `0–100` for display only.
+Each gauge also shows the target remaining percent for an even usage pace:
+`100 × time remaining ÷ window duration`. The difference between that target and
+actual remaining quota is reported in percentage points over or under pace.
 Gauge color compares the used share with the elapsed share of its reset window:
 blue means usage is below 70% of elapsed-window pace and could be favored, green is on pace,
 yellow is at least 15% ahead of pace, and red is at least 50% ahead. Blue waits

@@ -3,7 +3,7 @@ import { createDailyUsageHeatmap } from '/shared/browser/daily-usage-heatmap.js'
 import { escapeHtml } from '/shared/browser/dom.js';
 import { formatDate, formatToolTitle } from '/shared/browser/format.js';
 import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
-import { formatReset, gaugeLevel, isStale, limitReasonText, LIMITS_REFRESH_MS, remainingFor } from './limits-format.js';
+import { expectedRemainingFor, formatReset, gaugeLevel, isStale, limitReasonText, LIMITS_REFRESH_MS, remainingFor } from './limits-format.js';
 
 const dashboardEl = document.querySelector('#dashboard');
 const workspaceEl = document.querySelector('#workspace');
@@ -297,12 +297,20 @@ function renderLimitGauge(provider) {
   const summary = remaining === null
     ? `unavailable — ${escapeHtml(limitReasonText(provider.reason))}`
     : `${remaining}% left`;
+  const expectedRemaining = expectedRemainingFor(provider);
+  const paceDelta = expectedRemaining === null ? null : expectedRemaining - remaining;
+  const paceDirection = paceDelta > 0.5 ? 'over' : paceDelta < -0.5 ? 'under' : 'on';
+  const pace = paceDelta === null
+    ? null
+    : `target ${Math.round(expectedRemaining)}% left · ${Math.abs(Math.round(paceDelta))} pp ${paceDirection} pace`;
+  const paceMetrics = paceDelta === null ? '' : `<span class="gauge-metrics"><span>target <b>${Math.round(expectedRemaining)}%</b> left</span><span><b>${Math.abs(Math.round(paceDelta))} pp</b> ${paceDirection} pace</span></span>`;
+  const reset = remaining === null ? null : formatReset(provider.resetsAt);
   const detail = remaining === null
-    ? 'No provider-reported value'
-    : `resets ${escapeHtml(formatReset(provider.resetsAt))}`;
+    ? '<span class="gauge-detail">No provider-reported value</span>'
+    : `<span class="gauge-reset">resets <b>${escapeHtml(reset)}</b></span>`;
   return `<div class="limit-gauge level-${level}" data-provider="${escapeHtml(provider.id)}">
-    <span class="gauge-ring" style="--pct:${remaining === null ? 0 : remaining}" role="img" aria-label="${escapeHtml(title)}: ${summary}"><span>${escapeHtml(value)}</span></span>
-    <div class="gauge-text"><strong>${escapeHtml(title)}</strong><span class="gauge-summary">${summary}</span><span class="gauge-detail">${detail}</span>
+    <span class="gauge-ring" style="--pct:${remaining === null ? 0 : remaining}" role="img" aria-label="${escapeHtml(title)}: ${summary}${pace ? `; ${pace}` : ''}"><span>${escapeHtml(value)}</span></span>
+    <div class="gauge-text"><strong>${escapeHtml(title)}</strong>${remaining === null ? `<span class="gauge-summary">${summary}</span>` : ''}${paceMetrics}${detail}
       <span class="gauge-detail">as of ${escapeHtml(formatDate(provider.asOf))}${provider.source ? ' · provider-reported' : ''}</span></div>
   </div>`;
 }

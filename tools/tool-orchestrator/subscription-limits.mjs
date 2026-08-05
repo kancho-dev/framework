@@ -17,7 +17,7 @@ const CLAUDE_OAUTH_BETA = 'oauth-2025-04-20';
 
 export const PROVIDERS = [
   { id: 'codex', label: 'Codex', windowLabel: 'Weekly', windowDurationMins: WEEKLY_WINDOW_MINS },
-  { id: 'claude-code', label: 'Claude Code', windowLabel: 'Weekly (7 day)', windowDurationMins: WEEKLY_WINDOW_MINS },
+  { id: 'claude-code', label: 'Claude Code', windowLabel: 'Weekly', windowDurationMins: WEEKLY_WINDOW_MINS },
   { id: 'claude-code-five-hour', label: 'Claude Code', windowLabel: '5 hour', windowDurationMins: 300 },
 ];
 

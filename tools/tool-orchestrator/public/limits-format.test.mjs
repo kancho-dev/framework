@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatReset, gaugeLevel, isStale, limitReasonText, LIMITS_REFRESH_MS, remainingFor } from './limits-format.js';
+import { expectedRemainingFor, formatReset, gaugeLevel, isStale, limitReasonText, LIMITS_REFRESH_MS, remainingFor } from './limits-format.js';
 
 const NOW = Date.parse('2026-07-24T20:00:00.000Z');
 
@@ -10,6 +10,19 @@ test('reads a remaining percent only from an ok provider', () => {
   assert.equal(remainingFor({ status: 'unavailable', remainingPercent: null }), null);
   assert.equal(remainingFor({ status: 'unavailable', remainingPercent: 62 }), null);
   assert.equal(remainingFor(null), null);
+});
+
+test('calculates the remaining quota expected at the current point in the window', () => {
+  const provider = {
+    status: 'ok',
+    remainingPercent: 40,
+    windowDurationMins: 7 * 24 * 60,
+    resetsAt: new Date(NOW + 4 * 24 * 60 * 60_000).toISOString(),
+  };
+  assert.ok(Math.abs(expectedRemainingFor(provider, NOW) - 57.142857) < 0.000001);
+  assert.equal(expectedRemainingFor({ ...provider, resetsAt: null }, NOW), null);
+  assert.equal(expectedRemainingFor({ ...provider, status: 'unavailable' }, NOW), null);
+  assert.equal(expectedRemainingFor({ ...provider, resetsAt: new Date(NOW - 1).toISOString() }, NOW), null);
 });
 
 test('grades usage against elapsed reset-window pace', () => {

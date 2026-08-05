@@ -257,4 +257,8 @@ h3 { margin: 0; font-size: 24px; letter-spacing: -0.035em; }
 .gauge-text { display: grid; gap: 3px; min-width: 0; }
 .gauge-text strong { font-size: 15px; }
 .gauge-summary { color: var(--gauge-color); font-size: 13px; font-weight: 700; }
+.gauge-metrics { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.gauge-metrics b { color: var(--gauge-color); font-size: 12px; font-weight: 700; }
+.gauge-reset { color: var(--muted); font-size: 12px; }
+.gauge-reset b { color: var(--text); font-size: 13px; font-weight: 700; }
 .gauge-detail { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
