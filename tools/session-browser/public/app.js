@@ -6,6 +6,7 @@ import { formatToolTitle } from '/shared/browser/format.js';
 import { sessionBrowserScope } from '/shared/browser/session-links.js';
 import { clearStaleRequestedSelection, nearestScrollTop, requestedSelection, requestedTopic } from './selection.js';
 import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
+import { tableScrollKeys } from './table-scroll.js';
 
 const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, tagFilter: 'all', sourceErrors: [], metadataError: null };
 let detailUpdatePending = false;
@@ -325,6 +326,11 @@ function scrollSelectedTopicIntoView() {
   pane.scrollTo({ top: Math.max(0, pane.scrollTop + targetTop - paneTop - headerHeight - 12) });
 }
 
+function assignTableScrollKeys() {
+  const tables = [...els.messages.querySelectorAll('.markdown-table-wrap')];
+  tableScrollKeys(tables).forEach((key, index) => { tables[index].dataset.tableKey = key; });
+}
+
 function captureTableScrollPositions() {
   return Array.from(els.messages.querySelectorAll('.markdown-table-wrap')).map((node, index) => [node.dataset.tableKey || `index:${index}`, node.scrollLeft]);
 }
@@ -387,6 +393,7 @@ function renderSelectedDetail({ scrollTopic = true } = {}) {
   const codeBlockScrollPositions = captureCodeBlockScrollPositions();
   els.messages.classList.toggle('hide-tools', !els.showTools.checked);
   els.messages.innerHTML = detail.activeEntries.map((entry) => renderEntry(entry, detail.entries)).join('');
+  assignTableScrollKeys();
   for (const node of els.messages.querySelectorAll('details[data-detail-key]')) {
     if (openDetails.has(node.dataset.detailKey)) node.open = true;
   }
