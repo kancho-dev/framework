@@ -303,7 +303,7 @@ function renderLimitGauge(provider) {
   const pace = paceDelta === null
     ? null
     : `target ${Math.round(expectedRemaining)}% left · ${Math.abs(Math.round(paceDelta))} pp ${paceDirection} pace`;
-  const paceMetrics = paceDelta === null ? '' : `<span class="gauge-metrics"><span>target <b>${Math.round(expectedRemaining)}%</b> left</span><span><b>${Math.abs(Math.round(paceDelta))} pp</b> ${paceDirection} pace</span></span>`;
+  const paceMetrics = paceDelta === null ? '' : `<span class="gauge-metrics"><span>target <b>${Math.round(expectedRemaining)}%</b> left</span><span><b>${Math.abs(Math.round(paceDelta))} pp</b> <em>${paceDirection}</em> pace</span></span>`;
   const reset = remaining === null ? null : formatReset(provider.resetsAt);
   const detail = remaining === null
     ? '<span class="gauge-detail">No provider-reported value</span>'
