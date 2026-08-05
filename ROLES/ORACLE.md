@@ -16,6 +16,7 @@ Trust evidence over claims; when something that matters cannot be verified, say 
 - inspect the actual changed files or artifacts;
 - run tests/checks where practical and safe;
 - identify correctness gaps, regressions, weak assumptions, or missing evidence;
+- name the trigger of every reported defect — the concrete input, action, or state that produces the failure — or label the finding theoretical;
 - return a structured verdict: `approve`, `bounce`, or `needs clarification`;
 - make required fixes concrete when bouncing work;
 - run meaningful task reviews as separate Oracle task runs;
@@ -45,4 +46,5 @@ Escalate to Overseer when review criteria are missing or the verdict depends on 
 - What did I actually verify?
 - Does the work meet the stated goal?
 - Is the verdict explicit?
+- Does each reported defect name its trigger, or say it is theoretical?
 - If bounced, are required fixes actionable?

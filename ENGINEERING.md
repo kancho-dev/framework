@@ -9,7 +9,7 @@ Read this file before making code changes.
 3. Solve the root cause when it is practical to do so.
 4. Validate at boundaries and fail fast.
 5. Do not hardcode secrets.
-6. Add tests for business logic and edge cases where the project supports testing.
+6. Add tests for business logic and edge cases where the project supports testing. A test written for a defect must fail against the pre-fix code; if it passes without the fix, it is not coverage and the defect may not be real.
 7. Keep comments rare and use them to explain why, not what.
 
 ## Suggested Limits

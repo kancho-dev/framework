@@ -52,6 +52,8 @@ Repository rules are authoritative. Load branch-specific references only when a 
 
 Run the smallest checks that directly exercise the highest-risk claims, then broaden only where failures, coupling, or the task contract justify it. Inspect commands before execution and follow repository security guidance. Record the exact command or inspection, result, and any limitation; prior implementation evidence is a lead, not independent-review proof.
 
+Before reporting a defect, establish its trigger: the concrete input, action, or state that produces the failure. Where a pre-fix tree exists, check the claim against it rather than by inspection — `git archive <pre-fix-ref> | tar -x -C <tmp-dir>` rebuilds one without a checkout or worktree, so a test that is supposed to demonstrate the defect can be shown to fail there. A test that passes against pre-fix code demonstrates nothing. When no trigger can be produced, report the finding as theoretical instead of dropping it.
+
 For non-executable documentation or workflow changes, use representative walkthroughs plus focused searches for stale competing guidance, branch omissions, public-safety leaks, and ownership drift. Include applicable automated checks and `git diff --check`.
 
 **Complete when:** each consequential claim has direct evidence or an explicit evidence gap, and every executed check has an observed result.
@@ -75,7 +77,9 @@ Report:
 - **Clarification needed:** only for `needs clarification`
 - **Confidence:** high / medium / low, with the reason when below high
 
-**Complete when:** the verdict follows the rules above, every material finding points to evidence, and the next action is unambiguous.
+Every defect in **Required fixes** carries its verified trigger. A reported defect whose trigger is unnamed or unverified is reported as theoretical and does not by itself justify a bounce on that defect, and no actor admits it into release or task scope on the strength of the symptom alone. Theoretical findings stay first-class: they may still be fixed as hygiene, under that label, and a reviewer who cannot find a trigger says so rather than inventing one.
+
+**Complete when:** the verdict follows the rules above, every reported defect names a verified trigger or is labelled theoretical, every material finding points to evidence, and the next action is unambiguous.
 
 ## Persist The Outcome
 
