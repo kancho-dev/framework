@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -26,6 +26,41 @@ async function writeJsonl(path, entries) {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${entries.map((entry) => JSON.stringify(entry)).join('\n')}\n`);
 }
+
+test('artifact replacement never exposes partial JSON to concurrent readers', async (t) => {
+  const workspaceRoot = await fixtureWorkspace(t);
+  const piRoot = join(workspaceRoot, 'pi-sessions');
+  const outDir = join(workspaceRoot, 'out');
+  const encodedWorkspace = `-${resolve(workspaceRoot).replace(/\//g, '-')}--`;
+  const sessionPath = join(piRoot, encodedWorkspace, 'large-session.jsonl');
+  const entries = Array.from({ length: 20_000 }, (_, index) => ({
+    type: 'message',
+    timestamp: '2026-01-02T03:04:05.000Z',
+    message: { role: 'assistant', model: `model-${index}`, usage: { input: index + 1, output: 1 } },
+  }));
+  await writeJsonl(sessionPath, entries);
+  await mkdir(outDir, { recursive: true });
+  await writeFile(join(outDir, 'normalized.json'), '{"records":[]}');
+
+  const child = spawn(process.execPath, [join(here, 'analyze.mjs'), '--workspace', workspaceRoot, '--out', outDir, '--source', 'pi', '--pi-root', piRoot]);
+  const completed = new Promise((resolveChild, rejectChild) => {
+    let stderr = '';
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', rejectChild);
+    child.on('close', (code) => code === 0 ? resolveChild() : rejectChild(new Error(stderr)));
+  });
+
+  let done = false;
+  completed.finally(() => { done = true; });
+  let parseError;
+  while (!done && !parseError) {
+    try { JSON.parse(await readFile(join(outDir, 'normalized.json'), 'utf8')); }
+    catch (error) { parseError = error; }
+    await new Promise((resolveLoop) => setImmediate(resolveLoop));
+  }
+  await completed;
+  assert.ifError(parseError);
+});
 
 test('Pi CLI analysis normalizes recorded usage and native cost', async (t) => {
   const workspaceRoot = await fixtureWorkspace(t);
