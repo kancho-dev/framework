@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test server.test.mjs subscription-limits.test.mjs public/limits-format.test.mjs"
+    "test": "node --test server.test.mjs subscription-limits.test.mjs public/limits-format.test.mjs ../shared-web/refresh-coordinator.test.mjs"
   }
 }
