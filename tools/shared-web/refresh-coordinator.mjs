@@ -76,11 +76,13 @@ export function createRefreshCoordinator({ fetchData, isValid = () => true, getI
       lastError = error;
       status('error', { reason: request.reason });
     } finally {
-      if (running === current) running = null;
-      if (queuedPoll) {
-        const poll = queuedPoll;
-        queuedPoll = null;
-        start(poll);
+      if (running === current) {
+        running = null;
+        if (queuedPoll) {
+          const poll = queuedPoll;
+          queuedPoll = null;
+          start(poll).then(poll.resolve, poll.reject);
+        }
       }
     }
   }
@@ -88,8 +90,13 @@ export function createRefreshCoordinator({ fetchData, isValid = () => true, getI
   function start({ reason, force = false }) {
     if (!REASONS.has(reason)) throw new Error(`Unknown refresh reason: ${reason}`);
     if (reason === 'poll' && running) {
-      queuedPoll = { reason, force, identity: getIdentity() };
-      return running.promise;
+      if (!queuedPoll) {
+        let resolve;
+        let reject;
+        const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+        queuedPoll = { reason, force, promise, resolve, reject };
+      }
+      return queuedPoll.promise;
     }
 
     generation += 1;

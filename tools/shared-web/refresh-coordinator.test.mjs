@@ -35,20 +35,55 @@ test('only the newest request may commit', async () => {
   assert.deepEqual(commits.map(({ data, reason }) => [data, reason]), [['new', 'focus']]);
 });
 
-test('timer ticks coalesce while a fetch is running', async () => {
+test('timer ticks coalesce while a fetch is running and await the queued poll', async () => {
   const first = deferred();
+  const poll = deferred();
   let calls = 0;
-  const { refresh } = coordinator({ fetchData: async () => (++calls === 1 ? first.promise : calls) });
+  const { refresh } = coordinator({ fetchData: async () => (++calls === 1 ? first.promise : poll.promise) });
 
   const running = refresh.request({ reason: 'manual' });
   const coalesced = refresh.request({ reason: 'poll' });
-  assert.equal(coalesced, running);
-  assert.equal(refresh.request({ reason: 'poll' }), running);
+  assert.notEqual(coalesced, running);
+  assert.equal(refresh.request({ reason: 'poll' }), coalesced);
   first.resolve('first');
-  await coalesced;
-  await new Promise((resolve) => setImmediate(resolve));
-
+  await running;
   assert.equal(calls, 2);
+
+  let pollSettled = false;
+  coalesced.then(() => { pollSettled = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(pollSettled, false);
+  poll.resolve('poll');
+  await coalesced;
+  assert.equal(pollSettled, true);
+});
+
+test('a superseded request cannot release a poll over a newer manual refresh', async () => {
+  const first = deferred();
+  const manual = deferred();
+  const signals = [];
+  let calls = 0;
+  const { refresh, commits } = coordinator({
+    fetchData: ({ signal }) => {
+      signals.push(signal);
+      calls += 1;
+      if (calls === 1) return first.promise;
+      if (calls === 2) return manual.promise;
+      return Promise.resolve('poll');
+    },
+  });
+
+  const oldRequest = refresh.request({ reason: 'focus' });
+  const queuedPoll = refresh.request({ reason: 'poll' });
+  const manualRequest = refresh.request({ reason: 'manual', force: true });
+  first.resolve('old');
+  await oldRequest;
+  assert.equal(signals[1].aborted, false);
+  assert.equal(calls, 2);
+
+  manual.resolve('manual');
+  await Promise.all([manualRequest, queuedPoll]);
+  assert.deepEqual(commits.map(({ data, reason }) => [data, reason]), [['manual', 'manual'], ['poll', 'poll']]);
 });
 
 test('a response cannot commit after its identity vanishes', async () => {
