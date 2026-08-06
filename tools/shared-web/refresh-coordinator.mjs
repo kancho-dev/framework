@@ -95,6 +95,10 @@ export function createRefreshCoordinator({ fetchData, isValid = () => true, getI
         let reject;
         const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
         queuedPoll = { reason, force, promise, resolve, reject };
+      } else if (force) {
+        // Coalescing must not drop a caller's force: the queued poll is the only
+        // fetch those callers will get.
+        queuedPoll.force = true;
       }
       return queuedPoll.promise;
     }

@@ -35,6 +35,23 @@ test('only the newest request may commit', async () => {
   assert.deepEqual(commits.map(({ data, reason }) => [data, reason]), [['new', 'focus']]);
 });
 
+test('a coalesced poll keeps force once any caller asked for it', async () => {
+  const first = deferred();
+  const poll = deferred();
+  const forces = [];
+  const { refresh } = coordinator({ fetchData: ({ force }) => { forces.push(force); return forces.length === 1 ? first.promise : poll.promise; } });
+
+  const running = refresh.request({ reason: 'manual' });
+  refresh.request({ reason: 'poll' });
+  const coalesced = refresh.request({ reason: 'poll', force: true });
+  first.resolve('first');
+  await running;
+  poll.resolve('poll');
+  await coalesced;
+
+  assert.deepEqual(forces, [false, true]);
+});
+
 test('timer ticks coalesce while a fetch is running and await the queued poll', async () => {
   const first = deferred();
   const poll = deferred();
