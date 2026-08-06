@@ -21,20 +21,22 @@ export function restoreBoardScroll(scroll) {
   for (const column of els.board.querySelectorAll('.column[data-status]')) column.scrollTop = scroll.columns[column.dataset.status] || 0;
 }
 
-export function renderBoard(visible) {
-  els.board.innerHTML = state.statuses.filter((status) => state.selectedStatuses.has(status)).map((status) => renderColumn(status, sortTasks(status, visible.filter((task) => task.metadata?.status === status)))).join('');
+export function renderBoard(visible, { orderingDisabled = false } = {}) {
+  els.board.classList.toggle('ordering-disabled', orderingDisabled);
+  els.board.innerHTML = state.statuses.filter((status) => state.selectedStatuses.has(status)).map((status) => renderColumn(status, sortTasks(status, visible.filter((task) => task.metadata?.status === status)), orderingDisabled)).join('');
 }
 
-function renderColumn(status, tasks) {
-  return `<section class="column" data-status="${escapeHtml(status)}"><h3>${escapeHtml(status)} <span>${tasks.length}</span></h3><div class="drop-zone" data-status="${escapeHtml(status)}">${tasks.map(renderCard).join('') || '<p class="muted">No tasks</p>'}</div></section>`;
+function renderColumn(status, tasks, orderingDisabled) {
+  return `<section class="column" data-status="${escapeHtml(status)}"><h3>${escapeHtml(status)} <span>${tasks.length}</span></h3><div class="drop-zone" data-status="${escapeHtml(status)}">${tasks.map((task) => renderCard(task, orderingDisabled)).join('') || '<p class="muted">No tasks</p>'}</div></section>`;
 }
 
-function renderCard(task) {
+function renderCard(task, orderingDisabled) {
   const meta = task.metadata || {};
   const active = task.key === state.selectedKey ? ' active' : '';
   const tags = (meta.tags || []).slice(0, 4).map((tag) => labelPill(tag)).join('');
   const steering = pendingSteeringIndicator(task.hasPendingSteeringNotes);
-  return `<button class="task-card${active}" draggable="true" data-key="${escapeHtml(task.key)}"><div class="card-top"><span class="card-identity"><span class="display-id">${escapeHtml(meta.displayId)}</span>${nextActorBadge(meta.nextActor)}${steering}</span>${projectPill(task.project)}</div><strong>${escapeHtml(task.title)}</strong><span class="card-slug" title="${escapeHtml(task.slug)}">${escapeHtml(task.slug)}</span><div class="card-meta">${metaPill('priority', meta.priority, `priority ${meta.priority}`)}${metaPill('type', meta.type, 'type')}${tags}</div></button>`;
+  const dragHint = orderingDisabled ? ' title="Filtered: drag to another column to change status; clear filters to reorder"' : '';
+  return `<button class="task-card${active}" draggable="true"${dragHint} data-key="${escapeHtml(task.key)}"><div class="card-top"><span class="card-identity"><span class="display-id">${escapeHtml(meta.displayId)}</span>${nextActorBadge(meta.nextActor)}${steering}</span>${projectPill(task.project)}</div><strong>${escapeHtml(task.title)}</strong><span class="card-slug" title="${escapeHtml(task.slug)}">${escapeHtml(task.slug)}</span><div class="card-meta">${metaPill('priority', meta.priority, `priority ${meta.priority}`)}${metaPill('type', meta.type, 'type')}${tags}</div></button>`;
 }
 
 export function showSelectedTaskInBoard() {

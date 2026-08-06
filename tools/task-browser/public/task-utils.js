@@ -1,32 +1,16 @@
-export const priorityRank = { urgent: 0, high: 1, normal: 2, low: 3 };
+import { sortForBoardOrder } from './board-ordering.js';
+
 
 export function unique(values) {
   return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
 export function sortTasks(status, tasks) {
-  return [...tasks].sort((a, b) => status === 'done' ? compareDone(a, b) : compareActive(a, b));
-}
-
-function compareActive(a, b) {
-  return compareNullableNumber(a.metadata?.order, b.metadata?.order, true)
-    || compareNumber(priorityRank[a.metadata?.priority] ?? 99, priorityRank[b.metadata?.priority] ?? 99)
-    || compareDateDesc(a.latestRunAt, b.latestRunAt)
-    || compareNumber(displayNumber(b), displayNumber(a))
-    || a.key.localeCompare(b.key);
+  return [...tasks].sort(status === 'done' ? compareDone : sortForBoardOrder);
 }
 
 function compareDone(a, b) {
   return compareRunPresence(a, b) || compareDateDesc(a.latestRunAt, b.latestRunAt) || compareNumber(displayNumber(b), displayNumber(a)) || a.key.localeCompare(b.key);
-}
-
-function compareNullableNumber(a, b, nullLast) {
-  const aNum = Number.isFinite(a) ? a : null;
-  const bNum = Number.isFinite(b) ? b : null;
-  if (aNum !== null && bNum !== null && aNum !== bNum) return aNum - bNum;
-  if (aNum === null && bNum !== null) return nullLast ? 1 : -1;
-  if (aNum !== null && bNum === null) return nullLast ? -1 : 1;
-  return 0;
 }
 
 function compareNumber(a, b) { return a === b ? 0 : a - b; }

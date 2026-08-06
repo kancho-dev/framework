@@ -6,6 +6,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appendHistoryEvent, applyBrowserPatch, applyRelationshipPatch, buildHistoryEvent, changedTaskKeys, deriveBlocks, findWorkspaceRoot, historyPathFor, metadataPathFor, readHistory, readMetadata, snapshotTasks, STATUSES, syncMetadataTasks, writeMetadata } from './metadata-helpers.mjs';
 import { exists, normalizeBasePath, readStaticText, safeError, sendHtml, sendJson, serveStaticPath, stripBasePath } from '../shared-web/http.mjs';
+import { planBoardMove } from './public/board-ordering.js';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(TOOL_DIR, 'public');
@@ -325,6 +326,27 @@ async function updateTaskMetadata(ctx, key, patch) {
   return { ...metadata.tasks[key], blocks: deriveBlocks(metadata, key) };
 }
 
+async function moveTaskOnBoard(ctx, request) {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) throw Object.assign(new Error('Invalid board move'), { statusCode: 400 });
+  if (typeof request.key !== 'string' || !request.key) throw Object.assign(new Error('Missing task key'), { statusCode: 400 });
+  if (!STATUSES.includes(request.status)) throw Object.assign(new Error('Invalid destination status'), { statusCode: 400 });
+  if (!Number.isInteger(request.index) || request.index < 0) throw Object.assign(new Error('Invalid destination index'), { statusCode: 400 });
+  const discovered = await discoverTasks(ctx);
+  const metadata = syncMetadataTasks(await readMetadata(ctx.metadataPath, { allowMissing: true }), discovered, { inferType });
+  const beforeTasks = snapshotTasks(metadata);
+  let plan;
+  try {
+    plan = planBoardMove(discovered.map((task) => ({ ...task, metadata: metadata.tasks[task.key] })), request);
+  } catch (error) {
+    throw Object.assign(error, { statusCode: /Unknown task/.test(error.message) ? 404 : 400 });
+  }
+  for (const change of plan) metadata.tasks[change.key] = applyBrowserPatch(metadata.tasks[change.key], change.metadata);
+  const events = changedTaskKeys(beforeTasks, metadata).map((taskKey) => buildHistoryEvent({ key: taskKey, task: metadata.tasks[taskKey], before: beforeTasks[taskKey], after: metadata.tasks[taskKey], actor: 'operator', source: 'browser', action: 'board.move' })).filter(Boolean);
+  await writeMetadata(ctx.metadataPath, metadata);
+  for (const event of events) await appendHistoryEvent(ctx.historyPath, event);
+  return { changes: plan.map(({ key }) => ({ key, metadata: { ...metadata.tasks[key], blocks: deriveBlocks(metadata, key) } })) };
+}
+
 async function readJsonBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -380,6 +402,10 @@ export function createTaskBrowserHandler({ basePath = '/', cockpit = null, works
           return true;
         }
         sendJson(res, 200, { metadata: await updateTaskMetadata(ctx, body.key, body.metadata) });
+        return true;
+      }
+      if (pathname === '/api/board-move' && req.method === 'POST') {
+        sendJson(res, 200, await moveTaskOnBoard(ctx, await readJsonBody(req)));
         return true;
       }
       if (pathname.startsWith('/shared/')) {

@@ -31,6 +31,18 @@ export async function saveSteeringNotes(key, content, revision) {
   return data.steeringNotes;
 }
 
+export async function moveBoardTask(key, status, index) {
+  const res = await fetch('api/board-move', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, status, index }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Board move failed: ${res.status}`);
+  for (const change of data.changes || []) {
+    const task = state.tasks.find((item) => item.key === change.key);
+    if (task) task.metadata = change.metadata;
+  }
+  els.status.textContent = `Saved board placement for ${key}.`;
+  return data.changes || [];
+}
+
 export async function saveMetadata(key, patch) {
   const res = await fetch('api/task-metadata', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, metadata: patch }) });
   const data = await res.json().catch(() => ({}));

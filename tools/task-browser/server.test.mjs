@@ -43,6 +43,10 @@ async function patch(base, nextActor) {
   return fetch(`${base}/api/task-metadata`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: 'demo/task', metadata: { nextActor } }) });
 }
 
+async function boardMove(base, body) {
+  return fetch(`${base}/api/board-move`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+}
+
 test('task inventory and on-demand previews enforce Markdown and task boundaries', async () => {
   const ctx = await fixture();
   const taskDir = join(ctx.root, 'projects/demo/work/task');
@@ -157,6 +161,63 @@ test('summary groups, filters, and deterministically orders actionable next acto
       'demo/operator-review',
       'demo/operator-planned',
     ]);
+  });
+});
+
+test('board move atomically persists status and the minimal ordering patch', async () => {
+  const ctx = await fixture();
+  const entries = [
+    await addTask(ctx, 'first', { displayId: '#2', status: 'active', priority: 'normal', order: 1 }),
+    await addTask(ctx, 'second', { displayId: '#3', status: 'active', priority: 'normal', order: 2 }),
+    await addTask(ctx, 'boundary', { displayId: '#4', status: 'active', priority: 'normal', order: 4 }),
+  ];
+  const stored = JSON.parse(await readFile(ctx.metadataPath, 'utf8'));
+  stored.tasks['demo/task'].status = 'planned';
+  stored.tasks['demo/task'].order = 9;
+  for (const [key, metadata] of entries) stored.tasks[key] = metadata;
+  await writeFile(ctx.metadataPath, `${JSON.stringify(stored)}\n`);
+
+  await withServer(ctx, async (base) => {
+    const response = await boardMove(base, { key: 'demo/task', status: 'active', index: 1 });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.deepEqual(result.changes.map(({ key, metadata }) => [key, metadata.status, metadata.order]), [
+      ['demo/task', 'active', 2],
+      ['demo/second', 'active', 3],
+    ]);
+  });
+  const saved = JSON.parse(await readFile(ctx.metadataPath, 'utf8')).tasks;
+  assert.equal(saved['demo/task'].status, 'active');
+  assert.equal(saved['demo/task'].order, 2);
+  assert.equal(saved['demo/second'].order, 3);
+  assert.equal(saved['demo/first'].order, 1);
+  assert.equal(saved['demo/boundary'].order, 4);
+  const events = (await readFile(ctx.historyPath, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(events.map(({ taskKey, action }) => [taskKey, action]), [['demo/task', 'board.move'], ['demo/second', 'board.move']]);
+});
+
+test('rejected board move preserves existing task ordering', async () => {
+  const ctx = await fixture();
+  const before = await readFile(ctx.metadataPath, 'utf8');
+  await withServer(ctx, async (base) => {
+    const response = await boardMove(base, { key: 'demo/task', status: 'active', index: 4 });
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /Invalid destination index/);
+  });
+  assert.equal(await readFile(ctx.metadataPath, 'utf8'), before);
+});
+
+test('status-only metadata moves preserve the existing order value', async () => {
+  const ctx = await fixture();
+  const stored = JSON.parse(await readFile(ctx.metadataPath, 'utf8'));
+  stored.tasks['demo/task'].order = 7;
+  await writeFile(ctx.metadataPath, `${JSON.stringify(stored)}\n`);
+  await withServer(ctx, async (base) => {
+    const response = await fetch(`${base}/api/task-metadata`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: 'demo/task', metadata: { status: 'review' } }) });
+    assert.equal(response.status, 200);
+    const metadata = (await response.json()).metadata;
+    assert.equal(metadata.status, 'review');
+    assert.equal(metadata.order, 7);
   });
 });
 

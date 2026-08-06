@@ -116,7 +116,7 @@ export async function readHistory(path, { taskKey = null, limit = 20 } = {}) {
 
 function normalizeHistoryValue(field, value) {
   if (ARRAY_FIELDS.has(field)) return cleanArray(value);
-  if (field === 'order') return Number.isFinite(value) ? value : null;
+  if (field === 'order') return normalizeOrder(value);
   if (field === 'parent') return typeof value === 'string' && value.trim() ? value.trim() : null;
   if (value === undefined) return null;
   return value;
@@ -146,7 +146,7 @@ export function normalizeTask(task, existing = {}, { inferType } = {}) {
     children: cleanArray(task.children),
     related: cleanArray(task.related),
     tags: cleanArray(task.tags),
-    order: Number.isFinite(task.order) ? task.order : null,
+    order: normalizeOrder(task.order),
   };
 }
 
@@ -310,6 +310,8 @@ export function normalizeNextActorPatch(value) {
 export function fieldName(name) { return name.replace(/-([a-z])/g, (_, c) => c.toUpperCase()); }
 export function split(value) { return cleanArray(String(value).split(',')); }
 export function cleanArray(value) { return Array.isArray(value) ? [...new Set(value.map((v) => String(v).trim()).filter(Boolean))] : []; }
+function normalizeOrder(value) { return Number.isInteger(value) && value > 0 ? value : null; }
+
 export function parseOrder(value) { if (value === null || value === '') return null; const n = Number(value); if (!Number.isInteger(n) || n <= 0) throw new Error('order must be a positive integer'); return n; }
 export function valid(value, allowed, fallback) { return allowed.includes(value) ? value : fallback; }
 export function requireOne(value, allowed, name) { if (!allowed.includes(value)) throw new Error(`${name} must be one of: ${allowed.join(', ')}`); return value; }

@@ -17,6 +17,11 @@ test('normalizeTask preserves allowed next actors and safely clears absent or in
   assert.equal(normalizeTask({ ...baseTask, nextActor: 'builder' }).nextActor, null);
 });
 
+test('normalizeTask treats non-positive and non-integer order values as missing', () => {
+  assert.equal(normalizeTask({ ...baseTask, order: 2 }).order, 2);
+  for (const order of [0, -1, 1.5, Number.NaN]) assert.equal(normalizeTask({ ...baseTask, order }).order, null);
+});
+
 test('stored metadata normalizes absent or older invalid nextActor values to null', () => {
   const metadata = normalizeMetadata({ tasks: { absent: {}, invalid: { nextActor: 'builder' }, valid: { nextActor: 'agent' } } });
   assert.equal(metadata.tasks.absent.nextActor, null);

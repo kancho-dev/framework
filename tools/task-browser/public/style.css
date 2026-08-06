@@ -42,11 +42,16 @@ h1,h2,h3,p { margin:0; } h1{font-size:20px; display:flex; align-items:center; ga
 .column h3 { display:flex; justify-content:space-between; margin-bottom:10px; }
 .drop-zone { min-height:84px; border-radius:10px; }
 .drop-zone:has(.muted:only-child) { display:flex; align-items:center; justify-content:center; border:1px dashed rgba(156,220,254,.18); background:rgba(255,255,255,.02); }
-.column.drop-target .drop-zone { border:1px dashed rgba(156,220,254,.55); background:rgba(156,220,254,.06); }
+.column.drop-target .drop-zone { background:rgba(156,220,254,.04); }
+.insertion-target { position:relative; height:12px; margin:-6px 0 2px; pointer-events:none; }
+.insertion-target::before { content:""; position:absolute; left:0; right:0; top:5px; height:3px; border-radius:999px; background:var(--accent); box-shadow:0 0 0 1px rgba(21,22,27,.8),0 0 10px rgba(156,220,254,.4); }
+.insertion-target::after { content:"Drop here"; position:absolute; z-index:1; right:8px; top:-4px; padding:0 5px; color:var(--accent); background:var(--bg); font-size:9px; line-height:14px; }
 .muted { color:var(--dim); padding:8px 2px; }
 .task-card { width:100%; text-align:left; margin:0 0 8px; padding:12px; background:var(--panel-2); border:1px solid transparent; border-radius:12px; }
 .task-card[draggable="true"] { cursor:grab; }
 .task-card[draggable="true"]:active { cursor:grabbing; }
+.task-card.dragging { opacity:.38; }
+.board.ordering-disabled .task-card { cursor:grab; }
 .task-card.active { border-color:var(--accent); box-shadow:inset 3px 0 0 var(--accent); }
 .task-card > strong { display:block; margin-bottom:6px; }
 .card-slug { display:block; margin-bottom:8px; overflow:hidden; color:var(--muted); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
