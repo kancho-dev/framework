@@ -102,9 +102,7 @@ export function createRefreshCoordinator({ fetchData, isValid = () => true, getI
     generation += 1;
     if (running) running.controller.abort();
     const request = { generation, reason, force, identity: getIdentity() };
-    const promise = run(request);
-    if (running?.generation === request.generation) running.promise = promise;
-    return promise;
+    return run(request);
   }
 
   function request(options) {
