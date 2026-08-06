@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { atomicWrite } from './atomic-write.mjs';
 import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel } from '../shared-web/model-normalization.mjs';
 import { openCodeTokenValues, openCodeTotalTokens } from '../shared-web/opencode-usage.mjs';
 
@@ -58,12 +59,6 @@ await atomicWrite(join(outDir, 'normalized.json'), JSON.stringify({ generatedAt,
 await atomicWrite(join(outDir, 'daily.json'), JSON.stringify({ generatedAt, workspaceRoot, analysis, daily }, null, 2));
 await atomicWrite(join(outDir, 'report.md'), renderReport(records, warnings, analysis));
 console.log(`Wrote ${records.length} records to ${outDir}`);
-
-async function atomicWrite(path, content) {
-  const temporaryPath = `${path}.tmp`;
-  await writeFile(temporaryPath, content);
-  await rename(temporaryPath, path);
-}
 
 function parseArgs(argv) {
   const opts = {};
