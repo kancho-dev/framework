@@ -57,7 +57,6 @@ const daily = dailyUsage(records);
 await mkdir(outDir, { recursive: true });
 await atomicWrite(join(outDir, 'normalized.json'), JSON.stringify({ generatedAt, workspaceRoot, analysis, pricingPath, pricingSources: pricing.pricingSources || [], warnings, records }, null, 2));
 await atomicWrite(join(outDir, 'daily.json'), JSON.stringify({ generatedAt, workspaceRoot, analysis, daily }, null, 2));
-await atomicWrite(join(outDir, 'report.md'), renderReport(records, warnings, analysis));
 console.log(`Wrote ${records.length} records to ${outDir}`);
 
 function parseArgs(argv) {
@@ -76,7 +75,7 @@ function parseArgs(argv) {
 }
 
 function help() {
-  console.log(`Usage: node analyze.mjs [--workspace PATH] [--out DIR] [--pricing FILE] [--source pi|opencode|codex|claude-code] [--limit N|all]\n\nOutputs normalized.json and report.md. Defaults write to .tools-config/tokens-cost-analyzer/. By default all in-scope sessions/files are analyzed; use --limit for a bounded recent sessions/files slice per source, not a record/message limit.`);
+  console.log(`Usage: node analyze.mjs [--workspace PATH] [--out DIR] [--pricing FILE] [--source pi|opencode|codex|claude-code] [--limit N|all]\n\nOutputs normalized.json and daily.json. Defaults write to .tools-config/tokens-cost-analyzer/. By default all in-scope sessions/files are analyzed; use --limit for a bounded recent sessions/files slice per source, not a record/message limit.`);
   process.exit(0);
 }
 
@@ -490,54 +489,6 @@ function confidence(recordedCost, estimate, tokens) {
   return 'unknown';
 }
 
-function renderReport(records, warnings, analysis) {
-  const totalTokens = records.reduce((sum, r) => sum + (r.totalTokens || 0), 0);
-  const recordedCost = records.reduce((sum, r) => sum + (r.recordedCost || 0), 0);
-  const estimatedCost = records.reduce((sum, r) => sum + (r.estimatedCost || 0), 0);
-  const unknownCost = records.filter((r) => r.estimatedCost == null && r.recordedCost == null).length;
-  const recordWarnings = warningSummary(records);
-  return [`# Tokens / Cost Analyzer Report`, '', `Generated: ${new Date().toISOString()}`, `Analysis: ${analysis.mode === 'limited' ? `limited to latest ${analysis.limit} sessions/files per source` : 'full-history'}`, '', '## Summary', '', `- Records: ${records.length}`, `- Source-derived total tokens: ${totalTokens}`, `- Recorded native cost total: ${money(recordedCost)}`, `- Estimated cost total: ${money(estimatedCost)}`, `- Records with unknown/unpriced cost: ${unknownCost}`, '', '## Warnings', '', ...(warnings.length ? warnings.map((w) => `- ${w.source}: ${w.warning}`) : []), ...(recordWarnings.length ? recordWarnings.map((w) => `- ${w}`) : []), ...(!warnings.length && !recordWarnings.length ? ['- None'] : []), '', '## By Model', '', table(groupBy(records, (r) => r.modelLabel || r.model || 'unknown-model')), '', '## By Day', '', table(groupBy(records, (r) => r.date || 'unknown-date')), '', '## Top Drivers — Sessions', '', ...sessionDrivers(records).slice(0, 10).map((r) => `- ${r.date || 'unknown'} ${r.source} ${r.modelLabel || r.model || 'unknown-model'} records=${r.recordCount} tokens=${r.totalTokens ?? 'unknown'} recorded=${money(r.recordedCost)} estimated=${money(r.estimatedCost)} confidence=${r.confidence}${sessionBrowserMarkdownLink(r)}`), '', '## Top Drivers — Prompts / Messages', '', ...records.slice().sort(compareTopDrivers).slice(0, 10).map((r) => `- ${r.date || 'unknown'} ${r.source} ${r.modelLabel || r.model || 'unknown-model'} tokens=${r.totalTokens ?? 'unknown'} recorded=${money(r.recordedCost)} estimated=${money(r.estimatedCost)} confidence=${r.confidence}${sessionBrowserMarkdownLink(r)}`), '', 'Costs are estimates unless marked recorded in `normalized.json`. Missing values are unknown, not zero.', ''].join('\n');
-}
-
-function warningSummary(records) {
-  const counts = new Map();
-  for (const record of records) {
-    if (record.recordedCost == null && record.estimatedCost == null) counts.set('unknown/unpriced cost records', (counts.get('unknown/unpriced cost records') || 0) + 1);
-    if (!record.model) counts.set('unknown model records', (counts.get('unknown model records') || 0) + 1);
-    for (const warning of record.warnings || []) counts.set(warning, (counts.get(warning) || 0) + 1);
-  }
-  return [...counts.entries()].map(([label, count]) => `${label}: ${count}`);
-}
-
-function sessionBrowserMarkdownLink(record) {
-  if (!record.sessionBrowserPath) return '';
-  const params = new URLSearchParams({ selectSession: record.sessionBrowserPath });
-  if (record.sessionTopicId) params.set('selectTopic', record.sessionTopicId);
-  return ` [Session Browser](../session-browser/?${params.toString()})`;
-}
-
-function topDriverCost(record) { return Math.max(Number(record.recordedCost) || 0, Number(record.estimatedCost) || 0); }
-function compareTopDrivers(a, b) { return topDriverCost(b) - topDriverCost(a) || (Number(b.totalTokens) || 0) - (Number(a.totalTokens) || 0); }
-function sessionDrivers(records) {
-  const bySession = new Map();
-  for (const record of records) {
-    const key = `${record.source || 'unknown'}:${record.sessionId || record.sessionRef || 'unknown'}`;
-    const current = bySession.get(key) || { source: record.source, sessionId: record.sessionId, sessionRef: record.sessionRef, sessionBrowserPath: record.sessionBrowserPath, date: record.date, model: record.model, modelLabel: record.modelLabel, totalTokens: 0, recordedCost: 0, estimatedCost: 0, recordCount: 0, confidence: record.confidence };
-    current.totalTokens += Number(record.totalTokens) || 0;
-    current.recordedCost += Number(record.recordedCost) || 0;
-    current.estimatedCost += Number(record.estimatedCost) || 0;
-    current.recordCount += 1;
-    current.date = [current.date, record.date].filter(Boolean).sort()[0] || null;
-    current.modelLabel ||= record.modelLabel;
-    current.model ||= record.model;
-    if (current.confidence === 'unknown' && record.confidence) current.confidence = record.confidence;
-    bySession.set(key, current);
-  }
-  return [...bySession.values()]
-    .map((driver) => ({ ...driver, recordedCost: driver.recordedCost || null, estimatedCost: driver.estimatedCost || null }))
-    .sort(compareTopDrivers);
-}
-
 function dailyUsage(records) {
   const byDay = new Map();
   for (const record of records) {
@@ -548,27 +499,6 @@ function dailyUsage(records) {
     byDay.set(record.date, current);
   }
   return [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function groupBy(records, keyFn) {
-  const groups = new Map();
-  for (const record of records) {
-    const key = keyFn(record);
-    const current = groups.get(key) || { key, records: 0, tokens: 0, recorded: 0, estimated: 0, unknown: 0 };
-    current.records += 1;
-    current.tokens += record.totalTokens || 0;
-    current.recorded += record.recordedCost || 0;
-    current.estimated += record.estimatedCost || 0;
-    if (record.estimatedCost == null && record.recordedCost == null) current.unknown += 1;
-    groups.set(key, current);
-  }
-  return [...groups.values()].sort((a, b) => b.tokens - a.tokens).slice(0, 20);
-}
-
-function table(rows) {
-  const lines = ['| Bucket | Records | Tokens | Recorded Cost | Estimated Cost | Unknown/Unpriced |', '|---|---:|---:|---:|---:|---:|'];
-  for (const row of rows) lines.push(`| ${escapeCell(row.key)} | ${row.records} | ${row.tokens} | ${money(row.recorded)} | ${money(row.estimated)} | ${row.unknown} |`);
-  return lines.join('\n');
 }
 
 function chunks(items, size) {
@@ -623,6 +553,4 @@ function sumKnown(...values) { const known = values.filter((v) => v.value != nul
 function isoFromMs(value) { return Number.isFinite(Number(value)) ? new Date(Number(value)).toISOString() : null; }
 function sqlString(value) { return `'${String(value ?? '').replace(/'/g, "''")}'`; }
 function safeError(error) { return String(error?.message || error).split('\n')[0].slice(0, 220); }
-function money(value) { return value == null ? 'unknown' : `$${Number(value).toFixed(6)}`; }
-function escapeCell(value) { return String(value).replace(/\|/g, '\\|'); }
 function redactHome(path) { return String(path).replace(homedir(), '~'); }

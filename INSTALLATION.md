@@ -284,7 +284,7 @@ Useful configuration:
 Safety and privacy:
 
 - analysis is local-only and read-only with respect to source session data;
-- generated `normalized.json`, `report.md`, optional pricing overrides, and optional subscription records stay under ignored `.tools-config/` by default and may reveal models, usage, costs, paths, and work timing;
+- generated `normalized.json`, `daily.json`, optional pricing overrides, and optional subscription records stay under ignored `.tools-config/` by default and may reveal models, usage, costs, paths, and work timing;
 - do not commit generated reports or `.tools-config/` unless intentionally sharing that private local state;
 - estimates may be incomplete or unpriced and are explicitly separated from recorded native costs;
 - for complete source semantics, pricing caveats, Cockpit integration, and configuration, read `framework/tools/tokens-cost-analyzer/README.md`.
@@ -317,7 +317,7 @@ Optional browser tools use `.tools-config/` as the default private workspace-loc
     workspaces.json
   tokens-cost-analyzer/
     normalized.json
-    report.md
+    daily.json
     pricing.json
     subscriptions.json
 ```

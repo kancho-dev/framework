@@ -23,7 +23,7 @@ By default it writes private generated output to:
 
 ```text
 .tools-config/tokens-cost-analyzer/normalized.json
-.tools-config/tokens-cost-analyzer/report.md
+.tools-config/tokens-cost-analyzer/daily.json
 ```
 
 Optional private subscription records can live at:
