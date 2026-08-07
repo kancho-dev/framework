@@ -34,6 +34,14 @@ test('no excluded source renders amber and no fully included source renders red'
   assert.equal(rows[2].isLocal, true);
 });
 
+test('a recent cached report stays green but exposes the latest failed refresh', () => {
+  const [row] = sourceRows([source({ state: 'unreachable', fromCache: true, detail: 'host unreachable' })]);
+
+  assert.equal(row.tone, 'green', 'recent complete cached data remains trusted');
+  assert.equal(row.state, 'ok');
+  assert.match(row.note, /latest refresh attempt failed.*unreachable/);
+});
+
 test('both ages stay visible and distinguish "nothing new" from "could not check"', () => {
   const [reachable] = sourceRows([source({ staleReport: true, reportAgeHours: 50, fetchAgeHours: 0.5 })]);
   const [unreachable] = sourceRows([source({ staleReport: true, staleFetch: true, reportAgeHours: 50, fetchAgeHours: 50 })]);

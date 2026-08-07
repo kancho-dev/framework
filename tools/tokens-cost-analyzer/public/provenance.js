@@ -60,6 +60,7 @@ function sourceNote(source) {
   if (source.staleReport && source.staleFetch) return 'we have not been able to check this machine; its last known data is included.';
   if (source.staleReport) return 'reachable, but nothing newer has happened there; past usage is included.';
   if (source.staleFetch) return 'included from the last known good report; we could not reach this machine.';
+  if (source.fromCache && source.state !== 'ok') return `using a recent cached report; latest refresh attempt failed (${source.state}).`;
   if (source.coverageMode === 'limited') return 'covers a limited history, so combined totals are not full-history.';
   return null;
 }
