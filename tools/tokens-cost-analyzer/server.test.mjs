@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createTokensCostAnalyzerHandler, ensureArtifacts } from './server.mjs';
+import { loadExternalSources } from './sources.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -300,6 +301,25 @@ test('an unusable sources.json costs the deep links, not the dashboard', async (
 
   assert.equal(payload.linkTargets.machineId, 'workstation', 'identity still comes from the local report');
   assert.equal(payload.linkTargets.workspaces.length, 1, 'the default scan is the fallback, never a crash');
+});
+
+test('report and daily requests share one in-flight external fetch', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: oneSource });
+  let calls = 0;
+  let release;
+  const fetch = async () => {
+    calls += 1;
+    await new Promise((resolveFetch) => { release = resolveFetch; });
+    return { ok: false, state: 'unreachable', detail: 'asleep' };
+  };
+  const loadExternal = (options) => loadExternalSources({ ...options, fetch });
+
+  const report = request(outputDir, { loadExternal });
+  const daily = request(outputDir, { loadExternal }, '/api/daily-usage');
+  while (!release) await new Promise((resolveWait) => setImmediate(resolveWait));
+  assert.equal(calls, 1);
+  release();
+  assert.deepEqual((await Promise.all([report, daily])).map((response) => response.status), [200, 200]);
 });
 
 test('the daily endpoint serves merged records so the widget cannot disagree with the dashboard', async (t) => {

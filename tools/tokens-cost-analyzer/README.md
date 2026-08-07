@@ -96,7 +96,7 @@ command="cat ~/.tools-config/tokens-cost-analyzer/report.v1.json",no-port-forwar
 
 Two ages are tracked separately, because they mean different things: `staleReportAfterHours` (default 24) is how old the remote's *analysis* is, and `staleFetchAfterHours` (default 24) is how long since we last *reached* it. "That machine has not been used since Tuesday" and "we have not been able to check that machine since Tuesday" are not the same situation and are never collapsed into one word.
 
-A stale source is still **counted** — its past usage is real. Each successfully validated report is cached locally, so a machine that is asleep or unreachable degrades to *stale*, not to *gone*, and totals do not oscillate as machines come and go. Set `includeWhenStale: false` on a source to exclude it once its report goes stale.
+A stale source is still **counted** — its past usage is real. Each successfully validated report is cached locally, so a machine that is asleep or unreachable degrades to *stale*, not to *gone*, and totals do not oscillate as machines come and go. External attempts are reused for nine minutes (including failed attempts), concurrent requests share one attempt per source, and a manual refresh bypasses that age guard. Set `includeWhenStale: false` on a source to exclude it once its report goes stale.
 
 The Sources card colours each row by *trust in the totals*, not by liveness:
 

@@ -135,11 +135,11 @@ async function loadMergedRecords(options) {
   };
 }
 
-async function loadExternalSafely({ outputDir, loadExternal = loadExternalSources }) {
+async function loadExternalSafely({ outputDir, refresh, manual, loadExternal = loadExternalSources }) {
   try {
     const config = await loadSourcesConfig(outputDir);
     if (!config.sources.length) return [];
-    return (await loadExternal({ outputDir, config })).loads;
+    return (await loadExternal({ outputDir, config, force: refresh && manual })).loads;
   } catch (error) {
     // Reached only when configuration itself is unreadable — `loadExternalSources`
     // never throws. One unusable source file must not blank the dashboard.

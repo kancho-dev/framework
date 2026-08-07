@@ -57,13 +57,50 @@ const fetchReturning = (result, calls = []) => async (source, options) => {
 const serving = (payload) => fetchReturning({ ok: true, text: JSON.stringify(payload) });
 const failing = (state, detail = 'nope') => fetchReturning({ ok: false, state, detail });
 
-async function load(dir, sources, { fetch, now = NOW, ...config } = {}) {
-  return loadExternalSources({ outputDir: dir, now, fetch, config: { sources, staleReportAfterHours: 24, staleFetchAfterHours: 24, ...config } });
+async function load(dir, sources, { fetch, now = NOW, force = false, ...config } = {}) {
+  return loadExternalSources({ outputDir: dir, now, force, fetch, config: { sources, staleReportAfterHours: 24, staleFetchAfterHours: 24, ...config } });
 }
 
 test('no configured sources yields no records and no states', async (t) => {
   const dir = await outDir(t);
   assert.deepEqual(await loadExternalSources({ outputDir: dir, config: { configured: false } }), { loads: [], records: [], sourceStates: [] });
+});
+
+test('external loads are age-guarded, single-flight, failure-aware, and forceable per source', async (t) => {
+  const dir = await outDir(t);
+  const calls = [];
+  let release;
+  const fetch = fetchReturning(async () => {
+    await new Promise((resolveFetch) => { release = resolveFetch; });
+    return { ok: true, text: JSON.stringify(report()) };
+  }, calls);
+
+  const first = load(dir, [sshSource], { fetch });
+  const concurrent = load(dir, [sshSource], { fetch });
+  while (!release) await new Promise((resolveWait) => setImmediate(resolveWait));
+  assert.equal(calls.length, 1, 'concurrent loads share one source fetch');
+  release();
+  await Promise.all([first, concurrent]);
+
+  await load(dir, [sshSource], { fetch, now: NOW + 8 * 60_000 });
+  assert.equal(calls.length, 1, 'a recent attempt is reused');
+
+  const forcedCalls = [];
+  await loadExternalSources({ outputDir: dir, now: NOW + 8 * 60_000, force: true, fetch: fetchReturning({ ok: true, text: JSON.stringify(report()) }, forcedCalls), config: { sources: [sshSource], staleReportAfterHours: 24, staleFetchAfterHours: 24 } });
+  assert.equal(forcedCalls.length, 1, 'forced refresh bypasses the age guard');
+});
+
+test('a failed attempt is reused without advancing the last genuine success', async (t) => {
+  const dir = await outDir(t);
+  await load(dir, [sshSource], { fetch: serving(report()) });
+  const calls = [];
+  const failedAt = NOW + 10 * 60_000;
+  const failed = await load(dir, [sshSource], { fetch: fetchReturning({ ok: false, state: 'unreachable', detail: 'asleep' }, calls), now: failedAt });
+  const reused = await load(dir, [sshSource], { fetch: fetchReturning({ ok: false, state: 'unreachable', detail: 'must not run' }, calls), now: failedAt + 8 * 60_000 });
+
+  assert.equal(calls.length, 1);
+  assert.equal(reused.sourceStates[0].lastSuccessAt, failed.sourceStates[0].lastSuccessAt);
+  assert.equal(reused.sourceStates[0].fetchAgeHours, 18 / 60, 'cache serving recomputes age from the genuine success');
 });
 
 test('a fresh source contributes records stamped with its machine id', async (t) => {
@@ -123,7 +160,7 @@ test('malformed and future-schema reports are typed distinctly and excluded', as
   ];
 
   for (const { fetch, state, detail } of cases) {
-    const result = await load(dir, [sshSource], { fetch });
+    const result = await load(dir, [sshSource], { fetch, force: true });
     assert.deepEqual(result.records, [], state);
     assert.equal(result.sourceStates[0].state, state);
     assert.match(result.sourceStates[0].detail, detail);
@@ -210,7 +247,7 @@ test('a source now serving broken data is excluded rather than replaced by its c
   const dir = await outDir(t);
   await load(dir, [sshSource], { fetch: serving(report()) });
 
-  const { records, sourceStates } = await load(dir, [sshSource], { fetch: fetchReturning({ ok: true, text: '{"partial"' }) });
+  const { records, sourceStates } = await load(dir, [sshSource], { fetch: fetchReturning({ ok: true, text: '{"partial"' }), force: true });
   assert.deepEqual(records, [], 'a validation failure is not masked by history');
   assert.equal(sourceStates[0].state, 'invalid');
 });

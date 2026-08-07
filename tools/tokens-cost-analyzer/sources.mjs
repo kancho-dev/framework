@@ -11,13 +11,16 @@ import { safeError } from '../shared-web/http.mjs';
 // structural rather than aspirational (design §6).
 
 export const CACHE_DIRNAME = 'cache';
+const MIN_EXTERNAL_AGE_MS = 9 * 60 * 1000;
+const externalFlights = new Map();
+const externalAttempts = new Map();
 
 // Cache fallback is limited to the transport failures §6 names ("cache used if
 // present"). A report that arrives and fails validation is a source actively
 // serving broken data, so it is excluded rather than papered over with history.
 const CACHEABLE_FAILURES = new Set(['unreachable', 'unauthorized', 'missing', 'unreadable']);
 
-export async function loadExternalSources({ outputDir, config, now = Date.now(), fetch = fetchSource, fetchOptions = {} }) {
+export async function loadExternalSources({ outputDir, config, now = Date.now(), fetch = fetchSource, fetchOptions = {}, force = false }) {
   const entries = Array.isArray(config?.sources) ? config.sources : [];
   const context = {
     cacheDir: join(outputDir, CACHE_DIRNAME),
@@ -28,7 +31,7 @@ export async function loadExternalSources({ outputDir, config, now = Date.now(),
     fetch,
     fetchOptions,
   };
-  const loaded = await Promise.all(entries.map((entry, index) => loadSource(entry, index, context)));
+  const loaded = await Promise.all(entries.map((entry, index) => guardedLoadSource(entry, index, context, { outputDir, force })));
   // `loads` keeps each state paired with the records it produced. Merge needs
   // that pairing, because two sources can legitimately share one `sourceKey`
   // (§5.3's duplicate-machine case) and could not be told apart afterwards.
@@ -45,6 +48,48 @@ export async function loadExternalSources({ outputDir, config, now = Date.now(),
  * so an unexpected throw is always possible here however careful the inner
  * path is, and step 8 hands this promise to the request handler.
  */
+async function guardedLoadSource(entry, index, context, { outputDir, force }) {
+  const key = `${outputDir}\0${labelFor(entry, index)}\0${JSON.stringify({ entry, staleReportAfterHours: context.staleReportAfterHours, staleFetchAfterHours: context.staleFetchAfterHours, maxBytes: context.maxBytes })}`;
+  const prior = externalAttempts.get(key);
+  if (!force && prior && context.now - prior.attemptedAt < MIN_EXTERNAL_AGE_MS) return refreshAges(prior.result, context, entry);
+
+  let flight = externalFlights.get(key);
+  if (!flight) {
+    flight = loadSource(entry, index, context).then((result) => {
+      externalAttempts.set(key, { attemptedAt: context.now, result });
+      return result;
+    });
+    externalFlights.set(key, flight);
+    flight.finally(() => externalFlights.delete(key)).catch(() => {});
+  }
+  return flight;
+}
+
+function refreshAges(result, context, entry) {
+  const state = result.state;
+  if (!validDate(state.generatedAt) || !validDate(state.lastSuccessAt)) return result;
+  const reportAgeHours = ageHours(state.generatedAt, context.now);
+  const fetchAgeHours = ageHours(state.lastSuccessAt, context.now);
+  const staleReport = reportAgeHours > context.staleReportAfterHours;
+  const staleFetch = fetchAgeHours > context.staleFetchAfterHours;
+  const included = !staleReport || entry.includeWhenStale !== false;
+  const records = included ? result.records : [];
+  return {
+    records,
+    state: {
+      ...state,
+      state: state.fromCache ? state.state : (staleReport ? 'stale-report' : 'ok'),
+      included,
+      detail: state.fromCache ? state.detail : detailFor({ failure: null, included, staleReport, source: entry }),
+      reportAgeHours,
+      fetchAgeHours,
+      staleReport,
+      staleFetch,
+      records: records.length,
+    },
+  };
+}
+
 async function loadSource(entry, index, context) {
   try {
     return await attemptSource(entry, index, context);
