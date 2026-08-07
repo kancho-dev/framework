@@ -183,7 +183,7 @@ body.editing .widget { overflow: visible; }
 .widget-catalog button:hover { transform: translateY(-2px); border-color: var(--accent); background: rgb(156 220 254 / 0.08); box-shadow: 0 16px 34px rgb(0 0 0 / 0.22), inset 0 0 0 1px rgb(156 220 254 / 0.08); }
 .widget-catalog span { color: var(--muted); font-size: 12px; }
 .empty { color: var(--muted); }
-.type-daily-usage { --daily-usage-cell-size: 11px; --daily-usage-cell-gap: 3px; --daily-usage-surface: rgb(255 255 255 / 0.035); --daily-usage-muted: var(--muted); --daily-usage-dim: #718198; --daily-usage-text: var(--text); --daily-usage-accent: var(--accent); --daily-usage-level-0: rgb(255 255 255 / 0.055); --daily-usage-level-1: rgb(156 220 254 / 0.25); --daily-usage-level-2: rgb(156 220 254 / 0.45); --daily-usage-level-3: rgb(126 231 135 / 0.65); --daily-usage-level-4: var(--good); }
+.type-daily-usage { --daily-usage-cell-size: 10px; --daily-usage-cell-gap: 3px; --daily-usage-surface: rgb(255 255 255 / 0.035); --daily-usage-muted: var(--muted); --daily-usage-dim: #718198; --daily-usage-text: var(--text); --daily-usage-accent: var(--accent); --daily-usage-level-0: rgb(255 255 255 / 0.055); --daily-usage-level-1: rgb(156 220 254 / 0.25); --daily-usage-level-2: rgb(156 220 254 / 0.45); --daily-usage-level-3: rgb(126 231 135 / 0.65); --daily-usage-level-4: var(--good); }
 .daily-usage-generated { margin: 5px 0 16px; color: var(--muted); font-size: 11px; }
 .type-daily-usage .daily-usage-summary { margin-top: 0; }
 body.editing .widget { outline: 1px dashed rgb(156 220 254 / 0.45); outline-offset: -8px; }
