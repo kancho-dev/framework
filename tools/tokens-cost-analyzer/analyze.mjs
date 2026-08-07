@@ -27,6 +27,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(1);
   });
 }
+const startedAt = performance.now();
 const args = parseArgs(process.argv.slice(2));
 const workspaceRoot = resolve(args.workspace || process.env.WORKSPACE_ROOT || process.cwd());
 const outDir = resolve(args.out || join(workspaceRoot, '.tools-config', 'tokens-cost-analyzer'));
@@ -48,21 +49,26 @@ const scopes = parseSelfConfig(sourcesConfig.self, { workspaceRoot });
 const records = [];
 const warnings = [];
 
-if (sourceRequested(args.source, 'pi')) {
-  try { records.push(...await readPiRecords({ piRoot, scopes, pricing, limit })); }
-  catch (error) { warnings.push({ source: 'pi', warning: safeError(error) }); }
+// Timing is recorded per source, not just in total, because the sources differ
+// by an order of magnitude and an aggregate number cannot say which one grew.
+const timings = [];
+const scanStartedAt = performance.now();
+await collectSource('pi', () => readPiRecords({ piRoot, scopes, pricing, limit }));
+await collectSource('opencode', () => readOpenCodeRecords({ opencodeDb, scopes, pricing, limit }));
+await collectSource('codex', () => readCodexRecords({ codexRoot, scopes, pricing, limit }));
+await collectSource('claude-code', () => readClaudeCodeRecords({ claudeRoot, scopes, pricing, limit }));
+const scanMs = elapsedSince(scanStartedAt);
+
+async function collectSource(source, read) {
+  if (!sourceRequested(args.source, source)) return;
+  const sourceStartedAt = performance.now();
+  try { records.push(...await read()); }
+  catch (error) { warnings.push({ source, warning: safeError(error) }); }
+  timings.push({ source, ms: elapsedSince(sourceStartedAt) });
 }
-if (sourceRequested(args.source, 'opencode')) {
-  try { records.push(...await readOpenCodeRecords({ opencodeDb, scopes, pricing, limit })); }
-  catch (error) { warnings.push({ source: 'opencode', warning: safeError(error) }); }
-}
-if (sourceRequested(args.source, 'codex')) {
-  try { records.push(...await readCodexRecords({ codexRoot, scopes, pricing, limit })); }
-  catch (error) { warnings.push({ source: 'codex', warning: safeError(error) }); }
-}
-if (sourceRequested(args.source, 'claude-code')) {
-  try { records.push(...await readClaudeCodeRecords({ claudeRoot, scopes, pricing, limit })); }
-  catch (error) { warnings.push({ source: 'claude-code', warning: safeError(error) }); }
+
+function elapsedSince(mark) {
+  return Math.round(performance.now() - mark);
 }
 
 records.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
@@ -73,6 +79,7 @@ stampRecordIdentity(records, {
   nativeIdOf: (record) => nativeMessageIds.get(record) ?? null,
 });
 const generatedAt = new Date().toISOString();
+const emitStartedAt = performance.now();
 const daily = dailyUsage(records);
 await mkdir(outDir, { recursive: true });
 await atomicWrite(join(outDir, 'report.v1.json'), JSON.stringify(buildReport({ generatedAt, generatorVersion, records, warnings, pricing, scopes }), null, 2));
@@ -88,6 +95,7 @@ await atomicWrite(join(outDir, SCAN_SCOPE_FILE), JSON.stringify(scanScope(scopes
 // Migration); drop the orphan so installs do not keep a large unread artifact.
 await rm(join(outDir, 'normalized.json'), { force: true });
 console.log(`Wrote ${records.length} records to ${outDir}`);
+console.log(`Timing: total ${elapsedSince(startedAt)} ms (scan ${scanMs} ms${timings.map((timing) => `, ${timing.source} ${timing.ms} ms`).join('')}, emit ${elapsedSince(emitStartedAt)} ms)`);
 
 function buildReport({ generatedAt, generatorVersion, records, warnings, pricing, scopes }) {
   const dates = records.map((record) => record.date).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date || '')).sort();

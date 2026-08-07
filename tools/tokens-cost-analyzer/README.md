@@ -19,6 +19,8 @@ By default the analyzer reads all in-scope local sessions/files. For a faster re
 
 The browser automatically refreshes the report every 10 minutes; manual and automatic refreshes rebuild full-history analysis by default. To make server/Cockpit refreshes bounded, launch the tool or Cockpit with `TOKENS_COST_ANALYZER_LIMIT=N`; use `TOKENS_COST_ANALYZER_LIMIT=all` to be explicit about full-history refresh. Limited reports show a trust flag and generated metadata so they are not mistaken for full-history totals.
 
+Each analysis run prints a `Timing:` line giving its total duration split into scan time per source and artifact emission, so a slowdown can be attributed to a source rather than guessed at as history grows.
+
 By default it writes private generated output to:
 
 ```text

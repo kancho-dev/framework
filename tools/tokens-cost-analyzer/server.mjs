@@ -11,6 +11,7 @@ import { parseSelfConfig, scanScope, SCAN_SCOPE_FILE } from './workspace-scope.m
 import { loadExternalSources } from './sources.mjs';
 import { mergeReports } from './merge.mjs';
 import { dailyUsage, round, summarize } from './rollups.mjs';
+import { createReportViewCache } from './report-view-cache.mjs';
 
 const execFileAsync = promisify(execFile);
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
@@ -34,6 +35,9 @@ export function createTokensCostAnalyzerHandler(options = {}) {
   // Injected like `ensureArtifacts`'s `runAnalysis`, so every §6 degraded state
   // is testable through the real request path with no network.
   const loadExternal = options.loadExternal || loadExternalSources;
+  // One cache per handler, not per module: a test's fixture handler must never
+  // inherit another's parsed artifact.
+  const readReportView = options.readReportView || createReportViewCache();
   return async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost');
     if (basePath && url.pathname === basePath) {
@@ -46,8 +50,8 @@ export function createTokensCostAnalyzerHandler(options = {}) {
     try {
       const refresh = url.searchParams.get('refresh') === '1';
       const manual = url.searchParams.get('manual') === '1';
-      if (pathname === '/api/report') { sendJson(res, 200, await loadReport({ workspaceRoot, outputDir, refresh, manual, analysisLimit, loadExternal })); return true; }
-      if (pathname === '/api/daily-usage') { sendJson(res, 200, await loadDailyUsage({ workspaceRoot, outputDir, refresh, manual, analysisLimit, loadExternal })); return true; }
+      if (pathname === '/api/report') { sendJson(res, 200, await loadReport({ workspaceRoot, outputDir, refresh, manual, analysisLimit, loadExternal, readReportView })); return true; }
+      if (pathname === '/api/daily-usage') { sendJson(res, 200, await loadDailyUsage({ workspaceRoot, outputDir, refresh, manual, analysisLimit, loadExternal, readReportView })); return true; }
       if (pathname.startsWith('/shared/')) { await serveStaticPath(res, SHARED_WEB_DIR, pathname.replace('/shared', '')); return true; }
       if (pathname === '/') {
         const html = await readStaticText(PUBLIC_DIR, '/index.html');
@@ -120,20 +124,35 @@ async function readScanScope(outputDir, workspaceRoot) {
  */
 async function loadMergedRecords(options) {
   await ensureArtifacts(options);
-  const report = JSON.parse(await readFile(join(options.outputDir, REPORT_FILE), 'utf8'));
-  const local = localReportView(report, options.workspaceRoot);
+  const { local, mergeInput, machineId, workspaceIds } = await readLocalReport(options);
   const external = await loadExternalSafely(options);
-  const { records, merge } = mergeReports({ local: localMergeInput(report, local), external });
-  return {
-    local,
-    merged: records,
-    merge,
-    machineId: report.origin?.machineId ?? null,
-    // What this machine's own scan actually attributed to, straight from the
-    // artifact — the evidence that exposes a scope disagreement (§8.2).
-    workspaceIds: (report.origin?.workspaces || []).filter((id) => typeof id === 'string'),
-  };
+  const { records, merge } = mergeReports({ local: mergeInput, external });
+  return { local, merged: records, merge, machineId, workspaceIds };
 }
+
+/**
+ * Everything here derives from `report.v1.json` alone, so it is cached against
+ * that file's identity rather than rebuilt per request. External loading and
+ * merging deliberately stay outside the cache: they depend on remote state and
+ * on `refresh`, which the artifact's identity says nothing about.
+ */
+function readLocalReport({ outputDir, workspaceRoot, readReportView = defaultReportView }) {
+  return readReportView(join(outputDir, REPORT_FILE), (report) => {
+    const local = localReportView(report, workspaceRoot);
+    return {
+      local,
+      mergeInput: localMergeInput(report, local),
+      machineId: report.origin?.machineId ?? null,
+      // What this machine's own scan actually attributed to, straight from the
+      // artifact — the evidence that exposes a scope disagreement (§8.2).
+      workspaceIds: (report.origin?.workspaces || []).filter((id) => typeof id === 'string'),
+    };
+  });
+}
+
+// A caller that built no handler gets a correct read with no reuse, rather than
+// sharing one process-wide cache with every other caller.
+const defaultReportView = async (path, build) => build(JSON.parse(await readFile(path, 'utf8')));
 
 async function loadExternalSafely({ outputDir, refresh, manual, loadExternal = loadExternalSources }) {
   try {

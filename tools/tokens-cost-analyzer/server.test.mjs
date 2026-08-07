@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createTokensCostAnalyzerHandler, ensureArtifacts } from './server.mjs';
 import { loadExternalSources } from './sources.mjs';
+import { createReportViewCache } from './report-view-cache.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -396,4 +397,49 @@ test('subscription records are summarized alongside merged token usage', async (
   assert.equal(payload.totals.subscriptionCost, 30.005);
   assert.deepEqual(payload.subscriptions.byMonth, [{ month: '2026-01', amount: 30.005 }]);
   assert.equal(payload.monthly.find((row) => row.month === '2026-01').subscriptionCost, 30.005);
+});
+
+// --- #143: the request path must not re-parse the report artifact -----------
+
+test('a handler parses an unchanged report artifact once across requests', async (t) => {
+  const outputDir = await fixtureOutputDir(t);
+  let parses = 0;
+  const cache = createReportViewCache();
+  const readReportView = (path, build) => cache(path, (report) => { parses += 1; return build(report); });
+  const handler = createTokensCostAnalyzerHandler({ workspaceRoot: outputDir, outputDir, readReportView });
+  const send = (path) => new Promise((done) => {
+    let status;
+    handler({ url: path }, { writeHead(code) { status = code; }, setHeader() {}, end(body) { done({ status, payload: JSON.parse(body) }); } });
+  });
+
+  const first = await send('/api/report');
+  const second = await send('/api/report');
+  const daily = await send('/api/daily-usage');
+
+  assert.equal(first.status, 200);
+  assert.equal(parses, 1, 'the artifact is parsed once and reused');
+  assert.deepEqual(second.payload, first.payload, 'the reused view produces an identical response');
+  assert.equal(daily.status, 200);
+});
+
+test('a rewritten report artifact is re-parsed', async (t) => {
+  const outputDir = await fixtureOutputDir(t);
+  let parses = 0;
+  const cache = createReportViewCache();
+  const readReportView = (path, build) => cache(path, (report) => { parses += 1; return build(report); });
+  const handler = createTokensCostAnalyzerHandler({ workspaceRoot: outputDir, outputDir, readReportView });
+  const send = () => new Promise((done) => {
+    handler({ url: '/api/report' }, { writeHead() {}, setHeader() {}, end(body) { done(JSON.parse(body)); } });
+  });
+
+  const before = await send();
+  const artifact = JSON.parse(await readFile(join(outputDir, 'report.v1.json'), 'utf8'));
+  artifact.records.push(localRecord({ messageId: 'm2', unitId: 'workstation/pi/local-session/m2' }));
+  await new Promise((done) => setTimeout(done, 10));
+  await writeFile(join(outputDir, 'report.v1.json'), JSON.stringify(artifact));
+  const after = await send();
+
+  assert.equal(before.totals.records, 1);
+  assert.equal(after.totals.records, 2, 'the new record is visible without restarting the server');
+  assert.equal(parses, 2);
 });

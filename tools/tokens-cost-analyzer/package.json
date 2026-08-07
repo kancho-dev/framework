@@ -6,6 +6,6 @@
   "scripts": {
     "start": "node server.mjs",
     "analyze": "node analyze.mjs",
-    "test": "node --test adapters.test.mjs atomic-write.test.mjs report-contract.test.mjs report-emission.test.mjs server.test.mjs sources-config.test.mjs source-fetch.test.mjs sources.test.mjs merge.test.mjs opencode.test.mjs workspace-scope.test.mjs public/refresh.test.mjs public/provenance.test.mjs ../shared-web/opencode-usage.test.mjs ../shared-web/browser/daily-usage-heatmap.test.mjs"
+    "test": "node --test adapters.test.mjs atomic-write.test.mjs report-contract.test.mjs report-emission.test.mjs report-view-cache.test.mjs server.test.mjs sources-config.test.mjs source-fetch.test.mjs sources.test.mjs merge.test.mjs opencode.test.mjs workspace-scope.test.mjs public/refresh.test.mjs public/provenance.test.mjs ../shared-web/opencode-usage.test.mjs ../shared-web/browser/daily-usage-heatmap.test.mjs"
   }
 }

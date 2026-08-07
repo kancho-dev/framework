@@ -53,6 +53,23 @@ test('emits a valid v1 report whose origin lists only the workspaces present', a
   assert.equal(report.report.coverage.latestRecordDate, '2026-01-02');
 });
 
+// Run duration has to be observable from the run itself, or growth over time is
+// only ever anecdotal.
+test('reports run duration, split by source and emission', async (t) => {
+  const root = await workspace(t);
+  const claudeRoot = join(root, 'claude');
+  await writeJsonl(join(claudeRoot, 'p', 's.jsonl'), [claudeEntry('a1', root, 10)]);
+
+  const { stdout } = await execFileAsync(process.execPath, [
+    join(here, 'analyze.mjs'), '--workspace', root, '--out', join(root, 'out'),
+    '--source', 'claude-code', '--claude-root', claudeRoot,
+  ]);
+
+  const timing = stdout.split('\n').find((line) => line.startsWith('Timing:'));
+  assert.ok(timing, `no timing line in output: ${stdout}`);
+  assert.match(timing, /^Timing: total \d+ ms \(scan \d+ ms, claude-code \d+ ms, emit \d+ ms\)$/);
+});
+
 test('the report carries no absolute local paths or pricing path', async (t) => {
   const root = await workspace(t);
   const piRoot = join(root, 'pi');
