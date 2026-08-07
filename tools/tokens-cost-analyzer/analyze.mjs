@@ -1,16 +1,25 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { atomicWrite } from './atomic-write.mjs';
+import { SCHEMA, SCHEMA_VERSION, buildReportHeader, stampRecordIdentity } from './report-contract.mjs';
+import { loadSourcesConfig } from './sources-config.mjs';
+import { dailyUsage } from './rollups.mjs';
+import { attributePiWorkspace, attributeWorkspace, parseSelfConfig, scanScope, SCAN_SCOPE_FILE } from './workspace-scope.mjs';
 import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel } from '../shared-web/model-normalization.mjs';
 import { openCodeTokenValues, openCodeTotalTokens } from '../shared-web/opencode-usage.mjs';
 
 const execFileAsync = promisify(execFile);
+// Whether a record's `messageId` is a durable source id is known only at
+// construction and must not be inferred later from its shape. Held out of band
+// so the emitted record shape stays unchanged. Declared before the scan runs.
+const nativeMessageIds = new WeakMap();
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.on('uncaughtException', (error) => {
     console.error(`Error: ${safeError(error)}`);
@@ -30,34 +39,78 @@ const bundledPricingPath = fileURLToPath(new URL('./data/pi-pricing.json', impor
 const limit = parseLimit(args.limit);
 const analysis = { mode: limit == null ? 'full-history' : 'limited', limit, limitScope: 'recent sessions/files per source' };
 
+const generatorVersion = await readGeneratorVersion();
 const pricing = await loadPricing(pricingPath, bundledPricingPath);
+const sourcesConfig = await loadSourcesConfig(outDir);
+// One scan per machine, rooted at `self.root`; configured workspaces partition
+// that scan rather than narrowing it (design §4.1).
+const scopes = parseSelfConfig(sourcesConfig.self, { workspaceRoot });
 const records = [];
 const warnings = [];
 
 if (sourceRequested(args.source, 'pi')) {
-  try { records.push(...await readPiRecords({ piRoot, workspaceRoot, pricing, limit })); }
+  try { records.push(...await readPiRecords({ piRoot, scopes, pricing, limit })); }
   catch (error) { warnings.push({ source: 'pi', warning: safeError(error) }); }
 }
 if (sourceRequested(args.source, 'opencode')) {
-  try { records.push(...await readOpenCodeRecords({ opencodeDb, workspaceRoot, pricing, limit })); }
+  try { records.push(...await readOpenCodeRecords({ opencodeDb, scopes, pricing, limit })); }
   catch (error) { warnings.push({ source: 'opencode', warning: safeError(error) }); }
 }
 if (sourceRequested(args.source, 'codex')) {
-  try { records.push(...await readCodexRecords({ codexRoot, workspaceRoot, pricing, limit })); }
+  try { records.push(...await readCodexRecords({ codexRoot, scopes, pricing, limit })); }
   catch (error) { warnings.push({ source: 'codex', warning: safeError(error) }); }
 }
 if (sourceRequested(args.source, 'claude-code')) {
-  try { records.push(...await readClaudeCodeRecords({ claudeRoot, workspaceRoot, pricing, limit })); }
+  try { records.push(...await readClaudeCodeRecords({ claudeRoot, scopes, pricing, limit })); }
   catch (error) { warnings.push({ source: 'claude-code', warning: safeError(error) }); }
 }
 
 records.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
+stampRecordIdentity(records, {
+  machineId: scopes.machineId,
+  generatorVersion,
+  pricingFingerprint: pricing.pricingFingerprint,
+  nativeIdOf: (record) => nativeMessageIds.get(record) ?? null,
+});
 const generatedAt = new Date().toISOString();
 const daily = dailyUsage(records);
 await mkdir(outDir, { recursive: true });
-await atomicWrite(join(outDir, 'normalized.json'), JSON.stringify({ generatedAt, workspaceRoot, analysis, pricingPath, pricingSources: pricing.pricingSources || [], warnings, records }, null, 2));
+await atomicWrite(join(outDir, 'report.v1.json'), JSON.stringify(buildReport({ generatedAt, generatorVersion, records, warnings, pricing, scopes }), null, 2));
 await atomicWrite(join(outDir, 'daily.json'), JSON.stringify({ generatedAt, workspaceRoot, analysis, daily }, null, 2));
+// Local-only companion to the report: the roots this scan attributed against.
+// §7 keeps roots out of `report.v1.json` because that artifact is what remote
+// machines fetch — but §8.2's link rule needs them, and deriving them again at
+// read time lets a CLI run under one root and a server under another disagree
+// silently, killing every deep link. Written by the same run that stamped the
+// `workspaceId`s, so they agree by construction. Never fetched, never exported.
+await atomicWrite(join(outDir, SCAN_SCOPE_FILE), JSON.stringify(scanScope(scopes), null, 2));
+// `report.v1.json` replaces `normalized.json` outright with no shim (design §9
+// Migration); drop the orphan so installs do not keep a large unread artifact.
+await rm(join(outDir, 'normalized.json'), { force: true });
 console.log(`Wrote ${records.length} records to ${outDir}`);
+
+function buildReport({ generatedAt, generatorVersion, records, warnings, pricing, scopes }) {
+  const dates = records.map((record) => record.date).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date || '')).sort();
+  return {
+    schema: SCHEMA,
+    schemaVersion: SCHEMA_VERSION,
+    report: buildReportHeader({
+      generatedAt,
+      generatorVersion,
+      currency: 'USD',
+      coverage: { ...analysis, earliestRecordDate: dates[0] ?? null, latestRecordDate: dates.at(-1) ?? null },
+      // Fingerprints replace absolute pricing paths so a report cannot leak the
+      // producing machine's filesystem layout (design §3.2, §7).
+      pricingSources: pricing.pricingSources || [],
+      warnings,
+    }),
+    origin: {
+      machineId: scopes.machineId,
+      workspaces: [...new Set(records.map((record) => record.workspaceId))].sort(),
+    },
+    records,
+  };
+}
 
 function parseArgs(argv) {
   const opts = {};
@@ -75,7 +128,7 @@ function parseArgs(argv) {
 }
 
 function help() {
-  console.log(`Usage: node analyze.mjs [--workspace PATH] [--out DIR] [--pricing FILE] [--source pi|opencode|codex|claude-code] [--limit N|all]\n\nOutputs normalized.json and daily.json. Defaults write to .tools-config/tokens-cost-analyzer/. By default all in-scope sessions/files are analyzed; use --limit for a bounded recent sessions/files slice per source, not a record/message limit.`);
+  console.log(`Usage: node analyze.mjs [--workspace PATH] [--out DIR] [--pricing FILE] [--source pi|opencode|codex|claude-code] [--limit N|all]\n\nOutputs report.v1.json and daily.json. Defaults write to .tools-config/tokens-cost-analyzer/. The scan root and its workspace partitions come from sources.json when present, otherwise from --workspace. By default all in-scope sessions/files are analyzed; use --limit for a bounded recent sessions/files slice per source, not a record/message limit.`);
   process.exit(0);
 }
 
@@ -95,26 +148,44 @@ function applyRecentLimit(items, limit) {
 }
 
 async function loadPricing(path, bundledPath) {
-  const bundled = JSON.parse(await readFile(bundledPath, 'utf8'));
+  const bundledText = await readFile(bundledPath, 'utf8');
+  const bundled = JSON.parse(bundledText);
   const bundledModels = (bundled.models || []).map((model) => ({ ...model, source: 'bundled-pi-derived' }));
-  if (!existsSync(path)) return { ...bundled, models: bundledModels, pricingSources: [{ path: bundledPath, role: 'bundled-pi-derived' }] };
-  const local = JSON.parse(await readFile(path, 'utf8'));
+  const bundledSource = { role: 'bundled-pi-derived', fingerprint: fileFingerprint(bundledText) };
+  if (!existsSync(path)) return withPricingFingerprint({ ...bundled, models: bundledModels, pricingSources: [bundledSource] });
+  const localText = await readFile(path, 'utf8');
+  const local = JSON.parse(localText);
   const localModels = (local.models || []).map((model) => ({ ...model, source: 'local-override' }));
-  return {
+  return withPricingFingerprint({
     ...bundled,
     ...local,
     models: [...localModels, ...bundledModels],
     pricingSources: [
-      { path, role: 'local-override' },
-      { path: bundledPath, role: 'bundled-pi-derived' },
+      { role: 'local-override', fingerprint: fileFingerprint(localText) },
+      bundledSource,
     ],
-  };
+  });
 }
 
-async function readPiRecords({ piRoot, workspaceRoot, pricing, limit }) {
-  const files = applyRecentLimit((await piSessionFilesInScope(piRoot, workspaceRoot)).sort((a, b) => a.localeCompare(b)), limit);
+// One fingerprint over every contributing pricing table: `derivation` is only
+// asked whether the pricing that produced an estimate has changed at all.
+function withPricingFingerprint(pricing) {
+  const combined = pricing.pricingSources.map(({ role, fingerprint }) => `${role}:${fingerprint}`).join('\n');
+  return { ...pricing, pricingFingerprint: fileFingerprint(combined) };
+}
+
+function fileFingerprint(text) { return `sha256:${createHash('sha256').update(text).digest('hex')}`; }
+
+async function readGeneratorVersion() {
+  const manifest = JSON.parse(await readFile(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'));
+  if (!manifest.version) throw new Error('package.json version is required to stamp report provenance');
+  return manifest.version;
+}
+
+async function readPiRecords({ piRoot, scopes, pricing, limit }) {
+  const scoped = applyRecentLimit((await piSessionFilesInScope(piRoot, scopes)).sort((a, b) => a.sessionPath.localeCompare(b.sessionPath)), limit);
   const records = [];
-  for (const sessionPath of files) {
+  for (const { sessionPath, workspaceId } of scoped) {
     const file = basename(sessionPath);
     const lines = (await readFile(sessionPath, 'utf8')).split(/\r?\n/).filter(Boolean);
     const modelState = { source: 'pi', provider: '', model: '', variant: '' };
@@ -136,9 +207,12 @@ async function readPiRecords({ piRoot, workspaceRoot, pricing, limit }) {
       const variant = modelState.variant || null;
       records.push(buildRecord({
         source: 'pi',
+        workspaceId,
         sessionId: basename(file, '.jsonl'),
+        messageId: entry.id || null,
+        nativeMessageId: entry.id || null,
         sessionRef: redactHome(sessionPath),
-        sessionBrowserPath: sessionPath,
+        sessionBrowserPath: redactHome(sessionPath),
         sessionTopicId: latestUserMessageId,
         timestamp: entry.timestamp || isoFromMs(message.timestamp),
         provider,
@@ -166,12 +240,15 @@ async function readPiRecords({ piRoot, workspaceRoot, pricing, limit }) {
   return records;
 }
 
-async function readOpenCodeRecords({ opencodeDb, workspaceRoot, pricing, limit }) {
-  const rootPrefix = `${workspaceRoot.replace(/\/+$/, '')}/%`;
+async function readOpenCodeRecords({ opencodeDb, scopes, pricing, limit }) {
+  const scanRoot = scopes.root;
+  const rootPrefix = `${scanRoot.replace(/\/+$/, '')}/%`;
   const limitClause = limit == null ? '' : ` limit ${limit}`;
-  const sql = `select id,directory,path,time_created,model,cost,tokens_input,tokens_output,tokens_cache_read,tokens_cache_write from session where directory=${sqlString(workspaceRoot)} or directory like ${sqlString(rootPrefix)} or path=${sqlString(workspaceRoot)} or path like ${sqlString(rootPrefix)} order by time_updated desc${limitClause}`;
+  const sql = `select id,directory,path,time_created,model,cost,tokens_input,tokens_output,tokens_cache_read,tokens_cache_write from session where directory=${sqlString(scanRoot)} or directory like ${sqlString(rootPrefix)} or path=${sqlString(scanRoot)} or path like ${sqlString(rootPrefix)} order by time_updated desc${limitClause}`;
   const { stdout } = await execFileAsync('sqlite3', ['-readonly', '-json', opencodeDb, sql], { maxBuffer: 20 * 1024 * 1024 });
-  const sessions = stdout.trim() ? JSON.parse(stdout) : [];
+  const sessions = (stdout.trim() ? JSON.parse(stdout) : [])
+    .map((session) => ({ ...session, workspaceId: attributeWorkspace(session.directory || session.path, scopes) }))
+    .filter((session) => session.workspaceId != null);
   if (!sessions.length) return [];
   const messageRecords = await readOpenCodeMessageRecords(opencodeDb, sessions, pricing);
   const sessionsWithMessages = new Set(messageRecords.map((record) => record.sessionId));
@@ -214,8 +291,10 @@ async function readOpenCodeMessageRecords(opencodeDb, sessions, pricing) {
       const session = sessionById.get(row.sessionId) || {};
       records.push(buildRecord({
         source: 'opencode',
+        workspaceId: session.workspaceId,
         sessionId: row.sessionId,
         messageId: row.id,
+        nativeMessageId: row.id,
         sessionRef: `opencode.db:message/${row.id}`,
         sessionBrowserPath: `opencode:${row.sessionId}`,
         sessionTopicId: latestUserBySession.get(row.sessionId) || null,
@@ -257,6 +336,7 @@ function openCodeSessionRecord(row, pricing) {
   const sourceModel = parseOpenCodeModel(row.model) || null;
   return buildRecord({
     source: 'opencode',
+    workspaceId: row.workspaceId,
     sessionId: row.id,
     sessionRef: `opencode.db:session/${row.id}`,
     sessionBrowserPath: `opencode:${row.id}`,
@@ -282,7 +362,7 @@ function openCodeSessionRecord(row, pricing) {
   });
 }
 
-async function readCodexRecords({ codexRoot, workspaceRoot, pricing, limit }) {
+async function readCodexRecords({ codexRoot, scopes, pricing, limit }) {
   const files = applyRecentLimit((await walkJsonlFiles(codexRoot)).sort((a, b) => a.localeCompare(b)), limit);
   const records = [];
   for (const sessionPath of files) {
@@ -310,14 +390,19 @@ async function readCodexRecords({ codexRoot, workspaceRoot, pricing, limit }) {
         continue;
       }
       if (entry.type !== 'event_msg' || payload.type !== 'token_count') continue;
-      if (!isUnderRoot(latestCwd || sessionMeta.cwd, workspaceRoot)) continue;
+      const workspaceId = attributeWorkspace(latestCwd || sessionMeta.cwd, scopes);
+      if (workspaceId == null) continue;
       const rawUsage = payload.info?.last_token_usage || {};
       if (!hasCodexTokenUsage(rawUsage)) continue;
       const usage = normalizeCodexTokenUsage(rawUsage);
       records.push(buildRecord({
         source: 'codex',
+        workspaceId,
         sessionId: sessionMeta.session_id || sessionMeta.id || sessionId,
         messageId: `token-count-${index}`,
+        // Positional, not content-stable, so identity falls back to the
+        // content fingerprint (design §3.3).
+        nativeMessageId: null,
         sessionRef: redactHome(sessionPath),
         sessionBrowserPath: codexRef(sessionMeta.session_id || sessionMeta.id || sessionId),
         sessionTopicId: latestUserMessageId,
@@ -343,7 +428,7 @@ async function readCodexRecords({ codexRoot, workspaceRoot, pricing, limit }) {
   return records;
 }
 
-async function readClaudeCodeRecords({ claudeRoot, workspaceRoot, pricing, limit }) {
+async function readClaudeCodeRecords({ claudeRoot, scopes, pricing, limit }) {
   const files = applyRecentLimit((await walkJsonlFiles(claudeRoot)).sort((a, b) => a.localeCompare(b)), limit);
   const records = [];
   for (const sessionPath of files) {
@@ -359,12 +444,17 @@ async function readClaudeCodeRecords({ claudeRoot, workspaceRoot, pricing, limit
       if (entry.message.model === '<synthetic>') continue; // local placeholder (e.g. "No response requested."), not a real Anthropic turn
       const usage = entry.message.usage;
       if (!usage) continue;
-      if (!isUnderRoot(entry.cwd, workspaceRoot)) continue;
+      const workspaceId = attributeWorkspace(entry.cwd, scopes);
+      if (workspaceId == null) continue;
       const model = entry.message.model || null;
       records.push(buildRecord({
         source: 'claude-code',
+        workspaceId,
         sessionId,
         messageId: entry.uuid || `claude-entry-${index}`,
+        // The positional fallback is not a durable source id, so it must not be
+        // classed `native` (design §3.3 note for step 4).
+        nativeMessageId: entry.uuid || null,
         sessionRef: redactHome(sessionPath),
         sessionBrowserPath: browserRef,
         sessionTopicId: latestUserMessageId,
@@ -412,7 +502,7 @@ function hasCodexTokenUsage(usage) {
   return ['input_tokens', 'cached_input_tokens', 'output_tokens'].some((key) => knownNumber(usage[key]) != null);
 }
 
-function buildRecord({ source, sessionId, messageId = null, sessionRef, sessionBrowserPath, sessionTopicId = null, timestamp, provider, model, variant, modelLabel, tokens, sourceTotalTokens = null, recordedCost, rawFieldRefs, calculationMethod, omittedTokenWarnings = [], pricing }) {
+function buildRecord({ source, workspaceId, sessionId, messageId = null, nativeMessageId, sessionRef, sessionBrowserPath, sessionTopicId = null, timestamp, provider, model, variant, modelLabel, tokens, sourceTotalTokens = null, recordedCost, rawFieldRefs, calculationMethod, omittedTokenWarnings = [], pricing }) {
   const normalizedTokens = normalizeTokens(tokens);
   const displayModel = modelLabel || modelLabelFromParts({ source, provider, model, variant }) || model;
   const price = findPrice(pricing, provider, model, displayModel);
@@ -422,8 +512,9 @@ function buildRecord({ source, sessionId, messageId = null, sessionRef, sessionB
   const totalTokens = sourceTotalTokens != null
     ? { known: true, value: sourceTotalTokens }
     : sumKnown(...Object.values(normalizedTokens));
-  return {
+  const record = {
     source,
+    workspaceId,
     sessionId,
     messageId,
     sessionRef,
@@ -447,6 +538,8 @@ function buildRecord({ source, sessionId, messageId = null, sessionRef, sessionB
     provenance: { rawFieldRefs, calculationMethod, pricing: price ? { source: price.source || 'pricing-table', effectiveDate: price.effectiveDate, notes: price.notes || null } : null },
     warnings: estimate.warnings,
   };
+  nativeMessageIds.set(record, nativeMessageId === undefined ? messageId : nativeMessageId);
+  return record;
 }
 
 function normalizeTokens(tokens) {
@@ -489,18 +582,6 @@ function confidence(recordedCost, estimate, tokens) {
   return 'unknown';
 }
 
-function dailyUsage(records) {
-  const byDay = new Map();
-  for (const record of records) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(record.date || '')) continue;
-    const current = byDay.get(record.date) || { date: record.date, tokens: 0, records: 0 };
-    current.tokens += Number(record.totalTokens) || 0;
-    current.records += 1;
-    byDay.set(record.date, current);
-  }
-  return [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
-}
-
 function chunks(items, size) {
   const result = [];
   for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
@@ -508,15 +589,19 @@ function chunks(items, size) {
 }
 function stripModelVariant(value) { return value ? String(value).replace(/:[^/:]+$/, '') : null; }
 function parseJson(value) { if (value && typeof value === 'object') return value; try { return JSON.parse(value); } catch { return {}; } }
-async function piSessionFilesInScope(piRoot, workspaceRoot) {
-  const exact = encodePiWorkspace(workspaceRoot);
-  const prefix = exact.slice(0, -2);
-  const dirs = (await readdir(piRoot)).filter((name) => name === exact || name.startsWith(`${prefix}-`));
-  const files = [];
-  for (const dir of dirs) {
-    for (const file of (await readdir(join(piRoot, dir))).filter((name) => name.endsWith('.jsonl'))) files.push(join(piRoot, dir, file));
+// Pi encodes the workspace path into the directory name (`/`→`-`), which is not
+// reversible, so attribution always compares encoded roots and never decodes a
+// directory name back into a path (design §4.1).
+async function piSessionFilesInScope(piRoot, scopes) {
+  const scoped = [];
+  for (const dir of await readdir(piRoot)) {
+    const workspaceId = attributePiWorkspace(dir, scopes);
+    if (workspaceId == null) continue;
+    for (const file of (await readdir(join(piRoot, dir))).filter((name) => name.endsWith('.jsonl'))) {
+      scoped.push({ sessionPath: join(piRoot, dir, file), workspaceId });
+    }
   }
-  return files;
+  return scoped;
 }
 async function walkJsonlFiles(dir, files = []) {
   let entries;
@@ -533,12 +618,6 @@ async function walkJsonlFiles(dir, files = []) {
   }));
   return files;
 }
-function isUnderRoot(candidate, root) {
-  if (!candidate) return false;
-  const resolvedCandidate = resolve(candidate);
-  const resolvedRoot = resolve(root);
-  return resolvedCandidate === resolvedRoot || resolvedCandidate.startsWith(`${resolvedRoot}/`);
-}
 function codexRef(sessionId) { return `codex:${sessionId}`; }
 function codexSessionIdFromFile(file) { return basename(file, '.jsonl').match(/([0-9a-f]{8}-[0-9a-f-]{27,})/)?.[1] || basename(file, '.jsonl'); }
 function claudeCodeRef(id) { return `claude-code:${id}`; }
@@ -547,7 +626,6 @@ function claudeCodeSessionId(file) {
   if (inSubagents && basename(file).startsWith('agent-')) return `${basename(dirname(dirname(file)))}/${basename(file, '.jsonl')}`;
   return basename(file, '.jsonl');
 }
-function encodePiWorkspace(path) { return `-${resolve(path).replace(/\//g, '-')}--`; }
 function knownNumber(value) { return Number.isFinite(Number(value)) ? Number(value) : null; }
 function sumKnown(...values) { const known = values.filter((v) => v.value != null); return { known: known.length > 0, value: known.reduce((s, v) => s + v.value, 0) }; }
 function isoFromMs(value) { return Number.isFinite(Number(value)) ? new Date(Number(value)).toISOString() : null; }

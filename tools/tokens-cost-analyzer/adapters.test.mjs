@@ -13,7 +13,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 async function analyze(source, workspaceRoot, sourceArgs) {
   const outDir = join(workspaceRoot, 'out');
   await execFileAsync(process.execPath, [join(here, 'analyze.mjs'), '--workspace', workspaceRoot, '--out', outDir, '--source', source, ...sourceArgs]);
-  return JSON.parse(await readFile(join(outDir, 'normalized.json'), 'utf8'));
+  return JSON.parse(await readFile(join(outDir, 'report.v1.json'), 'utf8'));
 }
 
 async function fixtureWorkspace(t) {
@@ -40,7 +40,7 @@ test('artifact replacement never exposes partial JSON to concurrent readers', as
   }));
   await writeJsonl(sessionPath, entries);
   await mkdir(outDir, { recursive: true });
-  await writeFile(join(outDir, 'normalized.json'), '{"records":[]}');
+  await writeFile(join(outDir, 'report.v1.json'), '{"records":[]}');
 
   const child = spawn(process.execPath, [join(here, 'analyze.mjs'), '--workspace', workspaceRoot, '--out', outDir, '--source', 'pi', '--pi-root', piRoot]);
   const completed = new Promise((resolveChild, rejectChild) => {
@@ -54,7 +54,7 @@ test('artifact replacement never exposes partial JSON to concurrent readers', as
   completed.finally(() => { done = true; });
   let parseError;
   while (!done && !parseError) {
-    try { JSON.parse(await readFile(join(outDir, 'normalized.json'), 'utf8')); }
+    try { JSON.parse(await readFile(join(outDir, 'report.v1.json'), 'utf8')); }
     catch (error) { parseError = error; }
     await new Promise((resolveLoop) => setImmediate(resolveLoop));
   }
@@ -69,7 +69,7 @@ test('Pi CLI analysis normalizes recorded usage and native cost', async (t) => {
   await writeJsonl(join(piRoot, encodedWorkspace, 'pi-session.jsonl'), [
     { type: 'model_change', provider: 'anthropic', modelId: 'claude-test' },
     { type: 'message', id: 'user-1', message: { role: 'user' } },
-    { type: 'message', timestamp: '2026-01-02T03:04:05.000Z', message: { role: 'assistant', model: 'claude-test', provider: 'anthropic', usage: { input: 100, output: 20, cacheRead: 30, cacheWrite: 4, cost: { total: 0.0123 } } } },
+    { type: 'message', id: 'assistant-1', timestamp: '2026-01-02T03:04:05.000Z', message: { role: 'assistant', model: 'claude-test', provider: 'anthropic', usage: { input: 100, output: 20, cacheRead: 30, cacheWrite: 4, cost: { total: 0.0123 } } } },
   ]);
 
   const result = await analyze('pi', workspaceRoot, ['--pi-root', piRoot]);
@@ -82,6 +82,7 @@ test('Pi CLI analysis normalizes recorded usage and native cost', async (t) => {
   });
   assert.equal(result.records[0].totalTokens, 154);
   assert.equal(result.records[0].recordedCost, 0.0123);
+  assert.equal(result.records[0].messageId, 'assistant-1');
   assert.equal(result.records[0].sessionTopicId, 'user-1');
 });
 

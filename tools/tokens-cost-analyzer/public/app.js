@@ -2,6 +2,7 @@ import { createDailyUsageHeatmap } from '/shared/browser/daily-usage-heatmap.js'
 import { escapeHtml } from '/shared/browser/dom.js';
 import { formatDateTime, formatTokens, money } from '/shared/browser/format.js';
 import { sessionBrowserHrefFor, storeSessionBrowserSelection } from '/shared/browser/session-links.js';
+import { analysisLabel, provenanceLabel, scopeMismatchWarning, sessionLinkFor, sourceRows, totalsDisclosure } from './provenance.js';
 import { createMorphCommit } from '/shared/browser/refresh-commit.js';
 import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
 import { reportRequestUrl, startAutomaticRefresh } from './refresh.js';
@@ -19,7 +20,9 @@ $('#refresh').addEventListener('click', () => refresh.request({ reason: 'manual'
 document.addEventListener('click', (event) => {
   const link = event.target.closest('a[data-session-browser-path]');
   if (!link) return;
-  storeSessionBrowserSelection(link.dataset.sessionBrowserPath, link.dataset.sessionTopicId, { workspaceRoot: state.data?.workspaceRoot });
+  // §8.2: the selection is scoped by workspace root, so a cross-workspace link
+  // must store it under the *target* root or the session opens in the wrong one.
+  storeSessionBrowserSelection(link.dataset.sessionBrowserPath, link.dataset.sessionTopicId, { workspaceRoot: link.dataset.workspaceRoot || state.data?.workspaceRoot });
 });
 const commitReport = createMorphCommit({
   root: reportEl,
@@ -45,7 +48,9 @@ refresh.registerCommitUnit({
     const data = transaction.data;
     dailyUsageHeatmap.bind($('#daily-usage'));
     window.FrameworkWorkspaceBadge?.set(workspaceEl, { root: data.workspaceRoot, tooltipPrefix: 'Workspace', workspaceFilter: tokenAnalyzerWorkspaceFilter });
-    statusEl.textContent = `Generated ${formatDateTime(data.generatedAt)} · ${analysisLabel(data.analysis)} · ${data.workspaceRoot}`;
+    // §8.3: the old single-generation-time header line is wrong over merged
+    // data of mixed ages, so the source card replaces it rather than joining it.
+    statusEl.textContent = `${analysisLabel(data.analysis)} · ${data.workspaceRoot}`;
   },
 });
 refresh.request({ reason: 'initial' });
@@ -58,11 +63,13 @@ async function fetchReport({ signal, force, reason }) {
 }
 
 function render(data, root = document) {
-  renderWarnings(data.warnings || [], root);
+  renderWarnings([...(data.warnings || []), scopeMismatchWarning(data.linkTargets)].filter(Boolean), root);
+  renderSourceCard(data.merge, root);
   renderTotals(data.totals, data.subscriptions?.currency || 'EUR', root);
   renderMonthly(data.monthly || [], data.subscriptions?.currency || 'EUR', root);
   dailyUsageHeatmap.render($('#daily-usage', root), data.daily || []);
   renderSourceUsage(data.bySource || [], data.totals?.tokens || 0, root);
+  renderBars('#workspace-chart', data.byWorkspace || [], 'tokens', (row) => formatTokens(row.tokens), root);
   renderBars('#model-chart', (data.byModel || []).slice(0, 5), 'tokens', (row) => formatTokens(row.tokens), root);
   renderBars('#subscription-chart', (data.subscriptions?.byService || []).slice(0, 8).map((r) => ({ key: r.service, amount: r.amount })), 'amount', (row) => money(row.amount, data.subscriptions?.currency || 'EUR'), root);
   renderDrivers('#drivers', data.topDrivers || [], root);
@@ -74,6 +81,19 @@ function renderWarnings(warnings, root) {
   const el = $('#warnings', root);
   el.classList.toggle('hidden', warnings.length === 0);
   el.innerHTML = warnings.length ? `<strong>Trust flags</strong><ul>${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul>` : '';
+}
+
+function renderSourceCard(merge, root) {
+  const disclosure = totalsDisclosure(merge);
+  $('#totals-disclosure', root).textContent = disclosure || '';
+  $('#source-card', root).innerHTML = sourceRows(merge?.sources || []).map((row) => `<div class="source-row ${row.tone}">
+      <div class="source-name"><i class="dot ${row.tone}"></i><strong title="${escapeHtml(row.key)}">${escapeHtml(row.key)}</strong>${row.isLocal ? '<span class="pill">this workspace</span>' : ''}</div>
+      <span class="source-state">${escapeHtml(row.state)}</span>
+      <span class="source-age" title="${escapeHtml(row.generatedAt ? formatDateTime(row.generatedAt) : '')}">refreshed ${escapeHtml(row.reportAge || 'unknown')}</span>
+      <span class="source-age" title="${escapeHtml(row.lastSuccessAt ? formatDateTime(row.lastSuccessAt) : '')}">${row.fetchAge ? `reached ${escapeHtml(row.fetchAge)}` : ''}</span>
+      <span class="source-records">${row.records} ${row.records === 1 ? 'record' : 'records'}</span>
+      <span class="source-note">${escapeHtml(row.note || '')}</span>
+    </div>`).join('') || '<p class="status">No sources.</p>';
 }
 
 function renderTotals(totals, subCurrency, root) {
@@ -113,8 +133,26 @@ function renderBars(selector, rows, field, labelFn, root) {
   $(selector, root).innerHTML = rows.map((row) => `<div class="bar-row"><div class="name" title="${escapeHtml(row.key)}">${escapeHtml(row.key)}</div><div class="bar"><div class="fill" style="width:${Math.max(2, ((Number(row[field]) || 0) / max) * 100)}%"></div></div><div class="amount">${labelFn(row)}</div></div>`).join('') || '<p class="status">No data yet.</p>';
 }
 
-function sessionBrowserHref(driver) {
-  return sessionBrowserHrefFor(driver, { fallbackRoute: '../sessions/' });
+/**
+ * §8.2: a row links only when this Cockpit can actually reach the session, and
+ * a cross-workspace link carries `?workspace=<id>` so the Session Browser opens
+ * in the target workspace rather than reinterpreting the path in this one.
+ */
+function sessionLinkAttributes(record) {
+  const link = sessionLinkFor(record, {
+    machineId: state.data?.linkTargets?.machineId,
+    workspaces: state.data?.linkTargets?.workspaces || [],
+    workspaceRoot: state.data?.workspaceRoot,
+    cockpitWorkspaces: window.__FRAMEWORK_COCKPIT__?.workspaces || [],
+  }, (row) => sessionBrowserHrefFor(row, { fallbackRoute: '../sessions/' }));
+  if (!link) return null;
+  return `href="${escapeHtml(link.href)}" data-session-browser-path="${escapeHtml(record.sessionBrowserPath)}" data-session-topic-id="${escapeHtml(record.sessionTopicId || '')}" data-workspace-root="${escapeHtml(link.root)}"`;
+}
+
+// §8.2's visual treatment: a top-drivers table is scanned, not read, so an
+// unmarked row would be assumed local.
+function provenanceMarker(record) {
+  return `<span class="pill provenance" title="${escapeHtml(provenanceLabel(record))}">${escapeHtml(record.workspaceId || 'unknown-workspace')}</span>`;
 }
 
 function renderTrustInspector(issues, root) {
@@ -123,11 +161,11 @@ function renderTrustInspector(issues, root) {
   panel.classList.toggle('hidden', issues.length === 0);
   el.innerHTML = issues.map((issue) => {
     const model = issue.modelLabel || issue.model || 'unknown-model';
-    const href = sessionBrowserHref(issue);
+    const link = sessionLinkAttributes(issue);
     const title = `${issue.source || 'unknown'} · ${issue.date || 'unknown'} · ${model}`;
     const reasons = (issue.warnings || []).map((warning) => `<span class="pill warn">${escapeHtml(warning)}</span>`).join('');
-    const details = `<div class="inspector-main"><strong title="${escapeHtml(title)}">${escapeHtml(title)}</strong><small>${escapeHtml(issue.sessionRef || issue.sessionId || '')}${issue.messageId ? ` · message ${escapeHtml(issue.messageId)}` : ''}</small></div><div class="pills"><span class="pill">${formatTokens(issue.totalTokens || 0)}</span>${reasons}<span class="pill">alias ${escapeHtml(issue.model || 'unknown')}</span></div>`;
-    return href ? `<a class="inspector-row" href="${escapeHtml(href)}" data-session-browser-path="${escapeHtml(issue.sessionBrowserPath)}" data-session-topic-id="${escapeHtml(issue.sessionTopicId || '')}">${details}</a>` : `<article class="inspector-row">${details}</article>`;
+    const details = `<div class="inspector-main"><strong title="${escapeHtml(title)}">${escapeHtml(title)}</strong><small>${escapeHtml(issue.sessionRef || issue.sessionId || '')}${issue.messageId ? ` · message ${escapeHtml(issue.messageId)}` : ''}</small></div><div class="pills">${provenanceMarker(issue)}<span class="pill">${formatTokens(issue.totalTokens || 0)}</span>${reasons}<span class="pill">alias ${escapeHtml(issue.model || 'unknown')}</span></div>`;
+    return link ? `<a class="inspector-row" ${link}>${details}</a>` : `<article class="inspector-row">${details}</article>`;
   }).join('');
 }
 
@@ -135,17 +173,12 @@ function renderDrivers(selector, drivers, root) {
   $(selector, root).innerHTML = drivers.map((r) => {
     const model = r.modelLabel || r.model || 'unknown-model';
     const count = r.recordCount ? `<span class="pill">${r.recordCount} records</span>` : '';
-    const body = `<div class="driver-top"><span>${escapeHtml(r.date || 'unknown')}</span><span>${escapeHtml(r.source || '')}</span></div><strong title="${escapeHtml(model)}">${escapeHtml(model)}</strong><div class="pills"><span class="pill">${formatTokens(r.totalTokens || 0)}</span><span class="pill">recorded ${money(r.recordedCost, 'USD')}</span><span class="pill ${r.estimatedCost == null ? 'warn' : ''}">estimated ${money(r.estimatedCost, 'USD')}</span>${count}<span class="pill ${r.confidence === 'unknown' ? 'warn' : ''}">${escapeHtml(r.confidence || 'unknown')}</span></div>`;
-    const href = sessionBrowserHref(r);
-    return href ? `<a class="driver driver-link" href="${escapeHtml(href)}" data-session-browser-path="${escapeHtml(r.sessionBrowserPath)}" data-session-topic-id="${escapeHtml(r.sessionTopicId || '')}" title="Open in Session Browser">${body}</a>` : `<article class="driver">${body}</article>`;
+    const body = `<div class="driver-top"><span>${escapeHtml(r.date || 'unknown')}</span><span>${escapeHtml(r.source || '')}</span></div><strong title="${escapeHtml(model)}">${escapeHtml(model)}</strong><div class="pills">${provenanceMarker(r)}<span class="pill">${formatTokens(r.totalTokens || 0)}</span><span class="pill">recorded ${money(r.recordedCost, 'USD')}</span><span class="pill ${r.estimatedCost == null ? 'warn' : ''}">estimated ${money(r.estimatedCost, 'USD')}</span>${count}<span class="pill ${r.confidence === 'unknown' ? 'warn' : ''}">${escapeHtml(r.confidence || 'unknown')}</span></div>`;
+    const link = sessionLinkAttributes(r);
+    return link ? `<a class="driver driver-link" ${link} title="Open in Session Browser">${body}</a>` : `<article class="driver">${body}</article>`;
   }).join('');
 }
 
-function analysisLabel(analysis) {
-  if (analysis?.mode === 'limited') return `limited to latest ${analysis.limit} sessions/files per source`;
-  if (analysis?.mode === 'full-history') return 'full-history';
-  return 'analysis scope unknown';
-}
 function metric(label, value, note) { return `<article class="metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`; }
 function compactCurrency(value, currency) {
   const amount = Number(value) || 0;

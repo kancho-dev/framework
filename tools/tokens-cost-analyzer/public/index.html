@@ -21,12 +21,14 @@
     <p id="status" class="status">Loading…</p>
     <div id="report">
     <section id="warnings" class="warnings hidden"></section>
+    <section class="panel source-status"><div class="panel-title"><h2>Sources</h2><span id="totals-disclosure"></span></div><div id="source-card" class="source-card"></div></section>
     <section class="hero-grid" id="totals"></section>
     <section class="usage-layout">
       <article class="panel monthly-panel"><div class="panel-title"><h2>Monthly spend cockpit</h2><div class="panel-legend"><span><i class="dot" style="background:var(--accent)"></i>estimated token cost</span><span><i class="dot" style="background:var(--purple)"></i>subscriptions</span></div></div><div id="monthly-chart" class="chart"></div></article>
       <div class="usage-stack">
         <article class="panel"><div class="panel-title"><h2>Daily token usage</h2></div><div id="daily-usage"></div></article>
         <article class="panel"><div class="panel-title"><h2>Usage by agent tool</h2><span>normalized token share</span></div><div id="source-chart" class="bars compact-bars"></div></article>
+        <article class="panel"><div class="panel-title"><h2>Usage by workspace</h2><span>machine / workspace</span></div><div id="workspace-chart" class="bars compact-bars"></div></article>
       </div>
     </section>
     <section class="grid two">

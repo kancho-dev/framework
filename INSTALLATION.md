@@ -283,8 +283,9 @@ Useful configuration:
 
 Safety and privacy:
 
-- analysis is local-only and read-only with respect to source session data;
-- generated `normalized.json`, `daily.json`, optional pricing overrides, and optional subscription records stay under ignored `.tools-config/` by default and may reveal models, usage, costs, paths, and work timing;
+- analysis is local-only and read-only with respect to source session data **unless you configure remote sources**: with `type: "ssh"` entries in `sources.json` the tool makes outbound SSH connections to the hosts you name, running one bounded `cat` of a pre-generated report. It remains read-only with respect to the remote, holds no credentials (SSH config and agent own those), and does nothing at all when no sources are configured — but this is a real posture change and belongs in your decision to configure it;
+- generated `report.v1.json`, `daily.json`, `scan-scope.json`, the last-known-good source `cache/`, optional pricing overrides, and optional subscription records stay under ignored `.tools-config/` by default and may reveal models, usage, costs, paths, and work timing;
+- `report.v1.json` is what a remote machine fetches, so absolute paths are redacted from it and session content is never included; `scan-scope.json` keeps the local roots and is never shared;
 - do not commit generated reports or `.tools-config/` unless intentionally sharing that private local state;
 - estimates may be incomplete or unpriced and are explicitly separated from recorded native costs;
 - for complete source semantics, pricing caveats, Cockpit integration, and configuration, read `framework/tools/tokens-cost-analyzer/README.md`.
@@ -316,10 +317,13 @@ Optional browser tools use `.tools-config/` as the default private workspace-loc
   tool-orchestrator/
     workspaces.json
   tokens-cost-analyzer/
-    normalized.json
+    report.v1.json
     daily.json
+    scan-scope.json
     pricing.json
     subscriptions.json
+    sources.json
+    cache/
 ```
 
 Keep this directory ignored unless the workspace intentionally shares local tool state. For existing-workspace upgrades from older tool metadata paths, follow [`migrations/v0.14.0.md`](migrations/v0.14.0.md); `MIGRATIONS.md` indexes the full set.

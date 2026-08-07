@@ -37,7 +37,7 @@ before(async () => {
   ].join('\n')]);
 
   await execFileAsync('node', [join(here, 'analyze.mjs'), '--workspace', workspaceRoot, '--out', outDir, '--opencode-db', opencodeDb, '--source', 'opencode']);
-  ({ records } = JSON.parse(await readFile(join(outDir, 'normalized.json'), 'utf8')));
+  ({ records } = JSON.parse(await readFile(join(outDir, 'report.v1.json'), 'utf8')));
 });
 
 const record = (messageId) => records.find((item) => item.messageId === messageId);

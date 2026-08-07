@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ensureArtifacts } from './server.mjs';
+import { createTokensCostAnalyzerHandler, ensureArtifacts } from './server.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -82,6 +82,41 @@ test('server report endpoint analyzes fixture data and returns dashboard totals'
   const browserModule = await fetch(`http://127.0.0.1:${port}/shared/refresh-coordinator.mjs`);
   assert.equal(browserModule.status, 200);
   assert.equal(browserModule.headers.get('content-type'), 'text/javascript; charset=utf-8');
+
+  // Roots are redacted out of the artifact, so the payload's local path knowledge
+  // must come from local configuration rather than from the report.
+  assert.equal(report.workspaceRoot, workspaceRoot);
+  const artifact = JSON.parse(await readFile(join(workspaceRoot, '.tools-config', 'tokens-cost-analyzer', 'report.v1.json'), 'utf8'));
+  assert.equal('workspaceRoot' in artifact, false);
+  assert.equal(artifact.records[0].sessionBrowserPath.startsWith('~/'), false, 'this fixture lives outside HOME, so nothing is redacted here');
+  assert.equal(report.topDrivers[0].sessionBrowserPath, artifact.records[0].sessionBrowserPath);
+  assert.equal(artifact.records[0].workspaceId, artifact.origin.workspaces[0]);
+});
+
+test('a redacted local session path is expanded back for the local machine only', async (t) => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'tokens-analyzer-expand-'));
+  t.after(() => rm(outputDir, { recursive: true, force: true }));
+  const record = (unitId, sessionId, sessionBrowserPath) => ({
+    unitId, sessionId, sessionBrowserPath, source: 'pi', messageId: 'm', workspaceId: 'home',
+    timestamp: '2026-01-03T00:00:00.000Z', date: '2026-01-03', totalTokens: 1, tokens: {}, warnings: [],
+  });
+  await writeFile(join(outputDir, 'report.v1.json'), JSON.stringify({
+    report: { generatedAt: '2026-01-03T00:00:00.000Z', coverage: { mode: 'full-history', limit: null, limitScope: 'x' }, warnings: [] },
+    origin: { machineId: 'workstation', workspaces: ['home'] },
+    records: [record('workstation/pi/local/m', 'local', '~/.pi/local.jsonl'), record('laptop/pi/remote/m', 'remote', '~/.pi/remote.jsonl')],
+  }));
+  await writeFile(join(outputDir, 'daily.json'), JSON.stringify({ generatedAt: '2026-01-03T00:00:00.000Z', daily: [] }));
+
+  const handler = createTokensCostAnalyzerHandler({ workspaceRoot: outputDir, outputDir });
+  const payload = await new Promise((resolvePayload) => {
+    const res = { writeHead() {}, setHeader() {}, end(body) { resolvePayload(JSON.parse(body)); } };
+    handler({ url: '/api/report' }, res);
+  });
+
+  const pathBySession = new Map(payload.topDrivers.map((driver) => [driver.sessionId, driver.sessionBrowserPath]));
+  assert.equal(pathBySession.get('local'), join(homedir(), '.pi', 'local.jsonl'));
+  assert.equal(pathBySession.get('remote'), '~/.pi/remote.jsonl', "another machine's home directory is not ours to expand");
+  assert.equal(payload.workspaceRoot, outputDir);
 });
 
 test('artifact regeneration is age-guarded, single-flight, manual-aware, and retryable', async (t) => {
@@ -89,7 +124,7 @@ test('artifact regeneration is age-guarded, single-flight, manual-aware, and ret
   t.after(() => rm(outputDir, { recursive: true, force: true }));
   const now = Date.parse('2026-01-03T00:08:00.000Z');
   const writeArtifacts = async (generatedAt) => {
-    await writeFile(join(outputDir, 'normalized.json'), JSON.stringify({ generatedAt }));
+    await writeFile(join(outputDir, 'report.v1.json'), JSON.stringify({ report: { generatedAt } }));
     await writeFile(join(outputDir, 'daily.json'), JSON.stringify({ generatedAt, daily: [] }));
   };
   await writeArtifacts('2026-01-03T00:00:00.000Z');
@@ -120,4 +155,225 @@ test('artifact regeneration is age-guarded, single-flight, manual-aware, and ret
   await assert.rejects(ensureArtifacts(failing), /analysis failed/);
   await assert.rejects(ensureArtifacts(failing), /analysis failed/);
   assert.equal(attempts, 2, 'a failed analysis clears the in-flight slot');
+});
+
+// --- §9 step 8: merged loading below the request handler's catch ------------
+
+const LOCAL_STATES = ['unreachable', 'unauthorized', 'missing', 'unreadable', 'invalid', 'incompatible', 'disabled'];
+
+function localRecord(overrides = {}) {
+  return {
+    source: 'pi', sessionId: 'local-session', messageId: 'm1', workspaceId: 'framework',
+    unitId: 'workstation/pi/local-session/m1', identityClass: 'native',
+    timestamp: '2026-01-03T00:00:00.000Z', date: '2026-01-03',
+    totalTokens: 13, tokens: {}, recordedCost: 2, estimatedCost: null, warnings: [], ...overrides,
+  };
+}
+
+async function fixtureOutputDir(t, { records = [localRecord()], sources = null, workspaces = ['framework'] } = {}) {
+  const outputDir = await mkdtemp(join(tmpdir(), 'tokens-analyzer-step8-'));
+  t.after(() => rm(outputDir, { recursive: true, force: true }));
+  await writeFile(join(outputDir, 'report.v1.json'), JSON.stringify({
+    schema: 'tokens-cost-analyzer/report', schemaVersion: 1,
+    report: { reportId: 'report-local', generatedAt: '2026-01-03T00:00:00.000Z', generatorVersion: '0.6.0', currency: 'USD', coverage: { mode: 'full-history', limit: null, limitScope: 'x' }, pricingSources: [], warnings: [] },
+    origin: { machineId: 'workstation', workspaces },
+    records,
+  }));
+  await writeFile(join(outputDir, 'daily.json'), JSON.stringify({ generatedAt: '2026-01-03T00:00:00.000Z', workspaceRoot: outputDir, analysis: { mode: 'full-history' }, daily: [] }));
+  if (sources) await writeFile(join(outputDir, 'sources.json'), typeof sources === 'string' ? sources : JSON.stringify(sources));
+  return outputDir;
+}
+
+function request(outputDir, options = {}, path = '/api/report') {
+  const handler = createTokensCostAnalyzerHandler({ workspaceRoot: outputDir, outputDir, ...options });
+  return new Promise((resolvePayload) => {
+    let status;
+    const res = { writeHead(code) { status = code; }, setHeader() {}, end(body) { resolvePayload({ status, payload: JSON.parse(body) }); } };
+    handler({ url: path }, res);
+  });
+}
+
+const oneSource = { schemaVersion: 1, sources: [{ id: 'laptop', type: 'ssh', host: 'laptop.local', remotePath: '~/report.v1.json' }] };
+
+test('every external-source failure state still returns 200 with local records intact', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: oneSource });
+  // The baseline is a genuine local-only run — no sources.json at all — so the
+  // comparison is against today's behaviour rather than against a merge that
+  // happened to produce nothing.
+  const { payload: localOnly } = await request(await fixtureOutputDir(t));
+
+  for (const state of LOCAL_STATES) {
+    const loadExternal = async () => ({ loads: [{ records: [], state: { id: 'laptop', sourceKey: null, state, included: false, detail: `${state} detail` } }] });
+    const { status, payload } = await request(outputDir, { loadExternal });
+
+    assert.equal(status, 200, state);
+    assert.equal(payload.totals.records, 1, state);
+    assert.equal(payload.totals.tokens, 13, state);
+    assert.deepEqual(payload.topMessageDrivers, localOnly.topMessageDrivers, `${state}: local records are complete and unchanged`);
+    assert.deepEqual(payload.daily, localOnly.daily, state);
+    assert.equal(payload.merge.sources.find((row) => row.id === 'laptop').included, false, state);
+  }
+});
+
+test('an external loader that throws cannot take the local dashboard down', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: oneSource });
+  const { status, payload } = await request(outputDir, { loadExternal: () => Promise.reject(new Error('boom')) });
+
+  assert.equal(status, 200);
+  assert.equal(payload.totals.records, 1);
+  assert.equal(payload.merge.sources.at(-1).state, 'invalid', 'the failure is reported as a source row, not as a 500');
+});
+
+test('an unreadable sources.json is reported as a source row, not as a failed request', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: '{ not json' });
+  const { status, payload } = await request(outputDir);
+
+  assert.equal(status, 200);
+  assert.equal(payload.totals.tokens, 13, 'one unusable config file must not blank local analysis');
+  const row = payload.merge.sources.find((source) => source.id === 'sources.json');
+  assert.equal(row.included, false);
+  assert.match(row.detail, /not valid JSON/);
+});
+
+test('with no sources.json the payload is local-only plus exactly the additive fields', async (t) => {
+  const outputDir = await fixtureOutputDir(t);
+  const { status, payload } = await request(outputDir);
+
+  assert.equal(status, 200);
+  // §8.5's regression guard: one green row, one By Workspace line.
+  assert.equal(payload.merge.sources.length, 1);
+  assert.deepEqual(
+    { id: payload.merge.sources[0].id, included: payload.merge.sources[0].included, isLocal: payload.merge.sources[0].isLocal, records: payload.merge.sources[0].records },
+    { id: 'this machine', included: true, isLocal: true, records: 1 },
+  );
+  assert.deepEqual(payload.merge.totalsExclude, []);
+  assert.deepEqual(payload.merge.warnings, []);
+  assert.equal(payload.byWorkspace.length, 1);
+  assert.equal(payload.byWorkspace[0].key, 'workstation/framework');
+  assert.equal(payload.byWorkspace[0].tokens, payload.totals.tokens, 'By Workspace rows sum to the overall total');
+
+  // Local records survive merge byte-identically apart from the additive sourceKey.
+  const artifact = JSON.parse(await readFile(join(outputDir, 'report.v1.json'), 'utf8'));
+  const { sourceKey, ...merged } = payload.topMessageDrivers[0];
+  assert.equal(sourceKey, 'workstation');
+  assert.deepEqual(merged, artifact.records[0]);
+});
+
+// §8.2 condition 2 is a local lookup, so the browser needs this machine's own
+// workspace roots — reports deliberately carry none (§7).
+test('the payload carries this machine identity and its local workspace roots', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: { schemaVersion: 1, self: { machineId: 'ignored-here', catchAllId: 'home' } } });
+  const { payload } = await request(outputDir);
+
+  // The stamping identity is the report's, not the config's: records already
+  // carry `unitId`s built from it, and a renamed machine must not orphan them.
+  assert.equal(payload.linkTargets.machineId, 'workstation');
+  assert.deepEqual(payload.linkTargets.workspaces, [{ id: 'home', root: outputDir }], 'the catch-all root is always a link target');
+});
+
+// The regression this guards: a CLI run under `$HOME` and a server rooted at a
+// project directory derived different workspace ids, so no record resolved and
+// every deep link vanished with nothing said. `scan-scope.json` is written by
+// the run that stamped the ids, so the two cannot drift apart.
+test('an artifact scanned under one root keeps its links when the server is rooted elsewhere', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { records: [localRecord({ workspaceId: 'kancho' })], workspaces: ['kancho'] });
+  await writeFile(join(outputDir, 'scan-scope.json'), JSON.stringify({ machineId: 'workstation', workspaces: [{ id: 'kancho', root: '/home/kancho' }] }));
+
+  const { payload } = await request(outputDir);
+
+  assert.deepEqual(payload.linkTargets.workspaces, [{ id: 'kancho', root: '/home/kancho' }], 'link targets follow the scan, not the server root');
+  assert.deepEqual(payload.linkTargets.unresolvedWorkspaces, [], 'every scanned workspace resolves');
+});
+
+test('a scope the local configuration cannot resolve is reported instead of silently unlinking', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { records: [localRecord({ workspaceId: 'kancho' })], workspaces: ['kancho'] });
+  const { payload } = await request(outputDir);
+
+  // No scan-scope.json: the fallback derives ids from the server root, which
+  // cannot know about `kancho`. The rows go inert — and now say so.
+  assert.deepEqual(payload.linkTargets.unresolvedWorkspaces, ['kancho']);
+});
+
+test('an unusable sources.json costs the deep links, not the dashboard', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: '{ not json' });
+  const { payload } = await request(outputDir);
+
+  assert.equal(payload.linkTargets.machineId, 'workstation', 'identity still comes from the local report');
+  assert.equal(payload.linkTargets.workspaces.length, 1, 'the default scan is the fallback, never a crash');
+});
+
+test('the daily endpoint serves merged records so the widget cannot disagree with the dashboard', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: oneSource });
+  const remote = { records: [localRecord({ unitId: 'laptop/pi/remote/m1', sessionId: 'remote', totalTokens: 7, sourceKey: 'laptop' })], state: { id: 'laptop', sourceKey: 'laptop', reportId: 'report-laptop', state: 'ok', included: true, detail: null, generatedAt: '2026-01-03T00:00:00.000Z', currency: 'USD', coverageMode: 'full-history' } };
+  const loadExternal = async () => ({ loads: [remote] });
+
+  const report = await request(outputDir, { loadExternal });
+  const daily = await request(outputDir, { loadExternal }, '/api/daily-usage');
+
+  assert.equal(report.payload.totals.tokens, 20);
+  assert.deepEqual(daily.payload.daily, report.payload.daily);
+  assert.deepEqual(daily.payload.daily, [{ date: '2026-01-03', tokens: 20, records: 2 }]);
+  assert.deepEqual(report.payload.byWorkspace.map((row) => row.key), ['workstation/framework', 'laptop/framework']);
+});
+
+// A synced project directory puts the same sessionId on two machines (§5.5).
+// Merge drops identical records, but distinct messages survive on both — and a
+// single rolled-up row would wear one machine's provenance while §8.2 links it.
+test('one session seen on two machines stays two rows with honest provenance', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: oneSource });
+  const remote = { records: [localRecord({ unitId: 'laptop/pi/local-session/m2', messageId: 'm2', sourceKey: 'laptop', workspaceId: 'client-x' })], state: { id: 'laptop', sourceKey: 'laptop', reportId: 'report-laptop', state: 'ok', included: true, detail: null, generatedAt: '2026-01-03T00:00:00.000Z', currency: 'USD', coverageMode: 'full-history' } };
+  const { payload } = await request(outputDir, { loadExternal: async () => ({ loads: [remote] }) });
+
+  assert.equal(payload.topDrivers.length, 2, 'the same session on two machines is two rollup rows');
+  assert.deepEqual(
+    payload.topDrivers.map((driver) => [driver.sourceKey, driver.workspaceId, driver.recordCount]).sort(),
+    [['laptop', 'client-x', 1], ['workstation', 'framework', 1]],
+  );
+});
+
+test('a currency-excluded source contributes tokens without inflating the unpriced counters', async (t) => {
+  // One genuinely unpriced local record beside the currency-excluded remote, so
+  // every counter has to tell the two apart rather than happening to read zero.
+  const unpriced = localRecord({ unitId: 'workstation/pi/local-session/m2', messageId: 'm2', totalTokens: 4, recordedCost: null, estimatedCost: null });
+  const outputDir = await fixtureOutputDir(t, { sources: oneSource, records: [localRecord(), unpriced] });
+  const remote = { records: [localRecord({ unitId: 'eu/pi/remote/m1', sessionId: 'remote', totalTokens: 5, recordedCost: 9, sourceKey: 'eu', workspaceId: 'eu-ws' })], state: { id: 'eu', sourceKey: 'eu', reportId: 'report-eu', state: 'ok', included: true, detail: null, generatedAt: '2026-01-03T00:00:00.000Z', currency: 'EUR', coverageMode: 'full-history' } };
+  const { payload } = await request(outputDir, { loadExternal: async () => ({ loads: [remote] }) });
+
+  assert.equal(payload.totals.tokens, 22, 'token counts are currency-free');
+  assert.equal(payload.totals.recordedCost, 2, 'no EUR amount reaches a USD total');
+  assert.equal(payload.totals.unknownCostRecords, 1, 'a deliberate exclusion is not a data-quality problem');
+  assert.equal(payload.trustIssues.length, 1);
+  assert.match(payload.warnings.join(' '), /EUR.*USD/);
+
+  // The per-key panels must agree with the headline; a currency exclusion that
+  // leaked into these counts would contradict `totals.unknownCostRecords`.
+  const unknownBy = (rowsList) => rowsList.map((row) => [row.key, row.unknown]);
+  assert.deepEqual(unknownBy(payload.byModel), [['unknown-model', 1]]);
+  assert.deepEqual(unknownBy(payload.bySource), [['pi', 1]]);
+  assert.deepEqual(unknownBy(payload.byWorkspace).sort(), [['eu/eu-ws', 0], ['workstation/framework', 1]]);
+});
+
+test('a limited external source makes the whole aggregate limited', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: oneSource });
+  const remote = { records: [], state: { id: 'laptop', sourceKey: 'laptop', reportId: 'report-laptop', state: 'ok', included: true, detail: null, generatedAt: '2026-01-03T00:00:00.000Z', currency: 'USD', coverageMode: 'limited' } };
+  const { payload } = await request(outputDir, { loadExternal: async () => ({ loads: [remote] }) });
+
+  assert.equal(payload.analysis.mode, 'limited', 'incompleteness is contagious upward');
+  assert.match(payload.warnings.join(' '), /limited history/);
+});
+
+test('subscription records are summarized alongside merged token usage', async (t) => {
+  const outputDir = await fixtureOutputDir(t);
+  await writeFile(join(outputDir, 'subscriptions.json'), JSON.stringify({
+    records: [
+      { month: '2026-01', service: 'claude', amount: 20.005, currency: 'USD' },
+      { month: '2026-01', service: 'openai', amount: 10, currency: 'USD' },
+    ],
+  }));
+
+  const { status, payload } = await request(outputDir);
+  assert.equal(status, 200);
+  assert.equal(payload.totals.subscriptionCost, 30.005);
+  assert.deepEqual(payload.subscriptions.byMonth, [{ month: '2026-01', amount: 30.005 }]);
+  assert.equal(payload.monthly.find((row) => row.month === '2026-01').subscriptionCost, 30.005);
 });
