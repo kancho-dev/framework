@@ -1,11 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { reportRequestUrl, startAutomaticRefresh } from './refresh.js';
+import { refreshStatus, reportRequestUrl, startAutomaticRefresh } from './refresh.js';
 
 test('report request marks only manual refreshes as manual', () => {
   assert.equal(reportRequestUrl('?workspace=main', { force: true, reason: 'manual' }), 'api/report?workspace=main&refresh=1&manual=1');
   assert.equal(reportRequestUrl('?workspace=main', { force: true, reason: 'poll' }), 'api/report?workspace=main&refresh=1');
   assert.equal(reportRequestUrl('?workspace=main', { reason: 'initial' }), 'api/report?workspace=main');
+});
+
+test('terminal refresh phases clear transient status text', () => {
+  assert.deepEqual(refreshStatus('loading'), { visible: true, text: 'Loading analysis…' });
+  assert.deepEqual(refreshStatus('refreshing'), { visible: true, text: 'Refreshing…' });
+  assert.deepEqual(refreshStatus('committed'), { visible: false, text: '' });
+  assert.deepEqual(refreshStatus('update-ready'), { visible: false, text: '' });
 });
 
 test('automatic refresh forces report analysis on each poll', () => {

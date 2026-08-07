@@ -2,16 +2,15 @@ import { createDailyUsageHeatmap } from '/shared/browser/daily-usage-heatmap.js'
 import { escapeHtml } from '/shared/browser/dom.js';
 import { formatDateTime, formatTokens, money } from '/shared/browser/format.js';
 import { sessionBrowserHrefFor, storeSessionBrowserSelection } from '/shared/browser/session-links.js';
-import { analysisLabel, provenanceLabel, scopeMismatchWarning, sessionLinkFor, sourceRows, totalsDisclosure } from './provenance.js';
+import { provenanceLabel, scopeMismatchWarning, sessionLinkFor, sourceRows, totalsDisclosure } from './provenance.js';
 import { createMorphCommit } from '/shared/browser/refresh-commit.js';
 import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
-import { reportRequestUrl, startAutomaticRefresh } from './refresh.js';
+import { refreshStatus, reportRequestUrl, startAutomaticRefresh } from './refresh.js';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
 const state = { data: null };
 const dailyUsageHeatmap = createDailyUsageHeatmap({ showYearSwitcher: true });
 const $ = (selector, root = document) => root.querySelector(selector);
-const statusEl = $('#status');
 const workspaceEl = $('#workspace-name');
 const reportEl = $('#report');
 const tokenAnalyzerWorkspaceFilter = (workspace) => workspace?.tools?.['tokens-cost-analyzer'] === true;
@@ -36,9 +35,10 @@ const commitReport = createMorphCommit({
 const refresh = createRefreshCoordinator({
   fetchData: fetchReport,
   onStatus: ({ phase, error }) => {
-    if (phase === 'loading') statusEl.textContent = 'Loading local analysis…';
-    if (phase === 'refreshing') statusEl.textContent = 'Refreshing local analysis…';
-    if (phase === 'error') statusEl.textContent = `Error: ${error.message}`;
+    const statusEl = $('#status');
+    const status = refreshStatus(phase, error);
+    statusEl.textContent = status.text;
+    statusEl.classList.toggle('hidden', !status.visible);
   },
 });
 refresh.registerCommitUnit({
@@ -48,9 +48,8 @@ refresh.registerCommitUnit({
     const data = transaction.data;
     dailyUsageHeatmap.bind($('#daily-usage'));
     window.FrameworkWorkspaceBadge?.set(workspaceEl, { root: data.workspaceRoot, tooltipPrefix: 'Workspace', workspaceFilter: tokenAnalyzerWorkspaceFilter });
-    // §8.3: the old single-generation-time header line is wrong over merged
-    // data of mixed ages, so the source card replaces it rather than joining it.
-    statusEl.textContent = `${analysisLabel(data.analysis)} · ${data.workspaceRoot}`;
+    // Per-source ages and coverage replace the old single-report status line.
+    $('#status').classList.add('hidden');
   },
 });
 refresh.request({ reason: 'initial' });
@@ -86,14 +85,18 @@ function renderWarnings(warnings, root) {
 function renderSourceCard(merge, root) {
   const disclosure = totalsDisclosure(merge);
   $('#totals-disclosure', root).textContent = disclosure || '';
-  $('#source-card', root).innerHTML = sourceRows(merge?.sources || []).map((row) => `<div class="source-row ${row.tone}">
-      <div class="source-name"><i class="dot ${row.tone}"></i><strong title="${escapeHtml(row.key)}">${escapeHtml(row.key)}</strong>${row.isLocal ? '<span class="pill">this workspace</span>' : ''}</div>
-      <span class="source-state">${escapeHtml(row.state)}</span>
-      <span class="source-age" title="${escapeHtml(row.generatedAt ? formatDateTime(row.generatedAt) : '')}">refreshed ${escapeHtml(row.reportAge || 'unknown')}</span>
-      <span class="source-age" title="${escapeHtml(row.lastSuccessAt ? formatDateTime(row.lastSuccessAt) : '')}">${row.fetchAge ? `reached ${escapeHtml(row.fetchAge)}` : ''}</span>
-      <span class="source-records">${row.records} ${row.records === 1 ? 'record' : 'records'}</span>
-      <span class="source-note">${escapeHtml(row.note || '')}</span>
-    </div>`).join('') || '<p class="status">No sources.</p>';
+  $('#source-card', root).innerHTML = sourceRows(merge?.sources || []).map((row) => `<article class="source-row ${row.tone}">
+      <div class="source-row-head">
+        <div class="source-name"><strong title="${escapeHtml(row.key)}">${escapeHtml(row.name)}</strong><span class="source-identity">${escapeHtml(row.identity)}</span></div>
+        <span class="source-state"><i class="dot ${row.tone}"></i>${escapeHtml(row.state)}</span>
+      </div>
+      <div class="source-facts">
+        <div class="source-fact"><span>Report</span><strong title="${escapeHtml(row.generatedAt ? formatDateTime(row.generatedAt) : '')}">${escapeHtml(row.reportAge || 'unknown')}</strong></div>
+        <div class="source-fact"><span>Connection</span><strong title="${escapeHtml(row.lastSuccessAt ? formatDateTime(row.lastSuccessAt) : '')}">${escapeHtml(row.fetchAge || (row.isLocal ? 'local' : 'never reached'))}</strong></div>
+        <div class="source-fact"><span>Contribution</span><strong>${row.records} ${row.records === 1 ? 'record' : 'records'}</strong></div>
+      </div>
+      ${row.note ? `<div class="source-note ${row.tone === 'green' ? 'info' : ''}">${escapeHtml(row.note)}</div>` : ''}
+    </article>`).join('') || '<p class="status">No sources.</p>';
 }
 
 function renderTotals(totals, subCurrency, root) {

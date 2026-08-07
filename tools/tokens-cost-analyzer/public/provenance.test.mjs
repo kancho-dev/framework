@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { analysisLabel, linkTarget, provenanceLabel, relativeAge, scopeMismatchWarning, sessionLinkFor, sourceRows, sourceTone, totalsDisclosure } from './provenance.js';
+import { linkTarget, provenanceLabel, relativeAge, scopeMismatchWarning, sessionLinkFor, sourceRows, sourceTone, totalsDisclosure } from './provenance.js';
 
 function source(overrides = {}) {
   return { id: 'laptop', sourceKey: 'laptop', type: 'ssh', state: 'ok', included: true, costsExcluded: false, costsExcludedReason: null, detail: null, coverageMode: 'full-history', staleReport: false, staleFetch: false, reportAgeHours: 0.2, fetchAgeHours: 0.2, records: 3, ...overrides };
@@ -26,20 +26,31 @@ test('no excluded source renders amber and no fully included source renders red'
   const rows = sourceRows([
     source({ included: false, state: 'unreachable', detail: 'host unreachable' }),
     source({ id: 'stale', sourceKey: 'stale', staleReport: true }),
-    source({ id: 'local', isLocal: true, type: 'local' }),
+    source({ id: 'local', sourceKey: 'workstation', isLocal: true, type: 'local' }),
   ]);
   assert.deepEqual(rows.map((row) => row.tone), ['red', 'amber', 'green']);
-  assert.deepEqual(rows.map((row) => `${row.tone}:${row.state}`), ['red:excluded — unreachable', 'amber:included, not current', 'green:ok']);
+  assert.deepEqual(rows.map((row) => `${row.tone}:${row.state}`), ['red:excluded · unreachable', 'amber:not current', 'green:current']);
   assert.equal(rows[0].note, 'host unreachable', 'a red row says which number is missing and why');
   assert.equal(rows[2].isLocal, true);
+  assert.deepEqual(
+    { name: rows[2].name, identity: rows[2].identity },
+    { name: 'workstation', identity: 'local machine' },
+  );
+
+  const [unresolvedRemote] = sourceRows([source({ id: 'laptop-config', sourceKey: null, included: false, state: 'missing' })]);
+  assert.deepEqual(
+    { name: unresolvedRemote.name, identity: unresolvedRemote.identity },
+    { name: 'laptop-config', identity: 'configured source' },
+    'a source without a report identity does not repeat its config id',
+  );
 });
 
 test('a recent cached report stays green but exposes the latest failed refresh', () => {
   const [row] = sourceRows([source({ state: 'unreachable', fromCache: true, detail: 'host unreachable' })]);
 
   assert.equal(row.tone, 'green', 'recent complete cached data remains trusted');
-  assert.equal(row.state, 'ok');
-  assert.match(row.note, /latest refresh attempt failed.*unreachable/);
+  assert.equal(row.state, 'current · cached');
+  assert.match(row.note, /Latest refresh failed \(unreachable\).*recent cached report/);
 });
 
 test('both ages stay visible and distinguish "nothing new" from "could not check"', () => {
@@ -131,16 +142,9 @@ test('totals disclosure names what was left out instead of showing a bare number
   const merge = { sources: [source({ id: 'this machine', isLocal: true }), source({ id: 'laptop-eu', costsExcluded: true, costsExcludedReason: 'currency mismatch (EUR vs USD)' }), source({ id: 'nas', included: false, state: 'unreachable', detail: 'host unreachable' })], unidentifiableExcluded: 2 };
   const text = totalsDisclosure(merge);
 
-  assert.match(text, /Totals include 2 of 3 workspaces\./);
+  assert.match(text, /2 of 3 sources included\./);
   assert.match(text, /nas excluded: host unreachable\./);
   assert.match(text, /laptop-eu contributes tokens but no costs: currency mismatch \(EUR vs USD\)\./);
   assert.match(text, /2 records were excluded for lacking a usable identity\./);
   assert.equal(totalsDisclosure(null), null);
-});
-
-test('contagious limited coverage never renders a null limit', () => {
-  assert.equal(analysisLabel({ mode: 'limited', limit: null }), 'limited history — a source covers only part of its history');
-  assert.equal(analysisLabel({ mode: 'limited', limit: 8 }), 'limited to latest 8 sessions/files per source');
-  assert.equal(analysisLabel({ mode: 'full-history' }), 'full-history');
-  assert.equal(analysisLabel(null), 'analysis scope unknown');
 });

@@ -21,6 +21,8 @@ export function sourceTone(source) {
 export function sourceRows(sources = [], { now = Date.now() } = {}) {
   return sources.map((source) => ({
     key: sourceLabel(source),
+    name: source.sourceKey || String(source.id ?? 'unknown source'),
+    identity: source.isLocal ? 'local machine' : (source.sourceKey ? String(source.id ?? 'configured source') : 'configured source'),
     isLocal: Boolean(source.isLocal),
     tone: sourceTone(source),
     state: stateWord(source),
@@ -43,11 +45,12 @@ function sourceLabel(source) {
 }
 
 function stateWord(source) {
-  if (!source.included) return source.state === 'disabled' ? 'disabled' : `excluded — ${source.state}`;
+  if (!source.included) return source.state === 'disabled' ? 'disabled' : `excluded · ${source.state}`;
   if (source.costsExcluded) return 'costs excluded';
-  if (source.staleReport || source.staleFetch) return 'included, not current';
-  if (source.coverageMode === 'limited') return 'included, limited history';
-  return 'ok';
+  if (source.staleReport || source.staleFetch) return 'not current';
+  if (source.coverageMode === 'limited') return 'limited history';
+  if (source.fromCache && source.state !== 'ok') return 'current · cached';
+  return 'current';
 }
 
 /**
@@ -60,7 +63,7 @@ function sourceNote(source) {
   if (source.staleReport && source.staleFetch) return 'we have not been able to check this machine; its last known data is included.';
   if (source.staleReport) return 'reachable, but nothing newer has happened there; past usage is included.';
   if (source.staleFetch) return 'included from the last known good report; we could not reach this machine.';
-  if (source.fromCache && source.state !== 'ok') return `using a recent cached report; latest refresh attempt failed (${source.state}).`;
+  if (source.fromCache && source.state !== 'ok') return `Latest refresh failed (${source.state}); using the recent cached report.`;
   if (source.coverageMode === 'limited') return 'covers a limited history, so combined totals are not full-history.';
   return null;
 }
@@ -143,7 +146,7 @@ export function provenanceLabel(record) {
 export function totalsDisclosure(merge) {
   if (!merge?.sources?.length) return null;
   const included = merge.sources.filter((source) => source.included);
-  const parts = [`Totals include ${included.length} of ${merge.sources.length} workspaces.`];
+  const parts = [`${included.length} of ${merge.sources.length} sources included.`];
   for (const source of merge.sources.filter((source) => !source.included)) {
     parts.push(`${source.id} excluded: ${source.detail || source.state}.`);
   }
@@ -152,18 +155,4 @@ export function totalsDisclosure(merge) {
   }
   if (merge.unidentifiableExcluded) parts.push(`${merge.unidentifiableExcluded} records were excluded for lacking a usable identity.`);
   return parts.join(' ');
-}
-
-/**
- * §5.9's contagion sets `limited` with no local limit, because the limit
- * belongs to another machine's scan. Rendering "latest null" would read as a
- * bug rather than as an imported source covering only part of its history.
- */
-export function analysisLabel(analysis) {
-  if (analysis?.mode === 'limited') {
-    return analysis.limit == null
-      ? 'limited history — a source covers only part of its history'
-      : `limited to latest ${analysis.limit} sessions/files per source`;
-  }
-  return analysis?.mode === 'full-history' ? 'full-history' : 'analysis scope unknown';
 }

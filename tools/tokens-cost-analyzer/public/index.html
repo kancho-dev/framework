@@ -18,11 +18,12 @@
       <div class="brand"><img src="icon.svg" alt="" width="38" height="38"><h1>Tokens / Cost Analyzer <span id="workspace-name" class="workspace-badge wide"></span></h1></div>
       <div class="header-actions"><button id="refresh">Refresh analysis</button></div>
     </header>
-    <p id="status" class="status">Loading…</p>
     <div id="report">
     <section id="warnings" class="warnings hidden"></section>
-    <section class="panel source-status"><div class="panel-title"><h2>Sources</h2><span id="totals-disclosure"></span></div><div id="source-card" class="source-card"></div></section>
-    <section class="hero-grid" id="totals"></section>
+    <section id="summary-area" class="summary-area">
+      <section class="panel source-status"><div class="panel-title"><div class="source-heading"><h2>Sources</h2><span id="status" class="status">Loading…</span></div><span id="totals-disclosure"></span></div><div id="source-card" class="source-card"></div></section>
+      <section class="hero-grid" id="totals"></section>
+    </section>
     <section class="usage-layout">
       <article class="panel monthly-panel"><div class="panel-title"><h2>Monthly spend cockpit</h2><div class="panel-legend"><span><i class="dot" style="background:var(--accent)"></i>estimated token cost</span><span><i class="dot" style="background:var(--purple)"></i>subscriptions</span></div></div><div id="monthly-chart" class="chart"></div></article>
       <div class="usage-stack">
