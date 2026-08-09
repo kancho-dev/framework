@@ -11,6 +11,7 @@ import { atomicWrite } from './atomic-write.mjs';
 import { SCHEMA, SCHEMA_VERSION, buildReportHeader, stampRecordIdentity } from './report-contract.mjs';
 import { loadSourcesConfig } from './sources-config.mjs';
 import { dailyUsage } from './rollups.mjs';
+import { createDerivationCache } from './derivation-cache.mjs';
 import { attributePiWorkspace, attributeWorkspace, parseSelfConfig, scanScope, SCAN_SCOPE_FILE } from './workspace-scope.mjs';
 import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel } from '../shared-web/model-normalization.mjs';
 import { openCodeTokenValues, openCodeTotalTokens } from '../shared-web/opencode-usage.mjs';
@@ -46,6 +47,12 @@ const sourcesConfig = await loadSourcesConfig(outDir);
 // One scan per machine, rooted at `self.root`; configured workspaces partition
 // that scan rather than narrowing it (design §4.1).
 const scopes = parseSelfConfig(sourcesConfig.self, { workspaceRoot });
+const deriveFile = createDerivationCache({
+  outDir,
+  generatorVersion,
+  pricingFingerprint: pricing.pricingFingerprint,
+  contextFingerprint: fileFingerprint(JSON.stringify(scopes)),
+});
 const records = [];
 const warnings = [];
 
@@ -194,61 +201,69 @@ async function readPiRecords({ piRoot, scopes, pricing, limit }) {
   const scoped = applyRecentLimit((await piSessionFilesInScope(piRoot, scopes)).sort((a, b) => a.sessionPath.localeCompare(b.sessionPath)), limit);
   const records = [];
   for (const { sessionPath, workspaceId } of scoped) {
-    const file = basename(sessionPath);
-    const lines = (await readFile(sessionPath, 'utf8')).split(/\r?\n/).filter(Boolean);
-    const modelState = { source: 'pi', provider: '', model: '', variant: '' };
-    let latestUserMessageId = null;
-    for (const line of lines) {
-      const entry = JSON.parse(line);
-      if (entry?.type === 'message' && entry.message?.role === 'user') latestUserMessageId = entry.id || latestUserMessageId;
-      if (entry?.type === 'model_change') {
-        modelState.provider = entry.provider || '';
-        modelState.model = entry.modelId || entry.model || '';
-      } else if (entry?.type === 'thinking_level_change') {
-        modelState.variant = entry.thinkingLevel || '';
-      }
-      const message = entry.message;
-      const usage = message?.usage;
-      if (!usage) continue;
-      const model = message.model || modelState.model || entry.modelId || null;
-      const provider = message.provider || modelState.provider || entry.provider || null;
-      const variant = modelState.variant || null;
-      records.push(buildRecord({
-        source: 'pi',
-        workspaceId,
-        sessionId: basename(file, '.jsonl'),
-        messageId: entry.id || null,
-        nativeMessageId: entry.id || null,
-        sessionRef: redactHome(sessionPath),
-        sessionBrowserPath: redactHome(sessionPath),
-        sessionTopicId: latestUserMessageId,
-        timestamp: entry.timestamp || isoFromMs(message.timestamp),
-        provider,
-        model,
-        variant,
-        modelLabel: modelLabelFromParts({ source: 'pi', provider, model, variant }) || null,
-        tokens: {
-          input: knownNumber(usage.input),
-          output: knownNumber(usage.output),
-          cacheRead: knownNumber(usage.cacheRead),
-          cacheWrite: knownNumber(usage.cacheWrite),
-        },
-        recordedCost: knownNumber(usage.cost?.total),
-        rawFieldRefs: {
-          model: 'message.model or session model_change/thinking_level_change state',
-          provider: 'message.provider',
-          tokens: 'message.usage.{input,output,cacheRead,cacheWrite,totalTokens}',
-          cost: 'message.usage.cost.total',
-        },
-        calculationMethod: 'Pi assistant message usage is recorded per response; total is source-derived from recorded token fields when present.',
-        pricing,
-      }));
-    }
+    const result = await deriveFile({
+      source: 'pi', path: sessionPath,
+      derive: () => parsePiSession(sessionPath, workspaceId, pricing),
+      nativeIdOf: (record) => nativeMessageIds.get(record) ?? null,
+      restoreNativeId: (record, id) => nativeMessageIds.set(record, id),
+    });
+    records.push(...result.records);
+  }
+  return records;
+}
+
+async function parsePiSession(sessionPath, workspaceId, pricing) {
+  const records = [];
+  const file = basename(sessionPath);
+  const lines = (await readFile(sessionPath, 'utf8')).split(/\r?\n/).filter(Boolean);
+  const modelState = { source: 'pi', provider: '', model: '', variant: '' };
+  let latestUserMessageId = null;
+  for (const line of lines) {
+    const entry = JSON.parse(line);
+    if (entry?.type === 'message' && entry.message?.role === 'user') latestUserMessageId = entry.id || latestUserMessageId;
+    if (entry?.type === 'model_change') {
+      modelState.provider = entry.provider || '';
+      modelState.model = entry.modelId || entry.model || '';
+    } else if (entry?.type === 'thinking_level_change') modelState.variant = entry.thinkingLevel || '';
+    const message = entry.message;
+    const usage = message?.usage;
+    if (!usage) continue;
+    const model = message.model || modelState.model || entry.modelId || null;
+    const provider = message.provider || modelState.provider || entry.provider || null;
+    const variant = modelState.variant || null;
+    records.push(buildRecord({
+      source: 'pi', workspaceId, sessionId: basename(file, '.jsonl'), messageId: entry.id || null, nativeMessageId: entry.id || null,
+      sessionRef: redactHome(sessionPath), sessionBrowserPath: redactHome(sessionPath), sessionTopicId: latestUserMessageId,
+      timestamp: entry.timestamp || isoFromMs(message.timestamp), provider, model, variant,
+      modelLabel: modelLabelFromParts({ source: 'pi', provider, model, variant }) || null,
+      tokens: { input: knownNumber(usage.input), output: knownNumber(usage.output), cacheRead: knownNumber(usage.cacheRead), cacheWrite: knownNumber(usage.cacheWrite) },
+      recordedCost: knownNumber(usage.cost?.total),
+      rawFieldRefs: { model: 'message.model or session model_change/thinking_level_change state', provider: 'message.provider', tokens: 'message.usage.{input,output,cacheRead,cacheWrite,totalTokens}', cost: 'message.usage.cost.total' },
+      calculationMethod: 'Pi assistant message usage is recorded per response; total is source-derived from recorded token fields when present.', pricing,
+    }));
   }
   return records;
 }
 
 async function readOpenCodeRecords({ opencodeDb, scopes, pricing, limit }) {
+  const watermark = await openCodeWatermark(opencodeDb, scopes.root);
+  const result = await deriveFile({
+    source: 'opencode', path: opencodeDb, changeSignal: `${watermark}:${limit ?? 'all'}`,
+    derive: () => deriveOpenCodeRecords({ opencodeDb, scopes, pricing, limit }),
+    nativeIdOf: (record) => nativeMessageIds.get(record) ?? null,
+    restoreNativeId: (record, id) => nativeMessageIds.set(record, id),
+  });
+  return result.records;
+}
+
+async function openCodeWatermark(opencodeDb, scanRoot) {
+  const rootPrefix = `${scanRoot.replace(/\/+$/, '')}/%`;
+  const sql = `select max(time_updated) as watermark from session where directory=${sqlString(scanRoot)} or directory like ${sqlString(rootPrefix)} or path=${sqlString(scanRoot)} or path like ${sqlString(rootPrefix)}`;
+  const { stdout } = await execFileAsync('sqlite3', ['-readonly', '-json', opencodeDb, sql], { maxBuffer: 1024 * 1024 });
+  return (stdout.trim() ? JSON.parse(stdout) : [])[0]?.watermark ?? null;
+}
+
+async function deriveOpenCodeRecords({ opencodeDb, scopes, pricing, limit }) {
   const scanRoot = scopes.root;
   const rootPrefix = `${scanRoot.replace(/\/+$/, '')}/%`;
   const limitClause = limit == null ? '' : ` limit ${limit}`;
@@ -374,64 +389,76 @@ async function readCodexRecords({ codexRoot, scopes, pricing, limit }) {
   const files = applyRecentLimit((await walkJsonlFiles(codexRoot)).sort((a, b) => a.localeCompare(b)), limit);
   const records = [];
   for (const sessionPath of files) {
-    const lines = (await readFile(sessionPath, 'utf8')).split(/\r?\n/).filter(Boolean);
-    let sessionMeta = {};
-    let latestCwd = '';
-    let latestModel = null;
-    let latestUserMessageId = null;
-    const sessionId = codexSessionIdFromFile(sessionPath);
-    for (let index = 0; index < lines.length; index += 1) {
-      const entry = JSON.parse(lines[index]);
-      const payload = entry.payload || {};
-      if (entry.type === 'session_meta') {
-        sessionMeta = payload;
-        latestCwd = payload.cwd || latestCwd;
-        continue;
-      }
-      if (entry.type === 'turn_context') {
-        latestCwd = payload.cwd || latestCwd;
-        latestModel = payload.model || latestModel;
-        continue;
-      }
-      if (entry.type === 'response_item' && payload.type === 'message' && payload.role === 'user') {
-        latestUserMessageId = payload.id || `codex-entry-${index}`;
-        continue;
-      }
-      if (entry.type !== 'event_msg' || payload.type !== 'token_count') continue;
-      const workspaceId = attributeWorkspace(latestCwd || sessionMeta.cwd, scopes);
-      if (workspaceId == null) continue;
-      const rawUsage = payload.info?.last_token_usage || {};
-      if (!hasCodexTokenUsage(rawUsage)) continue;
-      const usage = normalizeCodexTokenUsage(rawUsage);
-      records.push(buildRecord({
-        source: 'codex',
-        workspaceId,
-        sessionId: sessionMeta.session_id || sessionMeta.id || sessionId,
-        messageId: `token-count-${index}`,
-        // Positional, not content-stable, so identity falls back to the
-        // content fingerprint (design §3.3).
-        nativeMessageId: null,
-        sessionRef: redactHome(sessionPath),
-        sessionBrowserPath: codexRef(sessionMeta.session_id || sessionMeta.id || sessionId),
-        sessionTopicId: latestUserMessageId,
-        timestamp: entry.timestamp || payload.timestamp || sessionMeta.timestamp,
-        provider: sessionMeta.model_provider || null,
-        model: latestModel,
-        variant: null,
-        modelLabel: latestModel || null,
-        tokens: usage.tokens,
-        recordedCost: null,
-        rawFieldRefs: {
-          model: 'turn_context.model',
-          provider: 'session_meta.model_provider',
-          tokens: 'event_msg.token_count.info.last_token_usage.{input_tokens,cached_input_tokens,output_tokens,total_tokens}',
-          cost: 'not recorded in observed Codex rollout token_count events',
-        },
-        calculationMethod: 'Codex token_count events expose cumulative and last-turn usage; analyzer records use last_token_usage only and split cached_input_tokens out of input_tokens to avoid double counting.',
-        omittedTokenWarnings: ['cacheWrite'],
-        pricing,
-      }));
+    const result = await deriveFile({
+      source: 'codex', path: sessionPath,
+      derive: () => parseCodexSession(sessionPath, scopes, pricing),
+      nativeIdOf: (record) => nativeMessageIds.get(record) ?? null,
+      restoreNativeId: (record, id) => nativeMessageIds.set(record, id),
+    });
+    records.push(...result.records);
+  }
+  return records;
+}
+
+async function parseCodexSession(sessionPath, scopes, pricing) {
+  const records = [];
+  const lines = (await readFile(sessionPath, 'utf8')).split(/\r?\n/).filter(Boolean);
+  let sessionMeta = {};
+  let latestCwd = '';
+  let latestModel = null;
+  let latestUserMessageId = null;
+  const sessionId = codexSessionIdFromFile(sessionPath);
+  for (let index = 0; index < lines.length; index += 1) {
+    const entry = JSON.parse(lines[index]);
+    const payload = entry.payload || {};
+    if (entry.type === 'session_meta') {
+      sessionMeta = payload;
+      latestCwd = payload.cwd || latestCwd;
+      continue;
     }
+    if (entry.type === 'turn_context') {
+      latestCwd = payload.cwd || latestCwd;
+      latestModel = payload.model || latestModel;
+      continue;
+    }
+    if (entry.type === 'response_item' && payload.type === 'message' && payload.role === 'user') {
+      latestUserMessageId = payload.id || `codex-entry-${index}`;
+      continue;
+    }
+    if (entry.type !== 'event_msg' || payload.type !== 'token_count') continue;
+    const workspaceId = attributeWorkspace(latestCwd || sessionMeta.cwd, scopes);
+    if (workspaceId == null) continue;
+    const rawUsage = payload.info?.last_token_usage || {};
+    if (!hasCodexTokenUsage(rawUsage)) continue;
+    const usage = normalizeCodexTokenUsage(rawUsage);
+    records.push(buildRecord({
+      source: 'codex',
+      workspaceId,
+      sessionId: sessionMeta.session_id || sessionMeta.id || sessionId,
+      messageId: `token-count-${index}`,
+      // Positional, not content-stable, so identity falls back to the
+      // content fingerprint (design §3.3).
+      nativeMessageId: null,
+      sessionRef: redactHome(sessionPath),
+      sessionBrowserPath: codexRef(sessionMeta.session_id || sessionMeta.id || sessionId),
+      sessionTopicId: latestUserMessageId,
+      timestamp: entry.timestamp || payload.timestamp || sessionMeta.timestamp,
+      provider: sessionMeta.model_provider || null,
+      model: latestModel,
+      variant: null,
+      modelLabel: latestModel || null,
+      tokens: usage.tokens,
+      recordedCost: null,
+      rawFieldRefs: {
+        model: 'turn_context.model',
+        provider: 'session_meta.model_provider',
+        tokens: 'event_msg.token_count.info.last_token_usage.{input_tokens,cached_input_tokens,output_tokens,total_tokens}',
+        cost: 'not recorded in observed Codex rollout token_count events',
+      },
+      calculationMethod: 'Codex token_count events expose cumulative and last-turn usage; analyzer records use last_token_usage only and split cached_input_tokens out of input_tokens to avoid double counting.',
+      omittedTokenWarnings: ['cacheWrite'],
+      pricing,
+    }));
   }
   return records;
 }
@@ -440,54 +467,66 @@ async function readClaudeCodeRecords({ claudeRoot, scopes, pricing, limit }) {
   const files = applyRecentLimit((await walkJsonlFiles(claudeRoot)).sort((a, b) => a.localeCompare(b)), limit);
   const records = [];
   for (const sessionPath of files) {
-    const lines = (await readFile(sessionPath, 'utf8')).split(/\r?\n/).filter(Boolean);
-    const sessionId = claudeCodeSessionId(sessionPath);
-    const browserRef = claudeCodeRef(sessionId);
-    let latestUserMessageId = null;
-    for (let index = 0; index < lines.length; index += 1) {
-      let entry;
-      try { entry = JSON.parse(lines[index]); } catch { continue; }
-      if (entry?.type === 'user' && entry.message) { latestUserMessageId = entry.uuid || latestUserMessageId; continue; }
-      if (entry?.type !== 'assistant' || !entry.message) continue;
-      if (entry.message.model === '<synthetic>') continue; // local placeholder (e.g. "No response requested."), not a real Anthropic turn
-      const usage = entry.message.usage;
-      if (!usage) continue;
-      const workspaceId = attributeWorkspace(entry.cwd, scopes);
-      if (workspaceId == null) continue;
-      const model = entry.message.model || null;
-      records.push(buildRecord({
-        source: 'claude-code',
-        workspaceId,
-        sessionId,
-        messageId: entry.uuid || `claude-entry-${index}`,
-        // The positional fallback is not a durable source id, so it must not be
-        // classed `native` (design §3.3 note for step 4).
-        nativeMessageId: entry.uuid || null,
-        sessionRef: redactHome(sessionPath),
-        sessionBrowserPath: browserRef,
-        sessionTopicId: latestUserMessageId,
-        timestamp: entry.timestamp,
-        provider: 'anthropic',
-        model,
-        variant: null,
-        modelLabel: model,
-        tokens: {
-          input: knownNumber(usage.input_tokens),
-          output: knownNumber(usage.output_tokens),
-          cacheRead: knownNumber(usage.cache_read_input_tokens),
-          cacheWrite: knownNumber(usage.cache_creation_input_tokens),
-        },
-        recordedCost: null,
-        rawFieldRefs: {
-          model: 'message.model',
-          provider: 'constant anthropic',
-          tokens: 'message.usage.{input_tokens,output_tokens,cache_read_input_tokens,cache_creation_input_tokens}',
-          cost: 'not recorded in Claude Code session JSONL',
-        },
-        calculationMethod: 'Claude Code assistant messages record per-response Anthropic usage; input_tokens already excludes cached reads, so token fields map directly with no de-duplication. Sub-agent (sidechain) messages are counted under the same source.',
-        pricing,
-      }));
-    }
+    const result = await deriveFile({
+      source: 'claude-code', path: sessionPath,
+      derive: () => parseClaudeCodeSession(sessionPath, scopes, pricing),
+      nativeIdOf: (record) => nativeMessageIds.get(record) ?? null,
+      restoreNativeId: (record, id) => nativeMessageIds.set(record, id),
+    });
+    records.push(...result.records);
+  }
+  return records;
+}
+
+async function parseClaudeCodeSession(sessionPath, scopes, pricing) {
+  const records = [];
+  const lines = (await readFile(sessionPath, 'utf8')).split(/\r?\n/).filter(Boolean);
+  const sessionId = claudeCodeSessionId(sessionPath);
+  const browserRef = claudeCodeRef(sessionId);
+  let latestUserMessageId = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    let entry;
+    try { entry = JSON.parse(lines[index]); } catch { continue; }
+    if (entry?.type === 'user' && entry.message) { latestUserMessageId = entry.uuid || latestUserMessageId; continue; }
+    if (entry?.type !== 'assistant' || !entry.message) continue;
+    if (entry.message.model === '<synthetic>') continue; // local placeholder (e.g. "No response requested."), not a real Anthropic turn
+    const usage = entry.message.usage;
+    if (!usage) continue;
+    const workspaceId = attributeWorkspace(entry.cwd, scopes);
+    if (workspaceId == null) continue;
+    const model = entry.message.model || null;
+    records.push(buildRecord({
+      source: 'claude-code',
+      workspaceId,
+      sessionId,
+      messageId: entry.uuid || `claude-entry-${index}`,
+      // The positional fallback is not a durable source id, so it must not be
+      // classed `native` (design §3.3 note for step 4).
+      nativeMessageId: entry.uuid || null,
+      sessionRef: redactHome(sessionPath),
+      sessionBrowserPath: browserRef,
+      sessionTopicId: latestUserMessageId,
+      timestamp: entry.timestamp,
+      provider: 'anthropic',
+      model,
+      variant: null,
+      modelLabel: model,
+      tokens: {
+        input: knownNumber(usage.input_tokens),
+        output: knownNumber(usage.output_tokens),
+        cacheRead: knownNumber(usage.cache_read_input_tokens),
+        cacheWrite: knownNumber(usage.cache_creation_input_tokens),
+      },
+      recordedCost: null,
+      rawFieldRefs: {
+        model: 'message.model',
+        provider: 'constant anthropic',
+        tokens: 'message.usage.{input_tokens,output_tokens,cache_read_input_tokens,cache_creation_input_tokens}',
+        cost: 'not recorded in Claude Code session JSONL',
+      },
+      calculationMethod: 'Claude Code assistant messages record per-response Anthropic usage; input_tokens already excludes cached reads, so token fields map directly with no de-duplication. Sub-agent (sidechain) messages are counted under the same source.',
+      pricing,
+    }));
   }
   return records;
 }

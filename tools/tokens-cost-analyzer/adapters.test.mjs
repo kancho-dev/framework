@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -84,6 +84,19 @@ test('Pi CLI analysis normalizes recorded usage and native cost', async (t) => {
   assert.equal(result.records[0].recordedCost, 0.0123);
   assert.equal(result.records[0].messageId, 'assistant-1');
   assert.equal(result.records[0].sessionTopicId, 'user-1');
+});
+
+test('an actively appended Pi session invalidates its shard and re-parses', async (t) => {
+  const workspaceRoot = await fixtureWorkspace(t);
+  const piRoot = join(workspaceRoot, 'pi-sessions');
+  const encodedWorkspace = `-${resolve(workspaceRoot).replace(/\//g, '-')}--`;
+  const sessionPath = join(piRoot, encodedWorkspace, 'active.jsonl');
+  const message = (id, input) => ({ type: 'message', id, timestamp: '2026-01-02T03:04:05.000Z', message: { role: 'assistant', model: 'test', usage: { input, output: 1 } } });
+  await writeJsonl(sessionPath, [message('first', 1)]);
+  assert.equal((await analyze('pi', workspaceRoot, ['--pi-root', piRoot])).records.length, 1);
+  await appendFile(sessionPath, `${JSON.stringify(message('second', 2))}\n`);
+  const updated = await analyze('pi', workspaceRoot, ['--pi-root', piRoot]);
+  assert.deepEqual(updated.records.map((record) => record.messageId), ['first', 'second']);
 });
 
 test('Codex CLI analysis uses last-turn usage and splits cached input', async (t) => {

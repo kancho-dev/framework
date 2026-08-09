@@ -19,7 +19,7 @@ By default the analyzer reads all in-scope local sessions/files. For a faster re
 
 The browser automatically refreshes the report every 10 minutes; manual and automatic refreshes rebuild full-history analysis by default. To make server/Cockpit refreshes bounded, launch the tool or Cockpit with `TOKENS_COST_ANALYZER_LIMIT=N`; use `TOKENS_COST_ANALYZER_LIMIT=all` to be explicit about full-history refresh. Limited reports show a trust flag and generated metadata so they are not mistaken for full-history totals.
 
-Each analysis run prints a `Timing:` line giving its total duration split into scan time per source and artifact emission, so a slowdown can be attributed to a source rather than guessed at as history grows.
+Each analysis run prints a `Timing:` line giving its total duration split into scan time per source and artifact emission, so a slowdown can be attributed to a source rather than guessed at as history grows. Derived records are cached in per-source shards and reused when the source is unchanged. Source file metadata (or OpenCode's `time_updated` watermark), pricing inputs, analyzer version, and workspace attribution configuration all participate in invalidation; a missing or corrupt shard is rebuilt automatically.
 
 By default it writes private generated output to:
 
@@ -27,6 +27,7 @@ By default it writes private generated output to:
 .tools-config/tokens-cost-analyzer/report.v1.json
 .tools-config/tokens-cost-analyzer/daily.json
 .tools-config/tokens-cost-analyzer/scan-scope.json
+.tools-config/tokens-cost-analyzer/derivation-cache/
 ```
 
 `report.v1.json` is the analysis artifact: a header, an `origin` block, and one record per normalized message. `scan-scope.json` records which local roots that scan attributed against; it stays local and is never shared, because it contains absolute paths that `report.v1.json` deliberately omits. Session deep links resolve through it, so **after changing your workspace layout, re-run the analysis** — until you do, the dashboard says session links are unavailable rather than quietly dropping them.
