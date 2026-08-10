@@ -72,19 +72,80 @@ Configure remote machines as sources in the same `sources.json`. **With no `sour
   "schemaVersion": 1,
   "staleReportAfterHours": 24,
   "staleFetchAfterHours": 24,
-  "maxReportBytes": 67108864,
+  "maxReportBytes": 268435456,
+  "refreshAfterMinutes": 10,
+  "retryAfterMinutes": 10,
   "sources": [
     { "id": "laptop", "type": "ssh", "host": "laptop-main", "remotePath": "~/.tools-config/tokens-cost-analyzer/report.v1.json", "timeoutSeconds": 10 },
-    { "id": "archive", "type": "file", "path": "/mnt/backup/report.v1.json", "enabled": false, "includeWhenStale": false }
+    { "id": "old-laptop", "type": "archived" },
+    { "id": "backup", "type": "file", "path": "/mnt/backup/report.v1.json", "enabled": false, "includeWhenStale": false }
   ]
 }
 ```
 
 Each remote machine simply runs the analyzer on its own schedule; there is no export step, and nothing is ever pushed. This machine **pulls** the report each remote already wrote.
 
+### Scheduling the analysis on the remote machine
+
+**The analyzer never runs anything on a machine you add as a source.** It reads the report that machine already wrote — one fixed, bounded, read-only command — and nothing else. So a source's report is exactly as fresh as the schedule *on that machine* makes it; if a remote's report is a week old, it is because nothing regenerated it there.
+
+Schedule it on the remote with whatever that machine already uses. A `cron` line:
+
+```cron
+# regenerate this machine's report every hour, on the hour
+0 * * * * cd /home/you/workspace && /usr/bin/node tools/tokens-cost-analyzer/analyze.mjs --workspace /home/you/workspace >/dev/null 2>&1
+```
+
+Or a `systemd --user` timer, which survives reboots and catches up a missed run:
+
+```ini
+# ~/.config/systemd/user/tokens-cost-analyzer.service
+[Unit]
+Description=Regenerate the tokens/cost analyzer report
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/you/workspace
+ExecStart=/usr/bin/node tools/tokens-cost-analyzer/analyze.mjs --workspace /home/you/workspace
+```
+
+```ini
+# ~/.config/systemd/user/tokens-cost-analyzer.timer
+[Unit]
+Description=Hourly tokens/cost analyzer report
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+systemctl --user enable --now tokens-cost-analyzer.timer
+loginctl enable-linger "$USER"   # so the timer runs while you are not logged in
+```
+
+`maxReportBytes` (default 256 MB) bounds what a single source may hand this machine. Reports are large and grow with history — roughly 2.5 KB per record, so a machine with years of use measures around 100 MB. A source over the cap is **excluded**, never truncated, since a partial report would silently under-count; the row says the size observed and to raise this setting.
+
+### Retired machines: `type: "archived"`
+
+When a machine is decommissioned its history is still real, and it should keep counting. An archived source is a local, immutable report file — no transport, no SSH, nothing to reach:
+
+```json
+{ "id": "old-laptop", "type": "archived" }
+```
+
+It defaults to `.tools-config/tokens-cost-analyzer/archive/old-laptop.json`; set `path` to keep the file elsewhere. An archived source is **exempt from both staleness axes** — a report from 2024 is not stale, it is archival — and its row renders in a neutral archive tone rather than as a fault or a warning. It turns red only when the file is genuinely broken: missing, unreadable, or written by a newer schema version. `includeWhenStale` is rejected on an archived source, because it could only ever mean "drop this machine's history".
+
+**Copy the report before you decommission the machine.** There is no way to regenerate it afterwards.
+
+> **Back up `archive/`.** Every other file under `.tools-config/` is regenerable from your sessions; this one is not. It holds the only remaining copy of a retired machine's history, and the analyzer never writes, prunes, or cleans it.
+
 ### Outbound network access — a real posture change
 
-This tool is otherwise a read-only local one. With `type: "ssh"` sources configured, **it makes outbound SSH connections to the hosts you name**. It stays read-only with respect to the remote — one bounded `cat <remotePath>`, never the remote analyzer, never a write, never anything derived from report contents — and it does nothing at all when no sources are configured. But the change is real and you should configure sources deliberately.
+This tool is otherwise a read-only local one. With `type: "ssh"` sources configured, **it makes outbound SSH connections to the hosts you name**. It stays read-only with respect to the remote — one bounded `gzip -c <remotePath>`, never the remote analyzer, never a write, never anything derived from report contents — and it does nothing at all when no sources are configured. Those connections happen on a **bounded cadence** (`refreshAfterMinutes`, default 10) rather than once per page load, so an open dashboard is not a continuous stream of SSH connections to every host you named. But the change is real and you should configure sources deliberately.
 
 **SSH is a prerequisite and is delegated entirely to your own setup.** `sources.json` holds a host alias and a path, never credentials. Keys, users, ports, jump hosts, and host-key policy come from your `ssh_config` and agent. Connections use `BatchMode=yes`, so the analyzer can never sit on a passphrase prompt, and host verification is your normal `known_hosts` checking — an unknown host key is a legitimate failure you resolve once, outside this tool.
 
@@ -92,14 +153,26 @@ To reduce what the key can do to exactly one thing, restrict it on the remote:
 
 ```text
 # remote ~/.ssh/authorized_keys
-command="cat ~/.tools-config/tokens-cost-analyzer/report.v1.json",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA...
+command="gzip -c ~/.tools-config/tokens-cost-analyzer/report.v1.json",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA...
 ```
+
+**Reports are compressed on the wire.** An `ssh` source is fetched with `gzip -c` and decompressed here — measured ~19× smaller for a 100 MB report, which is what makes a distant machine practical. It is still one fixed, bounded, read-only remote command, and decompression is bounded by `maxReportBytes` so a small payload cannot expand without limit. If the remote has no `gzip`, or its key is still restricted to `cat`, the fetch falls back to plain `cat` automatically; set `"compress": false` on a source to skip the attempt entirely.
 
 ### Freshness, staleness, and failure
 
 Two ages are tracked separately, because they mean different things: `staleReportAfterHours` (default 24) is how old the remote's *analysis* is, and `staleFetchAfterHours` (default 24) is how long since we last *reached* it. "That machine has not been used since Tuesday" and "we have not been able to check that machine since Tuesday" are not the same situation and are never collapsed into one word.
 
-A stale source is still **counted** — its past usage is real. Each successfully validated report is cached locally, so a machine that is asleep or unreachable degrades to *stale*, not to *gone*, and totals do not oscillate as machines come and go. External attempts are reused for nine minutes (including failed attempts), concurrent requests share one attempt per source, and a manual refresh bypasses that age guard. Set `includeWhenStale: false` on a source to exclude it once its report goes stale.
+A stale source is still **counted** — its past usage is real. Each successfully validated report is cached locally, so a machine that is asleep or unreachable degrades to *stale*, not to *gone*, and totals do not oscillate as machines come and go. Set `includeWhenStale: false` on a source to exclude it once its report goes stale.
+
+### How refreshing works
+
+**Once a machine has given you a report, a dashboard request never waits on it again.** It serves the last report each source successfully gave you and, if that report is older than the refresh cadence, starts a fetch in the background. The page returns at local speed whether that source is fast, slow, asleep, or gone — and both ages above keep telling the truth about what you are looking at while it catches up. The one exception is the very first fetch of a newly configured source: with nothing yet to serve, that request is awaited (see the cadence settings below).
+
+The **Refresh button** works the same way: it starts a refresh immediately, bypassing the cadence, and returns the page at once rather than making you wait for every machine. A source being fetched right now shows *Refreshing…* beside its state, and only that source's row changes. **Totals never update partially** — they hold their previous complete value and update in one step when the refresh lands, because a cost figure assembled from a subset of your machines is a wrong number briefly presented as a right one.
+
+`refreshAfterMinutes` (default 10) is how often a source is re-fetched, and `retryAfterMinutes` (default 10) is how soon a source that just failed is tried again. **These are cadence, not freshness**, and they are deliberately not the two `stale…Hours` settings above: raising the cadence makes this machine talk to yours less often, and it never makes anything on screen claim to be newer than it is. The very first fetch of a newly configured source is awaited, so adding a machine gives you immediate feedback; every fetch after that is in the background. Concurrent requests and repeated Refresh clicks share one fetch per source rather than stacking them.
+
+`GET /api/sources/status` serves the per-source rows on their own — state, both ages, record count, and whether a fetch is in flight. It is read-only and **triggers no fetch of its own**; the dashboard polls it while a refresh is running so a row's label can update without paying for a full merge.
 
 The Sources card colours each row by *trust in the totals*, not by liveness:
 

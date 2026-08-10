@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { fetchSource, validateSourceEntry, MAX_REPORT_BYTES } from './source-fetch.mjs';
 
 const sshSource = { id: 'laptop', type: 'ssh', host: 'laptop.local', remotePath: '~/.tools-config/tokens-cost-analyzer/report.v1.json' };
@@ -22,7 +23,7 @@ async function workDir(t) {
 
 test('the ssh invocation is BatchMode, argument-array, and bounded by both timeouts', async () => {
   const calls = [];
-  const result = await fetchSource({ ...sshSource, timeoutSeconds: 7 }, { executor: executorReturning({ code: 0, stdout: '{"ok":true}' }, calls) });
+  const result = await fetchSource({ ...sshSource, timeoutSeconds: 7, compress: false }, { executor: executorReturning({ code: 0, stdout: '{"ok":true}' }, calls) });
 
   assert.deepEqual(result, { ok: true, text: '{"ok":true}' });
   assert.equal(calls.length, 1);
@@ -65,9 +66,10 @@ test('malformed source entries are rejected as invalid rather than throwing', ()
   assert.match(validateSourceEntry({ id: 'Laptop', type: 'ssh' }, 0).detail, /sources\[0\]\.id is invalid/);
   assert.match(validateSourceEntry({ id: 'laptop', type: 'http' }, 1).detail, /sources\[1\]\.type/);
   assert.match(validateSourceEntry({ ...sshSource, timeoutSeconds: 0 }).detail, /timeoutSeconds/);
+  assert.match(validateSourceEntry({ ...sshSource, compress: 'yes' }).detail, /compress/);
   const valid = validateSourceEntry(sshSource);
   assert.equal(valid.ok, true);
-  assert.deepEqual(valid.value, { ...sshSource, timeoutSeconds: 10, enabled: true, includeWhenStale: true });
+  assert.deepEqual(valid.value, { ...sshSource, timeoutSeconds: 10, enabled: true, includeWhenStale: true, compress: true });
 });
 
 test('every ssh failure mode maps to a typed state and never leaks stderr', async () => {
@@ -121,7 +123,87 @@ test('timeouts are bounded above and ~ must be followed by a separator', async (
 test('an oversized ssh payload is rejected even when the executor returns it whole', async () => {
   const outcome = await fetchSource(sshSource, { executor: executorReturning({ code: 0, stdout: 'x'.repeat(50) }), maxBytes: 10 });
   assert.equal(outcome.state, 'unreadable');
-  assert.match(outcome.detail, /exceeds the 10 byte limit/);
+  assert.match(outcome.detail, /is 50 bytes, over the 10 byte limit/);
+});
+
+test('the default cap admits a real report, and an over-cap one names the observed size and the fix', async (t) => {
+  // The former 64 MB default sat below a measured 103 MB report, so a mature
+  // machine failed closed under stock config before the cap was raised.
+  assert.ok(MAX_REPORT_BYTES > 104 * 1024 * 1024, 'the default must clear a ~100 MB report');
+
+  const dir = await workDir(t);
+  const path = join(dir, 'report.v1.json');
+  await writeFile(path, 'x'.repeat(64));
+  const source = { id: 'big', type: 'file', path };
+
+  assert.equal((await fetchSource(source, { maxBytes: 64 })).ok, true, 'exactly at the cap is accepted');
+
+  const over = await fetchSource(source, { maxBytes: 63 });
+  assert.equal(over.state, 'unreadable');
+  assert.match(over.detail, /the report is 64 bytes, over the 63 byte limit/);
+  assert.match(over.detail, /raise maxReportBytes in sources\.json/);
+
+  // ssh truncates at the cap, so the detail must not invent a size.
+  const truncated = await fetchSource(sshSource, { executor: executorReturning({ code: null, truncated: true }), maxBytes: 63 });
+  assert.match(truncated.detail, /exceeds the 63 byte limit and the transfer was cut off there/);
+  assert.match(truncated.detail, /raise maxReportBytes in sources\.json/);
+});
+
+test('ssh sources are compressed on the wire by default and decompressed locally', async () => {
+  const calls = [];
+  const report = JSON.stringify({ schemaVersion: 1, records: [] });
+  const executor = executorReturning((file, args) => ({ code: 0, stdout: gzipSync(Buffer.from(report)) }), calls);
+
+  assert.deepEqual(await fetchSource(sshSource, { executor }), { ok: true, text: report });
+  assert.equal(calls.length, 1, 'one remote command, not a compressed attempt plus a plain one');
+  assert.deepEqual(calls[0].args.slice(5, 7), ['gzip', '-c'], 'still one fixed, bounded, read-only remote command');
+  assert.equal(calls[0].options.encoding, 'buffer');
+});
+
+test('compress: false keeps the plain cat transport', async () => {
+  const calls = [];
+  await fetchSource({ ...sshSource, compress: false }, { executor: executorReturning({ code: 0, stdout: '{"ok":1}' }, calls) });
+  assert.deepEqual(calls[0].args.slice(5, 6), ['cat']);
+  assert.ok(!calls[0].args.includes('gzip'));
+});
+
+test('a remote without gzip, or one restricted to cat, falls back once and still succeeds', async () => {
+  const plainCalls = [];
+  const gzipMissing = executorReturning((file, args) => (args.includes('gzip')
+    ? { code: 127, stderr: 'bash: gzip: command not found' }
+    : { code: 0, stdout: '{"ok":1}' }), plainCalls);
+  assert.deepEqual(await fetchSource(sshSource, { executor: gzipMissing }), { ok: true, text: '{"ok":1}' });
+  assert.equal(plainCalls.length, 2, 'exactly one retry, never a loop');
+
+  // A key still pinned to `command="cat …"` answers plainly whatever we asked for.
+  const restricted = executorReturning({ code: 0, stdout: '{"ok":1}' });
+  assert.deepEqual(await fetchSource(sshSource, { executor: restricted }), { ok: true, text: '{"ok":1}' });
+
+  // A genuine remote failure is reported, not retried into a second round trip.
+  const refusedCalls = [];
+  const refused = executorReturning({ code: 255, stderr: 'Permission denied (publickey).' }, refusedCalls);
+  assert.equal((await fetchSource(sshSource, { executor: refused })).state, 'unauthorized');
+  assert.equal(refusedCalls.length, 1);
+});
+
+test('a decompression bomb is aborted at the cap rather than allocating past it', async () => {
+  const bomb = gzipSync(Buffer.alloc(8 * 1024 * 1024, 0x61));
+  assert.ok(bomb.length < 64 * 1024, `expected a small payload, got ${bomb.length} bytes`);
+
+  const outcome = await fetchSource(sshSource, { executor: executorReturning({ code: 0, stdout: bomb }), maxBytes: 4096 });
+  assert.equal(outcome.ok, false);
+  assert.equal(outcome.state, 'unreadable');
+  assert.match(outcome.detail, /exceeds the 4096 byte limit/);
+  assert.match(outcome.detail, /raise maxReportBytes in sources\.json/);
+});
+
+test('a corrupt compressed payload fails typed rather than throwing or retrying', async () => {
+  const corrupt = Buffer.concat([Buffer.from([0x1f, 0x8b]), Buffer.alloc(64, 0x00)]);
+  const calls = [];
+  const outcome = await fetchSource(sshSource, { executor: executorReturning({ code: 0, stdout: corrupt }, calls) });
+  assert.equal(outcome.state, 'unreadable');
+  assert.match(outcome.detail, /could not be decompressed/);
+  assert.equal(calls.length, 1);
 });
 
 test('file sources read a regular file and classify the filesystem failures', async (t) => {
@@ -145,6 +227,41 @@ test('file sources read a regular file and classify the filesystem failures', as
 
   assert.equal((await fetchSource(source, { maxBytes: 4 })).state, 'unreadable');
   assert.equal((await fetchSource({ ...source, path: 'relative/report.json' })).state, 'invalid');
+});
+
+test('an archived source reads archive/<id>.json locally and never reaches a transport', async (t) => {
+  const dir = await workDir(t);
+  const archiveDir = join(dir, 'archive');
+  await mkdir(archiveDir);
+  await writeFile(join(archiveDir, 'old-laptop.json'), '{"schemaVersion":1}');
+  const calls = [];
+  const executor = executorReturning({ code: 0, stdout: 'never' }, calls);
+
+  const outcome = await fetchSource({ id: 'old-laptop', type: 'archived' }, { archiveDir, executor });
+  assert.deepEqual(outcome, { ok: true, text: '{"schemaVersion":1}' });
+  assert.equal(calls.length, 0, 'an archived source is a local read: no ssh, no network, no compression');
+
+  // An explicit path stays supported, for users keeping archives somewhere backed up.
+  const elsewhere = join(dir, 'kept.json');
+  await writeFile(elsewhere, '{"schemaVersion":1}');
+  assert.equal((await fetchSource({ id: 'old-laptop', type: 'archived', path: elsewhere }, { archiveDir })).ok, true);
+
+  // A genuinely broken archived file is a real fault, not archival neutrality.
+  assert.equal((await fetchSource({ id: 'absent', type: 'archived' }, { archiveDir })).state, 'missing');
+  assert.equal((await fetchSource({ id: 'old-laptop', type: 'archived' }, {})).state, 'invalid');
+});
+
+test('archived entries reject includeWhenStale rather than silently ignoring it', () => {
+  // The setting cannot mean anything on a source exempt from both staleness axes.
+  assert.match(validateSourceEntry({ id: 'old', type: 'archived', includeWhenStale: false }).detail, /includeWhenStale does not apply/);
+  assert.match(validateSourceEntry({ id: 'old', type: 'archived', includeWhenStale: true }).detail, /includeWhenStale does not apply/);
+
+  const valid = validateSourceEntry({ id: 'old', type: 'archived' });
+  assert.equal(valid.ok, true);
+  assert.deepEqual(valid.value, { id: 'old', type: 'archived', timeoutSeconds: 10, enabled: true, path: null });
+  // Re-validating a validated entry must not trip the rejection above.
+  assert.equal(validateSourceEntry(valid.value).ok, true);
+  assert.equal(validateSourceEntry({ id: 'old', type: 'archived', path: 'relative/report.json' }).state, 'invalid');
 });
 
 test('file sources expand ~ against the home directory', async (t) => {

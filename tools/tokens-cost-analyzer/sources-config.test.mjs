@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadSourcesConfig } from './sources-config.mjs';
 import { MAX_REPORT_BYTES } from './source-fetch.mjs';
+import { DEFAULT_REFRESH_MINUTES } from './sources-config.mjs';
 
 async function outDir(t) {
   const dir = await mkdtemp(join(tmpdir(), 'tokens-sources-'));
@@ -16,7 +17,32 @@ test('an absent sources.json yields the zero-config defaults', async (t) => {
   const dir = await outDir(t);
   assert.deepEqual(await loadSourcesConfig(dir), {
     configured: false, self: null, sources: [], staleReportAfterHours: 24, staleFetchAfterHours: 24, maxReportBytes: MAX_REPORT_BYTES,
+    refreshAfterMinutes: DEFAULT_REFRESH_MINUTES, retryAfterMinutes: DEFAULT_REFRESH_MINUTES,
   });
+});
+
+test('refresh cadence is configurable, validated, and separate from the stale thresholds', async (t) => {
+  const dir = await outDir(t);
+  await writeFile(join(dir, 'sources.json'), JSON.stringify({ sources: [] }));
+  const defaults = await loadSourcesConfig(dir);
+  assert.equal(defaults.refreshAfterMinutes, DEFAULT_REFRESH_MINUTES);
+  assert.equal(defaults.retryAfterMinutes, DEFAULT_REFRESH_MINUTES);
+  assert.equal(defaults.staleReportAfterHours, 24, 'cadence defaults never touch the staleness thresholds');
+
+  // A machine that is off for weeks can back its retries off without slowing
+  // successful refreshes, so the two cadences are independent.
+  await writeFile(join(dir, 'sources.json'), JSON.stringify({ refreshAfterMinutes: 2, retryAfterMinutes: 240 }));
+  const config = await loadSourcesConfig(dir);
+  assert.equal(config.refreshAfterMinutes, 2);
+  assert.equal(config.retryAfterMinutes, 240);
+  assert.equal(config.staleFetchAfterHours, 24);
+
+  for (const bad of [0, -1, 'soon']) {
+    await writeFile(join(dir, 'sources.json'), JSON.stringify({ refreshAfterMinutes: bad }));
+    await assert.rejects(loadSourcesConfig(dir), /refreshAfterMinutes must be a positive number of minutes/);
+  }
+  await writeFile(join(dir, 'sources.json'), JSON.stringify({ retryAfterMinutes: 0 }));
+  await assert.rejects(loadSourcesConfig(dir), /retryAfterMinutes must be a positive number of minutes/);
 });
 
 test('the size cap is configurable and validated', async (t) => {

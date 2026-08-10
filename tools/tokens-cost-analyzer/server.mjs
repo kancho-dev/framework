@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { exists, normalizeBasePath, readStaticText, safeError, sendHtml, sendJson, serveStaticPath, stripBasePath } from '../shared-web/http.mjs';
 import { loadSourcesConfig } from './sources-config.mjs';
 import { parseSelfConfig, scanScope, SCAN_SCOPE_FILE } from './workspace-scope.mjs';
-import { loadExternalSources } from './sources.mjs';
+import { loadExternalSources, readSourceStates } from './sources.mjs';
 import { mergeReports } from './merge.mjs';
 import { dailyUsage, round, summarize } from './rollups.mjs';
 import { createReportViewCache } from './report-view-cache.mjs';
@@ -32,9 +32,13 @@ export function createTokensCostAnalyzerHandler(options = {}) {
   const basePath = normalizeBasePath(options.basePath || '');
   const cockpit = options.cockpit || { tools: [] };
   const analysisLimit = Object.hasOwn(options, 'analysisLimit') ? options.analysisLimit : ANALYSIS_LIMIT;
-  // Injected like `ensureArtifacts`'s `runAnalysis`, so every §6 degraded state
+  // Injected like `ensureArtifacts`'s `runAnalysis`, so every degraded state
   // is testable through the real request path with no network.
   const loadExternal = options.loadExternal || loadExternalSources;
+  // Injected separately from `loadExternal` on purpose: the status endpoint must
+  // be provably unable to fetch, and a test that hands it the loader would only
+  // prove the loader was not called this time.
+  const readStates = options.readSourceStates || readSourceStates;
   // One cache per handler, not per module: a test's fixture handler must never
   // inherit another's parsed artifact.
   const readReportView = options.readReportView || createReportViewCache();
@@ -52,6 +56,7 @@ export function createTokensCostAnalyzerHandler(options = {}) {
       const manual = url.searchParams.get('manual') === '1';
       if (pathname === '/api/report') { sendJson(res, 200, await loadReport({ workspaceRoot, outputDir, refresh, manual, analysisLimit, loadExternal, readReportView })); return true; }
       if (pathname === '/api/daily-usage') { sendJson(res, 200, await loadDailyUsage({ workspaceRoot, outputDir, refresh, manual, analysisLimit, loadExternal, readReportView })); return true; }
+      if (pathname === '/api/sources/status') { sendJson(res, 200, await sourcesStatus({ outputDir, readStates })); return true; }
       if (pathname.startsWith('/shared/')) { await serveStaticPath(res, SHARED_WEB_DIR, pathname.replace('/shared', '')); return true; }
       if (pathname === '/') {
         const html = await readStaticText(PUBLIC_DIR, '/index.html');
@@ -74,6 +79,28 @@ export function createTokensCostAnalyzerHandler(options = {}) {
   };
 }
 
+/**
+ * Deliberately not `loadReport` minus some fields: no local report is
+ * read, nothing is merged, nothing is summarized, and no source is contacted.
+ * The client polls this once a second while a refresh is in flight, so anything
+ * expensive or anything that touches the network belongs in `/api/report`.
+ *
+ * `records` here is the source's own pre-dedup count. The status card's Records
+ * column is the post-dedup contribution, which only the merge can know — the
+ * client takes the in-flight flag from this payload and the numbers from
+ * `/api/report`.
+ */
+async function sourcesStatus({ outputDir, readStates }) {
+  try {
+    const config = await loadSourcesConfig(outputDir);
+    return { sources: config.sources.length ? readStates({ outputDir, config }) : [] };
+  } catch (error) {
+    // Same posture as `loadExternalSafely`: unreadable configuration is a fact
+    // about this machine, not a reason for a polling client to start erroring.
+    return { sources: [], error: safeError(error) };
+  }
+}
+
 async function loadReport(options) {
   const { local, merged, merge, machineId, workspaceIds } = await loadMergedRecords(options);
   const subscriptions = await readSubscriptions(join(options.outputDir, 'subscriptions.json'));
@@ -82,7 +109,7 @@ async function loadReport(options) {
 }
 
 /**
- * §8.2 condition 2 is a *local* lookup: reports carry no roots (§7), so the
+ * The second deep-link condition is a *local* lookup: reports carry no roots, so the
  * browser is given this machine's own workspace roots to match against the
  * Cockpit's registered workspaces.
  *
@@ -120,7 +147,7 @@ async function readScanScope(outputDir, workspaceRoot) {
 /**
  * The local-isolation invariant lives here: external loading sits below the
  * request handler's catch and inside its own, so no external-source condition
- * can stop `/api/report` returning 200 with complete local records (§6).
+ * can stop `/api/report` returning 200 with complete local records.
  */
 async function loadMergedRecords(options) {
   await ensureArtifacts(options);
@@ -144,7 +171,7 @@ function readLocalReport({ outputDir, workspaceRoot, readReportView = defaultRep
       mergeInput: localMergeInput(report, local),
       machineId: report.origin?.machineId ?? null,
       // What this machine's own scan actually attributed to, straight from the
-      // artifact — the evidence that exposes a scope disagreement (§8.2).
+      // artifact — the evidence that exposes a scope disagreement.
       workspaceIds: (report.origin?.workspaces || []).filter((id) => typeof id === 'string'),
     };
   });
@@ -179,7 +206,7 @@ function localMergeInput(report, local) {
 
 /**
  * Adapt `report.v1.json` to the shape `summarize` consumes. Roots are redacted
- * out of the artifact by design (§7), so local path knowledge is reapplied here
+ * out of the artifact by design, so local path knowledge is reapplied here
  * from local configuration rather than read back from the report.
  */
 function localReportView(report, workspaceRoot) {

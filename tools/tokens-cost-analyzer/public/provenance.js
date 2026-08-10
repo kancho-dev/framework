@@ -1,19 +1,23 @@
-// §8 provenance model. Pure functions over the merged payload so the status
+// The provenance model. Pure functions over the merged payload so the status
 // card's colour invariant and the deep-link capability rule are unit-testable
 // without a browser — they are the two places a merged view can lie to a user.
 
 /**
- * §8.3 traffic lights encode *trust in the totals*, not liveness:
+ * The traffic lights encode *trust in the totals*, not liveness:
  * red = a number is missing, amber = included but not current, green = fresh.
  * A currency-excluded source is red even though its tokens are included,
- * because its money is what went missing (§8.3's "currency-excluded" row).
+ * because its money is what went missing.
  */
 export function sourceTone(source) {
-  // A source the user turned off is not a fault: §6 lists it without even a
-  // warning, and §8.3's red list does not include it. Red here would train the
-  // user to ignore the colour they most need to notice.
+  // A source the user turned off is not a fault: it is listed without even a
+  // warning and is never red. Red here would train the user to ignore the
+  // colour they most need to notice.
   if (source.state === 'disabled') return 'off';
   if (!source.included || source.costsExcluded) return 'red';
+  // Deliberately *after* the exclusion checks: an archived report that is
+  // missing, unreadable, or on an incompatible schema is a real fault and stays
+  // red. Only a working one is archival-neutral.
+  if (source.state === 'archived') return 'archive';
   if (source.staleReport || source.staleFetch || source.coverageMode === 'limited') return 'amber';
   return 'green';
 }
@@ -26,17 +30,52 @@ export function sourceRows(sources = [], { now = Date.now() } = {}) {
     isLocal: Boolean(source.isLocal),
     tone: sourceTone(source),
     state: stateWord(source),
+    // Additive and orthogonal. It sits *beside* the state word rather
+    // than replacing it, so a refreshing source keeps reporting its current
+    // truth — the guarantee that keeps the state word worth reading.
+    refreshing: source.refreshing === true,
     // The local row carries no precomputed age — its ages are only meaningful
-    // against the reader's clock, and §8.3 gives it a row like any other.
+    // against the reader's clock, and it gets a row like any other.
     reportAge: relativeAge(source.reportAgeHours ?? ageHours(source.generatedAt, now)),
     generatedAt: source.generatedAt ?? null,
     lastSuccessAt: source.lastSuccessAt ?? null,
     // A local scan and a `file` source are never "reached" over a transport,
     // so an age here would invent a fetch that never happened.
-    fetchAge: source.isLocal || source.type === 'file' ? null : relativeAge(source.fetchAgeHours),
+    fetchAge: source.isLocal || source.type === 'file' || source.type === 'archived' ? null : relativeAge(source.fetchAgeHours),
+    // What to print when there is no fetch age, decided here for the same reason
+    // `noteTone` is: it is a judgement about what a row means, not a template
+    // detail. "never reached" is true of a source we failed to contact, but on a
+    // local file it describes a transport that was never going to happen and
+    // reads as a fault on a row that is working exactly as intended.
+    fetchLabel: fetchLabel(source),
     records: Number(source.records) || 0,
     note: sourceNote(source),
+    // The note's treatment is decided here rather than in the template, because
+    // "which colour explains this row" is the same judgement as `sourceTone`
+    // and must not drift from it. Default is the warning treatment.
+    noteTone: noteTone(source),
   }));
+}
+
+/**
+ * A healthy archived source is neutral, and its explanation has to look neutral
+ * too: an archival note in the warning treatment says "degraded" in colour while
+ * saying "will not change" in words. A *broken* archive keeps the warning
+ * treatment, because that one really is a fault.
+ */
+function fetchLabel(source) {
+  if (source.isLocal) return 'local';
+  if (source.type === 'archived') return 'archived file';
+  if (source.type === 'file') return 'local file';
+  const age = relativeAge(source.fetchAgeHours);
+  return age || 'never reached';
+}
+
+function noteTone(source) {
+  const tone = sourceTone(source);
+  if (tone === 'green') return 'info';
+  if (tone === 'archive') return 'archive';
+  return '';
 }
 
 function sourceLabel(source) {
@@ -47,6 +86,7 @@ function sourceLabel(source) {
 function stateWord(source) {
   if (!source.included) return source.state === 'disabled' ? 'disabled' : `excluded · ${source.state}`;
   if (source.costsExcluded) return 'costs excluded';
+  if (source.state === 'archived') return 'archived';
   if (source.staleReport || source.staleFetch) return 'not current';
   if (source.coverageMode === 'limited') return 'limited history';
   if (source.fromCache && source.state !== 'ok') return 'current · cached';
@@ -54,12 +94,13 @@ function stateWord(source) {
 }
 
 /**
- * §6.1: the four age combinations are different situations, and collapsing them
+ * The four age combinations are different situations, and collapsing them
  * into one "stale" would report *we could not check* as *nothing changed*.
  */
 function sourceNote(source) {
   if (source.costsExcludedReason) return `costs not counted: ${source.costsExcludedReason}`;
   if (!source.included) return source.detail || null;
+  if (source.state === 'archived') return 'archived report from a retired machine; its history is included and will not change.';
   if (source.staleReport && source.staleFetch) return 'we have not been able to check this machine; its last known data is included.';
   if (source.staleReport) return 'reachable, but nothing newer has happened there; past usage is included.';
   if (source.staleFetch) return 'included from the last known good report; we could not reach this machine.';
@@ -73,8 +114,8 @@ function ageHours(timestamp, now) {
   return Number.isFinite(parsed) ? (now - parsed) / 3_600_000 : null;
 }
 
-// A remote clock ahead of the local one yields a negative age (§6.1's clock
-// anomaly); rendering "-3h ago" would read as a bug rather than as skew.
+// A remote clock ahead of the local one yields a negative age (clock skew);
+// rendering "-3h ago" would read as a bug rather than as skew.
 export function relativeAge(hours) {
   if (hours == null || !Number.isFinite(Number(hours))) return null;
   const value = Number(hours);
@@ -85,7 +126,7 @@ export function relativeAge(hours) {
 }
 
 /**
- * §8.2's one capability rule: a row links if and only if the session it points
+ * The one capability rule: a row links if and only if the session it points
  * at is reachable from this Cockpit. Locality is not the test — registration
  * is — and every missing condition fails closed to an inert labelled row.
  */
@@ -103,7 +144,7 @@ export function linkTarget(record, context = {}) {
 }
 
 /**
- * The href half of the §8.2 rule, kept here rather than in `app.js` so the
+ * The href half of that rule, kept here rather than in `app.js` so the
  * "this row points at nothing addressable" case is testable alongside the
  * capability cases. `hrefFor` is the shared session-link resolver.
  */
@@ -124,7 +165,7 @@ function withWorkspace(href, workspaceId) {
 }
 
 /**
- * §8.2's silent-failure guard: when the artifact was scanned under scopes this
+ * The silent-failure guard: when the artifact was scanned under scopes this
  * install no longer resolves, no row links and nothing says why. Say why.
  */
 export function scopeMismatchWarning(linkTargets) {
@@ -140,7 +181,7 @@ export function provenanceLabel(record) {
 }
 
 /**
- * §8.4: never a bare total when something was left out of it. Reads the
+ * Never a bare total when something was left out of it. Reads the
  * structured merge block rather than parsing the prose warnings.
  */
 export function totalsDisclosure(merge) {

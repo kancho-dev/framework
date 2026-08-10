@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createTokensCostAnalyzerHandler, ensureArtifacts } from './server.mjs';
 import { loadExternalSources } from './sources.mjs';
+import { fetchSource } from './source-fetch.mjs';
 import { createReportViewCache } from './report-view-cache.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -159,7 +160,7 @@ test('artifact regeneration is age-guarded, single-flight, manual-aware, and ret
   assert.equal(attempts, 2, 'a failed analysis clears the in-flight slot');
 });
 
-// --- §9 step 8: merged loading below the request handler's catch ------------
+// --- merged loading below the request handler's catch ------------
 
 const LOCAL_STATES = ['unreachable', 'unauthorized', 'missing', 'unreadable', 'invalid', 'incompatible', 'disabled'];
 
@@ -196,6 +197,21 @@ function request(outputDir, options = {}, path = '/api/report') {
 }
 
 const oneSource = { schemaVersion: 1, sources: [{ id: 'laptop', type: 'ssh', host: 'laptop.local', remotePath: '~/report.v1.json' }] };
+
+// A validated report from another machine. Fingerprints differ per machine so
+// dedup never quietly removes the second source's contribution.
+function remoteReportFor(machineId, sessionId) {
+  return {
+    schema: 'tokens-cost-analyzer/report', schemaVersion: 1,
+    report: { reportId: `report-${machineId}`, generatedAt: '2026-01-03T00:00:00.000Z', generatorVersion: '0.6.0', currency: 'USD', coverage: { mode: 'full-history', limit: null, limitScope: 'x' }, pricingSources: [], warnings: [] },
+    origin: { machineId, workspaces: ['framework'] },
+    records: [localRecord({
+      unitId: `${machineId}/pi/${sessionId}/m1`, sessionId, totalTokens: 7,
+      contentFingerprint: `a1b2c3d4e5f607${machineId.length.toString(16).padStart(2, '0')}`,
+      derivation: { generatorVersion: '0.6.0', pricingFingerprint: 'sha256:abc' },
+    })],
+  };
+}
 
 test('every external-source failure state still returns 200 with local records intact', async (t) => {
   const outputDir = await fixtureOutputDir(t, { sources: oneSource });
@@ -242,7 +258,7 @@ test('with no sources.json the payload is local-only plus exactly the additive f
   const { status, payload } = await request(outputDir);
 
   assert.equal(status, 200);
-  // §8.5's regression guard: one green row, one By Workspace line.
+  // Regression guard: one green row, one By Workspace line.
   assert.equal(payload.merge.sources.length, 1);
   assert.deepEqual(
     { id: payload.merge.sources[0].id, included: payload.merge.sources[0].included, isLocal: payload.merge.sources[0].isLocal, records: payload.merge.sources[0].records },
@@ -261,8 +277,8 @@ test('with no sources.json the payload is local-only plus exactly the additive f
   assert.deepEqual(merged, artifact.records[0]);
 });
 
-// §8.2 condition 2 is a local lookup, so the browser needs this machine's own
-// workspace roots — reports deliberately carry none (§7).
+// The session-link rule is a local lookup, so the browser needs this machine's own
+// workspace roots — reports deliberately carry none.
 test('the payload carries this machine identity and its local workspace roots', async (t) => {
   const outputDir = await fixtureOutputDir(t, { sources: { schemaVersion: 1, self: { machineId: 'ignored-here', catchAllId: 'home' } } });
   const { payload } = await request(outputDir);
@@ -304,6 +320,112 @@ test('an unusable sources.json costs the deep links, not the dashboard', async (
   assert.equal(payload.linkTargets.workspaces.length, 1, 'the default scan is the fallback, never a crash');
 });
 
+// The named regression test for the whole task: a dashboard
+// request must cost local work plus a cache read, never a network round trip.
+test('a slow external source does not delay a dashboard request', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: oneSource });
+  const remoteReport = {
+    schema: 'tokens-cost-analyzer/report', schemaVersion: 1,
+    report: { reportId: 'report-laptop', generatedAt: '2026-01-03T00:00:00.000Z', generatorVersion: '0.6.0', currency: 'USD', coverage: { mode: 'full-history', limit: null, limitScope: 'x' }, pricingSources: [], warnings: [] },
+    origin: { machineId: 'laptop', workspaces: ['framework'] },
+    // A validated report: this one has to survive `validateReport`, since an
+    // invalid one would leave no snapshot and the second request would be cold.
+    records: [localRecord({
+      unitId: 'laptop/pi/remote/m1', sessionId: 'remote', totalTokens: 7,
+      contentFingerprint: 'a1b2c3d4e5f60718', derivation: { generatorVersion: '0.6.0', pricingFingerprint: 'sha256:abc' },
+    })],
+  };
+  const warm = (options) => loadExternalSources({ ...options, fetch: async () => ({ ok: true, text: JSON.stringify(remoteReport) }) });
+  const warmed = await request(outputDir, { loadExternal: warm });
+  // The fixture's report predates today, so the remote is legitimately
+  // stale-report — still counted, which is the point.
+  assert.deepEqual(warmed.payload.merge.sources.map((source) => source.state), ['ok', 'stale-report'], 'the first fetch is awaited and lands');
+
+  // `timeoutSeconds` defaults to 10 s; this executor never resolves at all, so
+  // any awaiting of it would show up as a hung request rather than a slow one.
+  let reached = false;
+  const stalled = (options) => loadExternalSources({
+    ...options,
+    now: Date.now() + 60 * 60_000,
+    fetch: async () => { reached = true; await new Promise(() => {}); },
+  });
+
+  // Bounded rather than awaited outright: if this regresses, the point is that
+  // the request blocks, and a blocked test must say so instead of wedging the
+  // suite behind a fetch that never resolves.
+  const started = Date.now();
+  const { status, payload } = await Promise.race([
+    request(outputDir, { loadExternal: stalled }),
+    new Promise((_, fail) => setTimeout(() => fail(new Error('the dashboard request awaited the external fetch')), 10_000)),
+  ]);
+  const elapsed = Date.now() - started;
+
+  assert.equal(status, 200, 'local isolation: an external source never changes the status');
+  assert.ok(elapsed < 1000, `expected the response to be independent of timeoutSeconds, took ${elapsed}ms`);
+  assert.equal(payload.totals.tokens, 20, 'the cached external records are counted, whole');
+  assert.deepEqual(payload.merge.sources.map((source) => source.state), ['ok', 'stale-report'], 'the cached snapshot is what the card reports');
+  assert.equal(payload.merge.sources[1].included, true, 'a machine we could not reach this second still counts');
+  assert.ok(reached, 'the refresh really was started — it was just not awaited');
+});
+
+// The endpoint's whole value is that a browser tab polling it once a
+// second cannot become a fetch loop against every configured machine.
+test('the sources status endpoint reports flights and starts none', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: oneSource });
+  const exploding = () => { throw new Error('the status endpoint contacted a source'); };
+
+  const { status, payload } = await request(outputDir, { loadExternal: exploding }, '/api/sources/status');
+
+  assert.equal(status, 200);
+  assert.deepEqual(payload, { sources: [] }, 'nothing has been loaded in this process, so nothing is claimed about it');
+
+  // And it stays cheap: no local report, no merge, no summarize.
+  assert.equal(payload.totals, undefined);
+  assert.equal(payload.merge, undefined);
+  assert.equal(payload.daily, undefined);
+});
+
+test('an unreadable sources.json leaves the status endpoint polling harmlessly', async (t) => {
+  const outputDir = await fixtureOutputDir(t, { sources: '{ not json' });
+  const { status, payload } = await request(outputDir, {}, '/api/sources/status');
+
+  assert.equal(status, 200, 'a polling client must not start erroring over local configuration');
+  assert.deepEqual(payload.sources, []);
+  assert.match(payload.error, /./);
+});
+
+test('the status endpoint and the report cannot disagree about a source', async (t) => {
+  const outputDir = await fixtureOutputDir(t, {
+    sources: { schemaVersion: 1, sources: [oneSource.sources[0], { id: 'old-laptop', type: 'archived' }] },
+  });
+  await mkdir(join(outputDir, 'archive'), { recursive: true });
+  await writeFile(join(outputDir, 'archive', 'old-laptop.json'), JSON.stringify(remoteReportFor('old-laptop', 'retired')));
+
+  const warm = (options) => loadExternalSources({ ...options, fetch: async (source, fetchOptions) => (source.type === 'archived'
+    ? fetchSource(source, fetchOptions)
+    : { ok: true, text: JSON.stringify(remoteReportFor('laptop', 'remote')) }) });
+  const { payload: report } = await request(outputDir, { loadExternal: warm });
+
+  const { payload: statusPayload } = await request(outputDir, { loadExternal: () => { throw new Error('no fetching'); } }, '/api/sources/status');
+  const byId = new Map(statusPayload.sources.map((source) => [source.id, source]));
+
+  assert.deepEqual([...byId.keys()], ['laptop', 'old-laptop'], 'both configured sources are described from what the report loaded');
+  for (const row of report.merge.sources.filter((source) => !source.isLocal)) {
+    const status = byId.get(row.id);
+    assert.equal(status.state, row.state, row.id);
+    assert.equal(status.included, row.included, row.id);
+    assert.equal(status.fromCache, row.fromCache, row.id);
+    assert.equal(status.lastSuccessAt, row.lastSuccessAt, row.id);
+    assert.equal(status.generatedAt, row.generatedAt, row.id);
+    // Both endpoints derive ages from the same events; only the clock moved.
+    assert.ok(Math.abs((status.reportAgeHours ?? 0) - (row.reportAgeHours ?? 0)) < 0.001, row.id);
+    assert.equal(status.fetchAgeHours == null, row.fetchAgeHours == null, row.id);
+  }
+  assert.equal(byId.get('old-laptop').state, 'archived');
+  assert.equal(byId.get('old-laptop').refreshing, false, 'an archived source is never in flight');
+  assert.equal(byId.get('laptop').refreshing, false, 'nothing is in flight once the report has landed');
+});
+
 test('report and daily requests share one in-flight external fetch', async (t) => {
   const outputDir = await fixtureOutputDir(t, { sources: oneSource });
   let calls = 0;
@@ -337,9 +459,9 @@ test('the daily endpoint serves merged records so the widget cannot disagree wit
   assert.deepEqual(report.payload.byWorkspace.map((row) => row.key), ['workstation/framework', 'laptop/framework']);
 });
 
-// A synced project directory puts the same sessionId on two machines (§5.5).
+// A synced project directory puts the same sessionId on two machines.
 // Merge drops identical records, but distinct messages survive on both — and a
-// single rolled-up row would wear one machine's provenance while §8.2 links it.
+// single rolled-up row would wear one machine's provenance while the session link points at the other.
 test('one session seen on two machines stays two rows with honest provenance', async (t) => {
   const outputDir = await fixtureOutputDir(t, { sources: oneSource });
   const remote = { records: [localRecord({ unitId: 'laptop/pi/local-session/m2', messageId: 'm2', sourceKey: 'laptop', workspaceId: 'client-x' })], state: { id: 'laptop', sourceKey: 'laptop', reportId: 'report-laptop', state: 'ok', included: true, detail: null, generatedAt: '2026-01-03T00:00:00.000Z', currency: 'USD', coverageMode: 'full-history' } };
@@ -399,7 +521,7 @@ test('subscription records are summarized alongside merged token usage', async (
   assert.equal(payload.monthly.find((row) => row.month === '2026-01').subscriptionCost, 30.005);
 });
 
-// --- #143: the request path must not re-parse the report artifact -----------
+// --- the request path must not re-parse the report artifact ----------------
 
 test('a handler parses an unchanged report artifact once across requests', async (t) => {
   const outputDir = await fixtureOutputDir(t);

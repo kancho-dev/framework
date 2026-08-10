@@ -5,7 +5,8 @@ import { sessionBrowserHrefFor, storeSessionBrowserSelection } from '/shared/bro
 import { provenanceLabel, scopeMismatchWarning, sessionLinkFor, sourceRows, totalsDisclosure } from './provenance.js';
 import { createMorphCommit } from '/shared/browser/refresh-commit.js';
 import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
-import { refreshStatus, reportRequestUrl, startAutomaticRefresh } from './refresh.js';
+import { refreshStatus, reportRequestUrl, startAutomaticRefresh, statusRequestUrl } from './refresh.js';
+import { createSourceStatusPoller } from './source-status.js';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
 const state = { data: null };
@@ -19,7 +20,7 @@ $('#refresh').addEventListener('click', () => refresh.request({ reason: 'manual'
 document.addEventListener('click', (event) => {
   const link = event.target.closest('a[data-session-browser-path]');
   if (!link) return;
-  // §8.2: the selection is scoped by workspace root, so a cross-workspace link
+  // The selection is scoped by workspace root, so a cross-workspace link
   // must store it under the *target* root or the session opens in the wrong one.
   storeSessionBrowserSelection(link.dataset.sessionBrowserPath, link.dataset.sessionTopicId, { workspaceRoot: link.dataset.workspaceRoot || state.data?.workspaceRoot });
 });
@@ -41,6 +42,17 @@ const refresh = createRefreshCoordinator({
     statusEl.classList.toggle('hidden', !status.visible);
   },
 });
+// The per-source labels are kept current by the cheap status endpoint,
+// and the expensive report request happens once, when the last flight settles.
+const sourceStatus = createSourceStatusPoller({
+  fetchStatus: async () => {
+    const res = await fetch(statusRequestUrl(location.search));
+    if (!res.ok) throw new Error(res.statusText);
+    return res.json();
+  },
+  onUpdate: applyInFlight,
+  onSettled: () => refresh.request({ reason: 'poll' }),
+});
 refresh.registerCommitUnit({
   key: 'report',
   commit: async (transaction) => {
@@ -50,8 +62,24 @@ refresh.registerCommitUnit({
     window.FrameworkWorkspaceBadge?.set(workspaceEl, { root: data.workspaceRoot, tooltipPrefix: 'Workspace', workspaceFilter: tokenAnalyzerWorkspaceFilter });
     // Per-source ages and coverage replace the old single-report status line.
     $('#status').classList.add('hidden');
+    sourceStatus.sync(data.merge?.sources || []);
   },
 });
+
+/**
+ * Only the flag is taken from a poll. Every number on the page — the
+ * totals, the charts, the per-source Records column — keeps coming from the
+ * last complete merged snapshot, so nothing on screen is ever assembled from a
+ * subset of machines. The status payload's own record count is pre-dedup and
+ * deliberately ignored here for the same reason.
+ */
+function applyInFlight(sources) {
+  const rows = state.data?.merge?.sources;
+  if (!rows) return;
+  const inFlight = new Set(sources.filter((source) => source.refreshing).map((source) => source.id));
+  state.data.merge.sources = rows.map((row) => ({ ...row, refreshing: !row.isLocal && inFlight.has(row.id) }));
+  renderSourceCard(state.data.merge, reportEl);
+}
 refresh.request({ reason: 'initial' });
 startAutomaticRefresh(refresh, AUTO_REFRESH_MS);
 
@@ -85,17 +113,16 @@ function renderWarnings(warnings, root) {
 function renderSourceCard(merge, root) {
   const disclosure = totalsDisclosure(merge);
   $('#totals-disclosure', root).textContent = disclosure || '';
-  $('#source-card', root).innerHTML = sourceRows(merge?.sources || []).map((row) => `<article class="source-row ${row.tone}">
+  $('#source-card', root).innerHTML = sourceRows(merge?.sources || []).map((row) => `<article class="source-row ${row.tone}${row.refreshing ? ' refreshing' : ''}">
       <div class="source-row-head">
-        <div class="source-name"><strong title="${escapeHtml(row.key)}">${escapeHtml(row.name)}</strong><span class="source-identity">${escapeHtml(row.identity)}</span></div>
-        <span class="source-state"><i class="dot ${row.tone}"></i>${escapeHtml(row.state)}</span>
+        <div class="source-name"><strong title="${escapeHtml(row.key)}">${escapeHtml(row.name)}</strong><span class="source-identity">${escapeHtml(row.identity)}</span>${row.note ? `<span class="source-note ${row.noteTone}" title="${escapeHtml(row.note)}">${escapeHtml(row.note)}</span>` : ''}</div>
+        <span class="source-state"><i class="dot ${row.tone}"></i>${escapeHtml(row.state)}${row.refreshing ? '<em class="source-refreshing">Refreshing…</em>' : ''}</span>
       </div>
       <div class="source-facts">
         <div class="source-fact"><span>Report</span><strong title="${escapeHtml(row.generatedAt ? formatDateTime(row.generatedAt) : '')}">${escapeHtml(row.reportAge || 'unknown')}</strong></div>
-        <div class="source-fact"><span>Connection</span><strong title="${escapeHtml(row.lastSuccessAt ? formatDateTime(row.lastSuccessAt) : '')}">${escapeHtml(row.fetchAge || (row.isLocal ? 'local' : 'never reached'))}</strong></div>
+        <div class="source-fact"><span>Connection</span><strong title="${escapeHtml(row.lastSuccessAt ? formatDateTime(row.lastSuccessAt) : '')}">${escapeHtml(row.fetchLabel)}</strong></div>
         <div class="source-fact"><span>Contribution</span><strong>${row.records} ${row.records === 1 ? 'record' : 'records'}</strong></div>
       </div>
-      ${row.note ? `<div class="source-note ${row.tone === 'green' ? 'info' : ''}">${escapeHtml(row.note)}</div>` : ''}
     </article>`).join('') || '<p class="status">No sources.</p>';
 }
 
@@ -137,7 +164,7 @@ function renderBars(selector, rows, field, labelFn, root) {
 }
 
 /**
- * §8.2: a row links only when this Cockpit can actually reach the session, and
+ * A row links only when this Cockpit can actually reach the session, and
  * a cross-workspace link carries `?workspace=<id>` so the Session Browser opens
  * in the target workspace rather than reinterpreting the path in this one.
  */
@@ -152,7 +179,7 @@ function sessionLinkAttributes(record) {
   return `href="${escapeHtml(link.href)}" data-session-browser-path="${escapeHtml(record.sessionBrowserPath)}" data-session-topic-id="${escapeHtml(record.sessionTopicId || '')}" data-workspace-root="${escapeHtml(link.root)}"`;
 }
 
-// §8.2's visual treatment: a top-drivers table is scanned, not read, so an
+// A top-drivers table is scanned, not read, so an
 // unmarked row would be assumed local.
 function provenanceMarker(record) {
   return `<span class="pill provenance" title="${escapeHtml(provenanceLabel(record))}">${escapeHtml(record.workspaceId || 'unknown-workspace')}</span>`;
