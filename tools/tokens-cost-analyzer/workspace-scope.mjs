@@ -23,7 +23,7 @@ export const SCAN_SCOPE_FILE = 'scan-scope.json';
 /**
  * The local, never-exported record of what a scan attributed against. The
  * catch-all is listed first because it is a workspace like any other here;
- * §8.2's reader matches a record's `workspaceId` against these ids.
+ * The deep-link reader matches a record's `workspaceId` against these ids.
  */
 export function scanScope(scopes) {
   return {

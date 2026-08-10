@@ -99,7 +99,7 @@ test('a session copied between two machines is dropped once with one aggregated 
 });
 
 test('cross-machine duplicates are detected for adapters with native ids and no fingerprint', () => {
-  // The regression guard for the §4.3 defect: keying on contentFingerprint
+  // The regression guard for the cross-machine duplicate defect: keying on contentFingerprint
   // silently matched nothing for Claude Code and OpenCode.
   for (const adapter of ['claude-code', 'opencode']) {
     const mine = record({ source: adapter });
@@ -159,7 +159,7 @@ test('a source in another currency contributes tokens but never money', () => {
   assert.deepEqual(merge.totalsExclude, []);
   const row = merge.sources.find((r) => r.id === 'laptop-eu');
   assert.equal(row.costsExcluded, true);
-  // §8.4's disclosure names the reason, so it must be structured data rather
+  // The totals disclosure names the reason, so it must be structured data rather
   // than something step 9 has to parse back out of the prose warning.
   assert.equal(row.costsExcludedReason, 'currency mismatch (EUR vs USD)');
 });
@@ -182,7 +182,7 @@ test('a source excluded upstream is listed with its reason and contributes nothi
   assert.equal(records.length, 1);
   assert.deepEqual(merge.totalsExclude, [{ sourceKey: 'laptop', reason: 'the report uses schemaVersion 99' }]);
   assert.equal(merge.sources.find((row) => row.id === 'laptop').records, 0);
-  assert.deepEqual(merge.warnings, ['laptop: excluded from totals — the report uses schemaVersion 99'], '§5.8 requires an excluded source to warn, not only to be listed');
+  assert.deepEqual(merge.warnings, ['laptop: excluded from totals — the report uses schemaVersion 99'], 'an excluded source must warn, not only be listed');
 });
 
 test('a disabled source is listed without a warning, unlike other exclusions', () => {
@@ -199,7 +199,7 @@ test('records that are not even objects are counted as excluded, not silently dr
   const { records, merge } = mergeReports({ local: local({ records: [record(), null, 42, 'nope'] }) });
 
   assert.equal(records.length, 1);
-  assert.equal(merge.unidentifiableExcluded, 3, '§5.6 excludes unidentifiable records and counts them');
+  assert.equal(merge.unidentifiableExcluded, 3, 'unidentifiable records are excluded and counted');
 });
 
 test('local is source zero and merge is deterministic regardless of source order', () => {

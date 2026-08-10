@@ -1,6 +1,6 @@
 import { contentKeyFor } from './report-contract.mjs';
 
-// §5 merge semantics over loaded records. Pure given its inputs, and every
+// Merge semantics over loaded records. Pure given its inputs, and every
 // outcome lands in the returned `merge` block rather than being thrown: the
 // local report is merged first and can never be displaced by an external one.
 
@@ -29,7 +29,7 @@ export function mergeReports({ local, external = [] } = {}) {
 }
 
 /**
- * §5.3: a source presenting an already-seen `reportId` or `machineId` is the
+ * A source presenting an already-seen `reportId` or `machineId` is the
  * same machine reached twice, and is skipped wholesale *before* record merging
  * rather than deduplicated record by record.
  */
@@ -41,10 +41,10 @@ function admit(localLoad, externalLoads, context) {
   for (const load of externalLoads) {
     if (!load.state.included) {
       const reason = load.state.detail || load.state.state;
-      // §5.8 requires an excluded source to warn, and §8.3 keeps totals
-      // exclusions in the warnings list — only per-source *stale* warnings are
-      // absorbed by the card. A disabled source is the documented exception:
-      // §6 lists it without a warning, because the user turned it off.
+      // An excluded source must warn, and totals exclusions stay in the warnings
+      // list — only per-source *stale* warnings are absorbed by the card. A
+      // disabled source is the documented exception: it is listed without a
+      // warning, because the user turned it off.
       if (load.state.state !== 'disabled') context.warnings.push(`${load.state.id}: excluded from totals — ${reason}`);
       admitted.push(prepare(load, { included: false, exclusion: reason }));
       continue;
@@ -63,7 +63,7 @@ function admit(localLoad, externalLoads, context) {
 }
 
 /**
- * §5.7 and §5.9: a currency mismatch removes money but keeps tokens, which stay
+ * A currency mismatch removes money but keeps tokens, which stay
  * trustworthy because token counts are currency-free; a limited source is
  * included but makes the aggregate limited, since incompleteness is contagious.
  */
@@ -81,7 +81,7 @@ function admissionFor(load, localLoad, context) {
 }
 
 /**
- * §5.1/§5.2/§5.6: local first and never displaced; a repeated `unitId` is
+ * Local first and never displaced; a repeated `unitId` is
  * dropped, which is what makes re-fetching a source idempotent; a record with
  * no resolvable identity is excluded rather than guessed into place.
  */
@@ -109,7 +109,7 @@ function collectRecords(admitted, context) {
 }
 
 /**
- * §5.5: the one case `unitId` cannot catch, because it is `sourceKey`-prefixed
+ * The one case `unitId` cannot catch, because it is `sourceKey`-prefixed
  * by design — the same session copied or synced between two machines. Keyed on
  * `contentKey`, which is machine-independent and defined for every adapter, and
  * warned about **once in aggregate**: a user syncing a project directory would
@@ -139,7 +139,7 @@ function dropCrossMachineDuplicates(records, admitted, context) {
 }
 
 /**
- * §5.5 keeps the freshest machine's occurrence, but §5.1 is the stronger rule:
+ * The freshest machine's occurrence is kept, but the stronger rule is that
  * a local record is never displaced, whatever an external report's age claims.
  * That also keeps the outcome independent of remote clock skew.
  */
@@ -154,12 +154,12 @@ function sourceRow(load, kept) {
     ...load.state,
     included: load.included,
     costsExcluded: Boolean(load.costsExcluded),
-    // §8.4's totals disclosure names the reason, so it must be readable from
+    // The totals disclosure names the reason, so it must be readable from
     // structured data rather than parsed back out of the prose warning.
     costsExcludedReason: load.costsExcludedReason ?? null,
     detail: load.included ? load.state.detail : (load.exclusion ?? load.state.detail),
     duplicatesDropped: load.duplicatesDropped,
-    // §8.3's Records column is the contributed count *after* dedup, which the
+    // The Records column is the contributed count *after* dedup, which the
     // per-source pre-dedup count on the loaded state cannot express.
     records: load.included ? kept.filter((record) => record.sourceKey === load.state.sourceKey).length : 0,
   };
@@ -182,7 +182,7 @@ function recordsOf(records) {
   return (Array.isArray(records) ? records : []).filter((record) => record && typeof record === 'object');
 }
 
-// §5.6 excludes unidentifiable records **and counts them**, so an entry that is
+// Unidentifiable records are excluded **and counted**, so an entry that is
 // not even an object is counted rather than quietly filtered away.
 function malformedCount(raw, kept) {
   return Array.isArray(raw) ? raw.length - kept.length : 0;
@@ -226,7 +226,7 @@ function withoutCosts(record) {
 }
 
 /**
- * §5.6 is checked on the fields themselves, not inferred from `contentKeyFor`:
+ * Exclusion is checked on the fields themselves, not inferred from `contentKeyFor`:
  * that helper treats a present `unitId` as authoritative and would happily
  * derive a key for a record missing the very ids this rule excludes.
  */

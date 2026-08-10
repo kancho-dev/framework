@@ -45,7 +45,7 @@ const generatorVersion = await readGeneratorVersion();
 const pricing = await loadPricing(pricingPath, bundledPricingPath);
 const sourcesConfig = await loadSourcesConfig(outDir);
 // One scan per machine, rooted at `self.root`; configured workspaces partition
-// that scan rather than narrowing it (design §4.1).
+// that scan rather than narrowing it.
 const scopes = parseSelfConfig(sourcesConfig.self, { workspaceRoot });
 const deriveFile = createDerivationCache({
   outDir,
@@ -92,14 +92,13 @@ await mkdir(outDir, { recursive: true });
 await atomicWrite(join(outDir, 'report.v1.json'), JSON.stringify(buildReport({ generatedAt, generatorVersion, records, warnings, pricing, scopes }), null, 2));
 await atomicWrite(join(outDir, 'daily.json'), JSON.stringify({ generatedAt, workspaceRoot, analysis, daily }, null, 2));
 // Local-only companion to the report: the roots this scan attributed against.
-// §7 keeps roots out of `report.v1.json` because that artifact is what remote
-// machines fetch — but §8.2's link rule needs them, and deriving them again at
+// Roots are kept out of `report.v1.json` because that artifact is what remote
+// machines fetch — but the deep-link rule needs them, and deriving them again at
 // read time lets a CLI run under one root and a server under another disagree
 // silently, killing every deep link. Written by the same run that stamped the
 // `workspaceId`s, so they agree by construction. Never fetched, never exported.
 await atomicWrite(join(outDir, SCAN_SCOPE_FILE), JSON.stringify(scanScope(scopes), null, 2));
-// `report.v1.json` replaces `normalized.json` outright with no shim (design §9
-// Migration); drop the orphan so installs do not keep a large unread artifact.
+// `report.v1.json` replaces `normalized.json` outright with no shim; drop the orphan so installs do not keep a large unread artifact.
 await rm(join(outDir, 'normalized.json'), { force: true });
 console.log(`Wrote ${records.length} records to ${outDir}`);
 console.log(`Timing: total ${elapsedSince(startedAt)} ms (scan ${scanMs} ms${timings.map((timing) => `, ${timing.source} ${timing.ms} ms`).join('')}, emit ${elapsedSince(emitStartedAt)} ms)`);
@@ -115,7 +114,7 @@ function buildReport({ generatedAt, generatorVersion, records, warnings, pricing
       currency: 'USD',
       coverage: { ...analysis, earliestRecordDate: dates[0] ?? null, latestRecordDate: dates.at(-1) ?? null },
       // Fingerprints replace absolute pricing paths so a report cannot leak the
-      // producing machine's filesystem layout (design §3.2, §7).
+      // producing machine's filesystem layout.
       pricingSources: pricing.pricingSources || [],
       warnings,
     }),
@@ -437,7 +436,7 @@ async function parseCodexSession(sessionPath, scopes, pricing) {
       sessionId: sessionMeta.session_id || sessionMeta.id || sessionId,
       messageId: `token-count-${index}`,
       // Positional, not content-stable, so identity falls back to the
-      // content fingerprint (design §3.3).
+      // content fingerprint.
       nativeMessageId: null,
       sessionRef: redactHome(sessionPath),
       sessionBrowserPath: codexRef(sessionMeta.session_id || sessionMeta.id || sessionId),
@@ -501,7 +500,7 @@ async function parseClaudeCodeSession(sessionPath, scopes, pricing) {
       sessionId,
       messageId: entry.uuid || `claude-entry-${index}`,
       // The positional fallback is not a durable source id, so it must not be
-      // classed `native` (design §3.3 note for step 4).
+      // classed `native`.
       nativeMessageId: entry.uuid || null,
       sessionRef: redactHome(sessionPath),
       sessionBrowserPath: browserRef,
@@ -638,7 +637,7 @@ function stripModelVariant(value) { return value ? String(value).replace(/:[^/:]
 function parseJson(value) { if (value && typeof value === 'object') return value; try { return JSON.parse(value); } catch { return {}; } }
 // Pi encodes the workspace path into the directory name (`/`→`-`), which is not
 // reversible, so attribution always compares encoded roots and never decodes a
-// directory name back into a path (design §4.1).
+// directory name back into a path.
 async function piSessionFilesInScope(piRoot, scopes) {
   const scoped = [];
   for (const dir of await readdir(piRoot)) {

@@ -16,9 +16,9 @@ export function dailyUsage(records) {
 }
 
 /**
- * §8.1's By Workspace rollup. The displayed key is `machineId/workspaceId`:
+ * The By Workspace rollup. The displayed key is `machineId/workspaceId`:
  * `sourceKey` comes from merge, `workspaceId` from the producing machine's
- * scan-time attribution, and under §4.1 the rows sum exactly to the total.
+ * scan-time attribution, and the rows sum exactly to the total.
  */
 export function workspaceKey(record) {
   const machineId = record.sourceKey || 'unknown-machine';
@@ -63,7 +63,7 @@ export function summarize(normalized, daily, subscriptions, merge = null) {
 }
 
 // A currency-excluded record has no cost *by decision*, not for want of pricing
-// (§5.7). Counting it as unknown/unpriced would report a deliberate exclusion
+// Counting it as unknown/unpriced would report a deliberate exclusion
 // as a data-quality problem.
 function isUnknownCost(record) {
   return !record.costExcluded && record.recordedCost == null && record.estimatedCost == null;
@@ -112,10 +112,10 @@ function sessionDrivers(records) {
   const bySession = new Map();
   for (const record of records) {
     // Keyed by machine too: a session synced across two machines is two rows,
-    // not one row wearing the first machine's provenance — which §8.2 would
-    // then happily link, sending half its records to a local Session Browser.
+    // not one row wearing the first machine's provenance — which the deep-link
+    // rule would then happily link, sending half its records to a local Session Browser.
     const key = `${record.sourceKey || 'unknown-machine'}:${record.source || 'unknown'}:${record.sessionId || record.sessionRef || 'unknown'}`;
-    // §8.2 decides linkability per row, so a session rollup must keep the
+    // Linkability is decided per row, so a session rollup must keep the
     // provenance of the records it folded rather than losing it to the sum.
     const current = bySession.get(key) || { source: record.source, sourceKey: record.sourceKey, workspaceId: record.workspaceId, sessionId: record.sessionId, sessionRef: record.sessionRef, sessionBrowserPath: record.sessionBrowserPath, date: record.date, model: record.model, modelLabel: record.modelLabel, totalTokens: 0, recordedCost: 0, estimatedCost: 0, recordCount: 0, confidence: record.confidence };
     current.totalTokens += Number(record.totalTokens) || 0;

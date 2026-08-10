@@ -63,7 +63,7 @@ export function unitIdFor(machineId, record, options = {}) {
 }
 
 /**
- * Stamp the §3.3 identity fields plus the §3.4 derivation onto locally produced
+ * Stamp the identity fields plus the derivation onto locally produced
  * records, in file order so fingerprint ordinals are reproducible across scans.
  */
 export function stampRecordIdentity(records, { machineId, generatorVersion, pricingFingerprint, nativeIdOf = nativeDiscriminator }) {

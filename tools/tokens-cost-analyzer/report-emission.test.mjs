@@ -143,7 +143,7 @@ test('identity is machine-scoped, and a positional id is never classed native', 
   await writeJsonl(join(claudeRoot, 'p', 's.jsonl'), [
     claudeEntry('a1', root, 10),
     // No `uuid`: the adapter falls back to a positional messageId, which is not
-    // a durable source id (design §3.3).
+    // a durable source id.
     { type: 'assistant', cwd: root, timestamp: '2026-01-02T03:04:06.000Z', message: { model: 'claude-test', usage: { input_tokens: 11, output_tokens: 0 } } },
   ]);
   await writeJsonl(join(codexRoot, 'rollout-c.jsonl'), [
