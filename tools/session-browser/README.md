@@ -140,6 +140,59 @@ claude --resume '<session-id>'
 
 Sub-agent (sidechain) sessions are read-only in the browser and are not independently resumable, so no restore command is offered for them. Claude Code support is best-effort and fail-soft: it renders user/assistant text, thinking, and generic tool calls/results, and a missing or empty `CLAUDE_PROJECTS_ROOT` never blocks the other sources.
 
+## Writing An Adapter
+
+A new source normalizes into these shapes. This is the contract; everything else about a source is adapter-private.
+
+```ts
+type SessionSummary = {
+  id: string;
+  source: 'pi' | 'opencode' | string;
+  path: string;
+  cwd?: string;
+  name?: string;
+  firstPrompt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  leafId?: string | null;
+  messageCount: number;
+  userMessageCount: number;
+  assistantMessageCount: number; // actual assistant answer messages
+  toolMessageCount?: number;     // tool-only/thinking/action turns
+  toolCallCount: number;
+  tokens?: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number }; // cumulative lifetime
+  contextLoad?: { latest: number | null; preferredCeiling: number }; // latest response; `null` means unknown, not zero
+  bookmarkKey?: string;
+  bookmarked?: boolean;
+  labels?: string[];
+};
+
+type SessionDetail = SessionSummary & {
+  entries: unknown[];
+  activeEntries: unknown[];
+  topicAnchors: Array<{
+    id: string;
+    timestamp?: string;
+    title: string;
+    depth: 'first-prompt' | 'user-prompt';
+  }>;
+  parentSession?: SessionSummary | null;
+  childSessions?: SessionSummary[];
+};
+```
+
+Every adapter must be fail-soft: one source failing or timing out must never block the others from listing.
+
+### Adapter implementation notes
+
+Non-obvious constraints found by implementation — the things a change here is likely to get wrong twice.
+
+- **OpenCode records the same per-response usage twice**, on the assistant `message` row and on its `step-finish` `part` rows, so parts contribute only when the message row carries no usage of its own. Latest context must be selected **by usage-row timestamp** in both the list SQL and the shared JS path: a part orphaned from its message row can otherwise override a newer response, and iteration order is not a safe proxy for recency.
+- **OpenCode workspace filtering must happen in SQL *before* the listing cap**, or the cap silently applies to recent global sessions instead of relevant workspace ones.
+- **Codex `~/.codex/session_index.jsonl` is not the source of truth** — it can omit rollout files. Scan the rollout files themselves.
+- **Codex `input_tokens` already includes `cached_input_tokens`**; split them before summing, or cached input is double-counted. `model_context_window` is deliberately unused as a pill denominator, since one static ceiling applies across adapters.
+- Token/usage accounting shared with the Tokens / Cost Analyzer lives in `tools/shared-web/opencode-usage.mjs` so both tools report the same totals. Change it in one place.
+
 ## UI Guide
 
 - **Search**: filter by prompt, cwd, name, id, path, or tag.

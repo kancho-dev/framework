@@ -158,6 +158,10 @@ For each widget, verify:
 - normal and edit modes work at normal and narrow widths, keyboard focus is visible, controls have meaningful labels, and untrusted text is safely escaped;
 - owning summary API tests cover selection/order and missing or stale values, followed by focused API smoke checks, relevant `node --check` or tests, and `git diff --check`.
 
+### Shared test ownership
+
+`tools/shared-web/` has no package of its own, so a test file added there runs in no suite until an owning tool's `test` script names it explicitly. Cockpit owns `shared-web/refresh-coordinator.test.mjs`. When you add a shared test, assign it an owner in the same change.
+
 ### Architecture and skill decision
 
 Keep widget registration and renderers embedded for now. The accepted dashboard has six widgets and simple dispatch; that does not justify a module system, formal shared registry, plugin API, or frontend build step.
@@ -207,3 +211,31 @@ cd tools/tokens-cost-analyzer && node server.mjs
 ```
 
 It does not add remote hosting, authentication, sync, daemon behavior, or shared metadata defaults.
+
+## Known Accepted Behaviors
+
+Each entry is a deliberate trade-off or an observed consequence that was reviewed and left in place. None is an open defect. Revisit an entry only when it causes real friction, and record the outcome here.
+
+### `daily-usage` shows the current year only, including when it is empty
+
+With `showYearSwitcher: false` the shared component locks to `new Date().getUTCFullYear()` and does not fall back to the most recent year with data, unlike the analyzer. On 1 January, or in a workspace whose usage stopped in a previous year, the widget renders an empty grid and "0 across 0 active UTC days" while looking populated. The widget's own empty state is unreachable in that case because it tests `daily.length` across all years, not the rendered year.
+
+This is intended — current year only was the requested behavior — but it is the one case where the widget can look broken while being correct. If it confuses someone in practice, the smallest fix is a rendered-year-aware empty message, not a fallback year, which would silently contradict the current-year decision.
+
+### The dashboard re-renders wholesale every 60 seconds
+
+`renderDashboard()` rebuilds `dashboardEl.innerHTML` for the entire layout on every dashboard poll. For most widgets this is invisible. For `daily-usage` it destroys and recreates the heatmap each minute, resetting its horizontal scroll position and re-running `revealToday`, so a user who scrolled to inspect an earlier part of the year loses that position within a minute.
+
+Accepted because the render is cheap and the widget model is deliberately simple. If more widgets acquire internal view state — scroll, selection, expansion — this is the point where per-widget morphing or preserved state becomes worth the complexity, rather than patching one widget at a time.
+
+### `URLSearchParams.prototype.size` is used in client code
+
+`fetchDailyUsage` in `public/app.js` tests `params.size`, which requires Chrome 113+ / Safari 17+. That is fine for a local developer tool on current browsers, but the analyzer uses `params.toString()` for the same check. Prefer `toString()` in new code so the two read alike.
+
+### Saved layouts are validated against the catalog, not against capability
+
+`normalizeDashboardLayout` filters a persisted layout by whether the widget `type` exists in the catalog, not by whether the owning tool is currently available. A workspace whose saved layout contains a widget for a tool that later becomes unavailable keeps that widget and shows its error or empty state rather than dropping it. This applies to every capability-gated widget.
+
+Leaving it is deliberate: silently deleting a user's widget when a tool is temporarily unmounted would be worse than showing a soft failure. Worth revisiting only if the failed state proves confusing rather than merely untidy.
+
+The full-fidelity `daily-usage` exception to the reduced-widget guideline is a fifth accepted trade-off; it is documented above under "Shared full-fidelity widget decisions".
