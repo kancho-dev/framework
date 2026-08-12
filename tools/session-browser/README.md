@@ -203,6 +203,7 @@ Non-obvious constraints found by implementation — the things a change here is 
 - **Origin pills**: cards for subdirectory sessions show a compact workspace-relative cwd label; hover for the full cwd. Workspace-root sessions omit the pill to reduce clutter.
 - **Session tags**: click a tag pill on a card to filter by that tag.
 - **Auto 10s**: enabled by default; refreshes session list and selected detail.
+- **Deferred detail refresh**: selecting reader text pauses detail refresh and shows a sticky warning; choose **Refresh now** to clear the selection and apply the waiting refresh.
 - **Context pill/bar**: latest recorded context load (`Xk ctx`) against the tool's static 200k preferred ceiling; this is an operational handoff threshold, not the model's context-window percentage.
 - **Topics rail**: jump between user prompts in the selected session.
 - **Show tool calls**: off by default; reveal tool-only/action detail when needed.

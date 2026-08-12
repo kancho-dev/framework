@@ -11,7 +11,6 @@ import { workspaceFilterForTool } from '/shared/browser/workspace-tools.js';
 
 const sessionBrowserWorkspaceFilter = workspaceFilterForTool('session-browser');
 const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, tagFilter: 'all', sourceErrors: [], metadataError: null };
-let detailUpdatePending = false;
 
 const els = {
   refresh: document.querySelector('#refresh'),
@@ -39,6 +38,8 @@ const els = {
   addTag: document.querySelector('#add-tag'),
   jumpTop: document.querySelector('#jump-top'),
   jumpBottom: document.querySelector('#jump-bottom'),
+  deferredRefresh: document.querySelector('#deferred-refresh'),
+  applyDeferredRefresh: document.querySelector('#apply-deferred-refresh'),
   topics: document.querySelector('#topics'),
   messages: document.querySelector('#messages'),
 };
@@ -245,7 +246,6 @@ function scheduleSelectedTopicLinkScroll() {
 }
 
 function renderSessionCountStatus() {
-  if (detailUpdatePending) return;
   const visibleCount = state.sessions.filter((session) => matches(session, els.filter.value)).length;
   const errors = [
     ...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`),
@@ -441,11 +441,21 @@ function hasReaderTextSelection() {
   return Boolean(pane && selection.rangeCount && pane.contains(selection.anchorNode) && pane.contains(selection.focusNode));
 }
 
+function showDeferredRefresh(show) {
+  els.deferredRefresh.classList.toggle('hidden', !show);
+  requestAnimationFrame(updateReaderHeaderHeight);
+}
+
+async function applyDeferredRefresh() {
+  window.getSelection?.().removeAllRanges();
+  await detailRefresh.release('detail');
+}
+
 let readerSelectionActive = false;
 document.addEventListener('selectionchange', () => {
   const active = hasReaderTextSelection();
   if (readerSelectionActive && !active) {
-    detailRefresh.release('detail').catch((error) => { els.readerTitle.textContent = error.message; });
+    applyDeferredRefresh().catch((error) => { els.readerTitle.textContent = error.message; });
   }
   readerSelectionActive = active;
 });
@@ -453,9 +463,9 @@ document.addEventListener('selectionchange', () => {
 const listRefresh = createRefreshCoordinator({
   fetchData: ({ signal }) => fetchSessions({ signal }),
   onStatus: ({ phase, error }) => {
-    if (phase === 'loading' && !detailUpdatePending) els.status.textContent = 'Loading sessions…';
-    if (phase === 'refreshing' && !detailUpdatePending) els.status.textContent = 'Refreshing sessions…';
-    if (phase === 'error' && !detailUpdatePending) els.status.textContent = error.message;
+    if (phase === 'loading') els.status.textContent = 'Loading sessions…';
+    if (phase === 'refreshing') els.status.textContent = 'Refreshing sessions…';
+    if (phase === 'error') els.status.textContent = error.message;
   },
 });
 
@@ -504,16 +514,16 @@ const detailRefresh = createRefreshCoordinator({
   getIdentity: () => state.selectedPath,
   onStatus: ({ phase, error, dropped }) => {
     if (phase === 'update-ready') {
-      detailUpdatePending = true;
-      els.status.textContent = 'Fresh session data is ready; clear the text selection to update.';
+      showDeferredRefresh(true);
+      renderSessionCountStatus();
     }
     if (phase === 'committed' || phase === 'idle') {
-      detailUpdatePending = false;
+      showDeferredRefresh(false);
       if (dropped) revealSelectedTopic = false;
       renderSessionCountStatus();
     }
     if (phase === 'error') {
-      detailUpdatePending = false;
+      showDeferredRefresh(false);
       revealSelectedTopic = false;
       els.readerTitle.textContent = error.message;
     }
@@ -679,6 +689,10 @@ els.topics.addEventListener('click', (event) => {
   state.selectedTopicId = link.dataset.topicId;
   persistSelectedTopic();
   renderSelectedDetail();
+});
+
+els.applyDeferredRefresh.addEventListener('click', () => {
+  applyDeferredRefresh().catch((error) => { els.readerTitle.textContent = error.message; });
 });
 
 els.messages.addEventListener('click', async (event) => {

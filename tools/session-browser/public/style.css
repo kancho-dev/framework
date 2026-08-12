@@ -132,6 +132,10 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 .reader-actions { margin-top: 10px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .jump-actions { margin-left: auto; display: flex; gap: 8px; }
 .reader-actions button { padding: 3px 8px; font-size: 11px; }
+.deferred-refresh { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 12px; padding: 9px 12px; color: var(--text); background: rgba(242,204,96,.14); border: 1px solid rgba(242,204,96,.55); border-radius: 9px; font-size: 12px; }
+.deferred-refresh.hidden { display: none; }
+.deferred-refresh strong { color: var(--warning); }
+.deferred-refresh button { flex: none; padding: 4px 9px; font-size: 11px; border-color: rgba(242,204,96,.65); }
 .meta { display: grid; gap: 4px; margin-top: 10px; color: var(--muted); }
 .meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; min-width: 0; }
 .meta-row span { white-space: nowrap; }
