@@ -7,6 +7,7 @@ import { createMorphCommit } from '/shared/browser/refresh-commit.js';
 import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
 import { refreshStatus, reportRequestUrl, startAutomaticRefresh, statusRequestUrl } from './refresh.js';
 import { createSourceStatusPoller } from './source-status.js';
+import { workspaceFilterForTool } from '/shared/browser/workspace-tools.js';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
 const state = { data: null };
@@ -14,7 +15,7 @@ const dailyUsageHeatmap = createDailyUsageHeatmap({ showYearSwitcher: true });
 const $ = (selector, root = document) => root.querySelector(selector);
 const workspaceEl = $('#workspace-name');
 const reportEl = $('#report');
-const tokenAnalyzerWorkspaceFilter = (workspace) => workspace?.tools?.['tokens-cost-analyzer'] === true;
+const tokenAnalyzerWorkspaceFilter = workspaceFilterForTool('tokens-cost-analyzer');
 window.FrameworkWorkspaceBadge?.set(workspaceEl, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace', workspaceFilter: tokenAnalyzerWorkspaceFilter });
 $('#refresh').addEventListener('click', () => refresh.request({ reason: 'manual', force: true }));
 document.addEventListener('click', (event) => {

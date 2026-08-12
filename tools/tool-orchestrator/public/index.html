@@ -35,22 +35,7 @@
       <div id="dashboard" class="dashboard-grid"></div>
     </section>
   </main>
-  <script>
-    const __cockpitParams = new URLSearchParams(location.search);
-    const __cockpitWorkspace = __cockpitParams.get('workspace');
-    const __cockpitWorkspaceQuery = __cockpitWorkspace ? `?workspace=${encodeURIComponent(__cockpitWorkspace)}` : '';
-    window.__FRAMEWORK_COCKPIT__ = {
-      enabled: true,
-      home: `/${__cockpitWorkspaceQuery}`,
-      icon: 'icon.svg',
-      current: 'home',
-      workspaceId: __cockpitWorkspace,
-      tools: [
-        { id: 'task-browser', title: 'Task Browser', shortTitle: 'Tasks', route: `/tools/tasks/${__cockpitWorkspaceQuery}`, icon: 'icons/task-browser.svg' },
-        { id: 'session-browser', title: 'Session Browser', shortTitle: 'Sessions', route: `/tools/sessions/${__cockpitWorkspaceQuery}`, icon: 'icons/session-browser.svg' }
-      ]
-    };
-  </script>
+  <!-- __FRAMEWORK_COCKPIT_CONFIG__ -->
   <script src="/shared/cockpit-nav.js"></script>
   <script src="/shared/select.js"></script>
   <script src="/shared/workspace-badge.js"></script>

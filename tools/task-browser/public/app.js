@@ -15,8 +15,10 @@ import { copyText as copyClipboardText, flashButton } from '/shared/browser/clip
 import { formatToolTitle } from '/shared/browser/format.js';
 import { createRefreshInteractionRegistry } from '/shared/browser/refresh-interactions.js';
 import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
+import { workspaceFilterForTool } from '/shared/browser/workspace-tools.js';
 
-window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
+const taskBrowserWorkspaceFilter = workspaceFilterForTool('task-browser');
+window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace', workspaceFilter: taskBrowserWorkspaceFilter });
 
 function restoreSelectedKey() {
   if (state.selectedKey) return;
@@ -63,7 +65,7 @@ function applyRefreshData({ data, generation, reason }) {
   restoreSelectedKey();
   reconcileSelectedTask();
   document.title = formatToolTitle(data.workspaceName, 'Tasks');
-  window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: data.workspaceName, root: data.workspaceRoot, tooltipPrefix: 'Workspace' });
+  window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: data.workspaceName, root: data.workspaceRoot, tooltipPrefix: 'Workspace', workspaceFilter: taskBrowserWorkspaceFilter });
   fillSelect(els.projectFilter, unique(data.tasks.map((task) => task.project)), 'All projects');
   fillSelect(els.priorityFilter, data.priorities, 'All priorities');
   restoreFilters();

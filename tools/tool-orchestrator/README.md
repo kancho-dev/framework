@@ -200,7 +200,7 @@ Optional multi-workspace config:
 }
 ```
 
-Workspace IDs are URL-safe and selected with `?workspace=<id>`, so two browser tabs can keep different workspace contexts. Availability checks determine whether an enabled tool is ready or warning. Missing metadata/history paths use each tool's existing default for that workspace. Task Browser and Session Browser default to enabled when their entries are omitted; Tokens / Cost Analyzer requires an explicit `"tokens-cost-analyzer": true` per workspace because analysis can scan full local session history.
+Workspace IDs are URL-safe and selected with `?workspace=<id>`, so two browser tabs can keep different workspace contexts. Cockpit navigation shows only tools enabled for the selected workspace, and each tool's workspace switcher shows only workspaces where that tool is enabled. If only one eligible workspace remains, the switcher renders a label rather than a dropdown. Home links always use the Cockpit icon. Availability checks determine whether an enabled tool is ready or warning. Missing metadata/history paths use each tool's existing default for that workspace. Task Browser and Session Browser default to enabled when their entries are omitted; Tokens / Cost Analyzer requires an explicit `"tokens-cost-analyzer": true` per workspace because analysis can scan full local session history.
 
 The Cockpit is additive. Standalone tools remain available with their existing commands:
 

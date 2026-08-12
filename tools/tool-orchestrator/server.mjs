@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createTaskBrowserHandler } from '../task-browser/server.mjs';
 import { createSessionBrowserHandler } from '../session-browser/server.mjs';
 import { createTokensCostAnalyzerHandler } from '../tokens-cost-analyzer/server.mjs';
-import { exists, safeError, sendJson, serveStaticPath } from '../shared-web/http.mjs';
+import { exists, readStaticText, safeError, sendHtml, sendJson, serveStaticPath } from '../shared-web/http.mjs';
 import { createSubscriptionLimitsReader } from './subscription-limits.mjs';
 
 const baseToolNav = [
@@ -185,12 +185,19 @@ function cockpitConfig(workspace, current = 'home') {
   return {
     enabled: true,
     home: `/${workspaceQuery(workspace)}`,
+    icon: '/icon.svg',
     current,
     workspaceId: workspace.id,
     currentWorkspace: publicWorkspace(workspace),
     workspaces: workspaceConfig.workspaces.map(publicWorkspace),
     tools: navFor(workspace),
   };
+}
+
+async function serveCockpitPage(res, workspace) {
+  const html = await readStaticText(PUBLIC_DIR, '/index.html');
+  const config = JSON.stringify(cockpitConfig(workspace)).replaceAll('<', '\\u003c');
+  return sendHtml(res, html.replace('<!-- __FRAMEWORK_COCKPIT_CONFIG__ -->', `<script>window.__FRAMEWORK_COCKPIT__ = ${config};</script>`));
 }
 
 function createWorkspaceHandlers(workspace) {
@@ -315,6 +322,7 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const workspace = selectedWorkspace(url);
+    if (url.pathname === '/' || url.pathname === '/index.html') return serveCockpitPage(res, workspace);
     if (url.pathname === '/api/tools') return sendJson(res, 200, await toolStatuses(workspace));
     if (url.pathname === '/api/dashboard-config' && req.method === 'GET') return sendJson(res, 200, await readDashboardConfig(workspace));
     if (url.pathname === '/api/dashboard-config' && req.method === 'PUT') return sendJson(res, 200, await writeDashboardConfig(workspace, await readJsonBody(req)));

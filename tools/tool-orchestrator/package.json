@@ -1,10 +1,10 @@
 {
   "name": "agent-tool-orchestrator",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test server.test.mjs subscription-limits.test.mjs public/limits-format.test.mjs ../shared-web/refresh-coordinator.test.mjs"
+    "test": "node --test server.test.mjs subscription-limits.test.mjs public/limits-format.test.mjs ../shared-web/refresh-coordinator.test.mjs ../shared-web/browser/workspace-tools.test.mjs"
   }
 }

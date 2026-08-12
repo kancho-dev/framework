@@ -7,7 +7,9 @@ import { sessionBrowserScope } from '/shared/browser/session-links.js';
 import { clearStaleRequestedSelection, nearestScrollTop, requestedSelection, requestedTopic } from './selection.js';
 import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
 import { tableScrollKeys } from './table-scroll.js';
+import { workspaceFilterForTool } from '/shared/browser/workspace-tools.js';
 
+const sessionBrowserWorkspaceFilter = workspaceFilterForTool('session-browser');
 const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, tagFilter: 'all', sourceErrors: [], metadataError: null };
 let detailUpdatePending = false;
 
@@ -81,7 +83,7 @@ function originRow(session) {
   return pill ? `<span class="origin-row">${pill}</span>` : '';
 }
 
-window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace' });
+window.FrameworkWorkspaceBadge?.set(els.workspaceName, { placeholder: 'Loading workspace…', tooltipPrefix: 'Workspace', workspaceFilter: sessionBrowserWorkspaceFilter });
 
 function updateDocumentTitle() {
   if (state.workspaceName) document.title = formatToolTitle(state.workspaceName, 'Sessions');
@@ -255,7 +257,7 @@ function renderSessionCountStatus() {
 function renderSessions() {
   const query = els.filter.value;
   const sessions = sortSessions(state.sessions.filter((session) => matches(session, query)));
-  window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: state.workspaceName, root: state.workspaceRoot, tooltipPrefix: 'Workspace' });
+  window.FrameworkWorkspaceBadge?.set(els.workspaceName, { name: state.workspaceName, root: state.workspaceRoot, tooltipPrefix: 'Workspace', workspaceFilter: sessionBrowserWorkspaceFilter });
   renderSessionCountStatus();
   const scrollTop = els.sessions.scrollTop;
   els.sessions.innerHTML = sessions.map((session) => `

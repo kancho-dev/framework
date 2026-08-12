@@ -49,6 +49,14 @@ test('tool assets load without a workspace query while pages and APIs remain gat
   const origin = `http://127.0.0.1:${port}`;
   await waitFor(origin, child);
 
+  const disabledPage = await (await fetch(origin)).text();
+  assert.match(disabledPage, /window\.__FRAMEWORK_COCKPIT__ = .*"workspaceId":"default"/);
+  assert.match(disabledPage, /"icon":"\/icon.svg"/, 'Home links use the Cockpit icon from every mounted tool');
+  assert.match(disabledPage, /"tools":\[\]/, 'Cockpit menu reflects the selected workspace tool set');
+  const enabledPage = await (await fetch(`${origin}/?workspace=enabled`)).text();
+  assert.match(enabledPage, /window\.__FRAMEWORK_COCKPIT__ = .*"workspaceId":"enabled"/);
+  assert.match(enabledPage, /"tools":\[.*"task-browser".*"session-browser".*"tokens-cost-analyzer"/);
+
   const disabledConfig = await (await fetch(`${origin}/api/dashboard-config`)).json();
   assert.ok(!disabledConfig.catalog.some((widget) => widget.type === 'daily-usage'));
   const enabledConfig = await (await fetch(`${origin}/api/dashboard-config?workspace=enabled`)).json();
@@ -71,7 +79,9 @@ test('tool assets load without a workspace query while pages and APIs remain gat
     assert.equal((await fetch(`${origin}${tool.base}/index%2Ehtml`)).status, 404, `${tool.base} encoded disabled HTML entry`);
     assert.equal((await fetch(`${origin}${tool.base}/index%2ehtml`)).status, 404, `${tool.base} lowercase encoded disabled HTML entry`);
     assert.equal((await fetch(`${origin}${tool.base}/${tool.api}`)).status, 404, `${tool.base} disabled API`);
-    assert.equal((await fetch(`${origin}${tool.base}/?workspace=enabled`)).status, 200, `${tool.base} enabled page`);
+    const enabledPageResponse = await fetch(`${origin}${tool.base}/?workspace=enabled`);
+    assert.equal(enabledPageResponse.status, 200, `${tool.base} enabled page`);
+    assert.match(await enabledPageResponse.text(), /"icon":"\/icon.svg"/, `${tool.base} Home link uses the Cockpit icon`);
     assert.equal((await fetch(`${origin}${tool.base}/shared/${tool.sharedAsset}`)).status, 200, `${tool.base} workspace-independent shared alias`);
   }
   assert.equal((await fetch(`${origin}/tools/tokens-cost-analyzer/refresh.test.mjs`)).status, 404);
