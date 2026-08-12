@@ -4,6 +4,7 @@ import { unique, sortTasks } from './task-utils.js';
 import { restoreFilters, persistFilters, resetFilters, renderStatusFilters, matches, fillSelect } from './filters.js';
 import { captureBoardScroll, restoreBoardScroll, renderBoard, showSelectedTaskInBoard as revealSelectedTaskInBoard, scrollSelectedCardIntoView, shouldRevealRestoredSelection } from './board.js';
 import { captureDetailFocus, restoreDetailFocus, renderDetail, renderDetailStatic, renderDetailMetadata, renderDetailSteering, attachDetailAutocompletes, continuePrompt } from './detail.js';
+import { captureDetailViewState, restoreDetailViewState } from './detail-view-state.js';
 import { fetchPreview, fetchTasks, moveBoardTask, saveMetadata, saveSteeringNotes } from './api.js';
 import { boardDropMode, columnDragScrollDelta, hasOrderingFilters, insertionIndex, shouldClearDropFeedback } from './board-drag.js';
 import { renderMarkdown } from './markdown.js';
@@ -126,29 +127,35 @@ document.addEventListener('selectionchange', () => {
   if (staticDetailSelectionActive && !active) releaseUnit('detail');
   staticDetailSelectionActive = active;
 });
+function preserveDetailViewState(render) {
+  const viewState = captureDetailViewState({ key: state.selectedKey, pane: els.detailPane, steeringRoot: els.steeringNotes });
+  render();
+  restoreDetailViewState(viewState, { key: state.selectedKey, pane: els.detailPane, steeringRoot: els.steeringNotes });
+}
+
 refresh.registerCommitUnit({
   key: 'detail',
   isDeferred: () => Boolean(selectedTask()) && hasStaticDetailSelection(),
-  commit: async (transaction) => { applyRefreshData(transaction); renderDetailStatic(selectedTask()); },
+  commit: async (transaction) => preserveDetailViewState(() => { applyRefreshData(transaction); renderDetailStatic(selectedTask()); }),
 });
 refresh.registerCommitUnit({
   key: 'detail-metadata',
   isDeferred: () => metadataInteractions.isDeferred(els.detailMeta),
-  commit: async (transaction) => {
+  commit: async (transaction) => preserveDetailViewState(() => {
     applyRefreshData(transaction);
     const focus = captureDetailFocus();
     window.FrameworkAutocomplete?.cleanup(els.detailMeta);
     renderDetailMetadata(selectedTask());
     attachDetailAutocompletes();
     restoreDetailFocus(focus);
-  },
+  }),
 });
 refresh.registerCommitUnit({
   key: 'detail-steering',
   isDeferred: () => steeringInteractions.isDeferred(els.steeringNotes)
     || els.steeringNotes.contains(document.activeElement)
     || Boolean(state.selectedKey && state.steeringDrafts[state.selectedKey]?.dirty),
-  commit: async (transaction) => { applyRefreshData(transaction); renderDetailSteering(selectedTask()); },
+  commit: async (transaction) => preserveDetailViewState(() => { applyRefreshData(transaction); renderDetailSteering(selectedTask()); }),
 });
 
 function render({ preserveScroll = null } = {}) {

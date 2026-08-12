@@ -142,7 +142,7 @@ Metadata edits call the local `PATCH /api/task-metadata` endpoint and write only
 
 ## Steering Notes
 
-The detail drawer also exposes the selected discovered task's optional `NOTES.md` as **Steering Notes**: one transient instruction for the next Task Run. Explicit Save and Clear actions use a constrained `PUT /api/steering-notes` endpoint; Clear deletes the file. A card indicator appears only while non-whitespace guidance is pending. Dirty drafts survive board refresh, and revision conflicts prevent a stale editor from overwriting a note changed or consumed elsewhere.
+The detail drawer also exposes the selected discovered task's optional `NOTES.md` as **Steering Notes**: one transient instruction for the next Task Run. Explicit Save and Clear actions use a constrained `PUT /api/steering-notes` endpoint; Clear deletes the file. A card indicator appears only while non-whitespace guidance is pending. Dirty drafts, drawer scroll position, and a manually resized Steering Notes editor survive board refresh; revision conflicts prevent a stale editor from overwriting a note changed or consumed elsewhere.
 
 Steering Notes are not live messaging: an Agent checks once at task-run start, immediately deletes `NOTES.md` after capturing a non-empty payload, and does not poll. Saving does not change status or `nextActor`. Note content is never copied into task-browser metadata or history. See framework `TASKS.md` for authorship, one-shot consumption, conflict-authority, and run-log rules. Workspace `OPERATOR-NOTES.md` is a separate durable Operator-maintained list.
 
