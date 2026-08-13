@@ -109,6 +109,8 @@ Example shape:
 
 Task Browser metadata owns UI/workflow fields: `displayId`, `status`, `priority`, `type`, nullable `nextActor`, `blockedBy`, `parent`, `children`, `related`, `tags`, and optional positive-integer `order`.
 
+Server and metadata CLI writes are safe to run concurrently. Every writer holds the same cross-process lock for its complete read-modify-write transaction, then publishes through a per-write temporary file and atomic rename. A writer waits up to five seconds for an active transaction before failing rather than overwriting state; locks owned by a process that no longer exists are recovered automatically.
+
 `nextActor` is `operator`, `agent`, or `null` and answers who must take the next meaningful action for the task to advance. It is not task status, ownership, an assignee, or the narrative next action. The board renders set values as accessible icon-only person/robot badges beside the display ID; unset tasks have no badge. Framework `TASKS.md` is the authoritative source for scenario-based update rules.
 
 `GET /api/summary` exposes `nextActors.counts.operator`, `nextActors.counts.agent`, and up to three compact `nextActors.operatorTasks` for the selected workspace. Only `planned`, `active`, `blocked`, and `review` tasks with accepted actor values are included; `paused`, `done`, unset, and unknown values are excluded defensively. Operator tasks are ordered by actionable status (`blocked`, `review`, `active`, `planned`), priority, explicit order, discovery order, title, and key. Cockpit consumes this contract without reproducing task-domain rules.

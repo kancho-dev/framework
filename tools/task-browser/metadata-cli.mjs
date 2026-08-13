@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from 'node:path';
-import { addRelationship, appendHistoryEvent, applyOptions, applyRelationshipPatch, ARRAY_FIELDS, buildHistoryEvent, changedTaskKeys, cleanArray, discoverTask, fieldName, findWorkspaceRoot, historyPathFor, metadataPathFor, normalizeTask, readHistory, readMetadata, removeRelationship, required, resolveTask, setChildren as setChildrenRelation, setParent as setParentRelation, snapshotTasks, split, writeMetadata } from './metadata-helpers.mjs';
+import { addRelationship, appendHistoryEvent, applyOptions, applyRelationshipPatch, ARRAY_FIELDS, buildHistoryEvent, changedTaskKeys, cleanArray, discoverTask, fieldName, findWorkspaceRoot, historyPathFor, metadataPathFor, normalizeTask, readHistory, readMetadata, removeRelationship, required, resolveTask, setChildren as setChildrenRelation, setParent as setParentRelation, snapshotTasks, split, withMetadataLock, writeMetadata } from './metadata-helpers.mjs';
 
 main().catch((error) => {
   console.error(`Error: ${error.message}`);
@@ -10,7 +10,13 @@ main().catch((error) => {
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   if (!command || command === 'help' || command === '--help') return help();
-  const ctx = await context(command === 'init');
+  const workspaceRoot = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
+  const metadataPath = metadataPathFor(workspaceRoot);
+  const execute = async () => runCommand(command, args, await context(command === 'init', workspaceRoot, metadataPath));
+  return isWriteCommand(command) ? withMetadataLock(metadataPath, execute) : execute();
+}
+
+async function runCommand(command, args, ctx) {
   if (command === 'list') return print(await list(ctx, parseOptions(args)));
   if (command === 'get') return print(await getTask(ctx, required(args[0], 'task reference')));
   if (command === 'key') return console.log(resolveTask(ctx.metadata, required(args[0], 'task reference')).key);
@@ -31,9 +37,11 @@ async function main() {
   throw new Error(`Unknown command: ${command}`);
 }
 
-async function context(allowMissing = false) {
-  const workspaceRoot = resolve(process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
-  const metadataPath = metadataPathFor(workspaceRoot);
+function isWriteCommand(command) {
+  return !['list', 'get', 'key', 'history'].includes(command);
+}
+
+async function context(allowMissing, workspaceRoot, metadataPath) {
   const metadata = await readMetadata(metadataPath, { allowMissing });
   return { workspaceRoot, metadataPath, historyPath: historyPathFor(workspaceRoot, metadataPath), metadata };
 }

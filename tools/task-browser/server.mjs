@@ -4,7 +4,7 @@ import { open, readdir, readFile, realpath, rename, stat, unlink, writeFile } fr
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appendHistoryEvent, applyBrowserPatch, applyRelationshipPatch, buildHistoryEvent, changedTaskKeys, deriveBlocks, findWorkspaceRoot, historyPathFor, metadataPathFor, readHistory, readMetadata, snapshotTasks, STATUSES, syncMetadataTasks, writeMetadata } from './metadata-helpers.mjs';
+import { appendHistoryEvent, applyBrowserPatch, applyRelationshipPatch, buildHistoryEvent, changedTaskKeys, deriveBlocks, findWorkspaceRoot, historyPathFor, metadataPathFor, readHistory, readMetadata, snapshotTasks, STATUSES, syncMetadataTasks, withMetadataLock, writeMetadata } from './metadata-helpers.mjs';
 import { exists, normalizeBasePath, readStaticText, safeError, sendHtml, sendJson, serveStaticPath, stripBasePath } from '../shared-web/http.mjs';
 import { planBoardMove } from './public/board-ordering.js';
 
@@ -216,6 +216,10 @@ async function readTaskPreview(ctx, key, requestedPath, run = false) {
 }
 
 async function syncMetadata(ctx, discovered) {
+  return withMetadataLock(ctx.metadataPath, () => syncMetadataUnlocked(ctx, discovered));
+}
+
+async function syncMetadataUnlocked(ctx, discovered) {
   const metadata = syncMetadataTasks(await readMetadata(ctx.metadataPath, { allowMissing: true }), discovered, { inferType });
   await writeMetadata(ctx.metadataPath, metadata);
   return metadata;
@@ -315,15 +319,17 @@ async function updateTaskMetadata(ctx, key, patch) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw Object.assign(new Error('Invalid metadata patch'), { statusCode: 400 });
   const discovered = await discoverTasks(ctx);
   if (!discovered.some((task) => task.key === key)) throw Object.assign(new Error('Unknown task'), { statusCode: 404 });
-  const metadata = await syncMetadata(ctx, discovered);
-  const beforeTasks = snapshotTasks(metadata);
-  const current = metadata.tasks[key] || {};
-  metadata.tasks[key] = applyBrowserPatch(current, patch);
-  applyRelationshipPatch(metadata, key, patch);
-  const events = changedTaskKeys(beforeTasks, metadata).map((taskKey) => buildHistoryEvent({ key: taskKey, task: metadata.tasks[taskKey], before: beforeTasks[taskKey], after: metadata.tasks[taskKey], actor: 'operator', source: 'browser', action: 'metadata.patch' })).filter(Boolean);
-  await writeMetadata(ctx.metadataPath, metadata);
-  for (const event of events) await appendHistoryEvent(ctx.historyPath, event);
-  return { ...metadata.tasks[key], blocks: deriveBlocks(metadata, key) };
+  return withMetadataLock(ctx.metadataPath, async () => {
+    const metadata = await syncMetadataUnlocked(ctx, discovered);
+    const beforeTasks = snapshotTasks(metadata);
+    const current = metadata.tasks[key] || {};
+    metadata.tasks[key] = applyBrowserPatch(current, patch);
+    applyRelationshipPatch(metadata, key, patch);
+    const events = changedTaskKeys(beforeTasks, metadata).map((taskKey) => buildHistoryEvent({ key: taskKey, task: metadata.tasks[taskKey], before: beforeTasks[taskKey], after: metadata.tasks[taskKey], actor: 'operator', source: 'browser', action: 'metadata.patch' })).filter(Boolean);
+    await writeMetadata(ctx.metadataPath, metadata);
+    for (const event of events) await appendHistoryEvent(ctx.historyPath, event);
+    return { ...metadata.tasks[key], blocks: deriveBlocks(metadata, key) };
+  });
 }
 
 async function moveTaskOnBoard(ctx, request) {
@@ -332,19 +338,21 @@ async function moveTaskOnBoard(ctx, request) {
   if (!STATUSES.includes(request.status)) throw Object.assign(new Error('Invalid destination status'), { statusCode: 400 });
   if (!Number.isInteger(request.index) || request.index < 0) throw Object.assign(new Error('Invalid destination index'), { statusCode: 400 });
   const discovered = await discoverTasks(ctx);
-  const metadata = syncMetadataTasks(await readMetadata(ctx.metadataPath, { allowMissing: true }), discovered, { inferType });
-  const beforeTasks = snapshotTasks(metadata);
-  let plan;
-  try {
-    plan = planBoardMove(discovered.map((task) => ({ ...task, metadata: metadata.tasks[task.key] })), request);
-  } catch (error) {
-    throw Object.assign(error, { statusCode: /Unknown task/.test(error.message) ? 404 : 400 });
-  }
-  for (const change of plan) metadata.tasks[change.key] = applyBrowserPatch(metadata.tasks[change.key], change.metadata);
-  const events = changedTaskKeys(beforeTasks, metadata).map((taskKey) => buildHistoryEvent({ key: taskKey, task: metadata.tasks[taskKey], before: beforeTasks[taskKey], after: metadata.tasks[taskKey], actor: 'operator', source: 'browser', action: 'board.move' })).filter(Boolean);
-  await writeMetadata(ctx.metadataPath, metadata);
-  for (const event of events) await appendHistoryEvent(ctx.historyPath, event);
-  return { changes: plan.map(({ key }) => ({ key, metadata: { ...metadata.tasks[key], blocks: deriveBlocks(metadata, key) } })) };
+  return withMetadataLock(ctx.metadataPath, async () => {
+    const metadata = syncMetadataTasks(await readMetadata(ctx.metadataPath, { allowMissing: true }), discovered, { inferType });
+    const beforeTasks = snapshotTasks(metadata);
+    let plan;
+    try {
+      plan = planBoardMove(discovered.map((task) => ({ ...task, metadata: metadata.tasks[task.key] })), request);
+    } catch (error) {
+      throw Object.assign(error, { statusCode: /Unknown task/.test(error.message) ? 404 : 400 });
+    }
+    for (const change of plan) metadata.tasks[change.key] = applyBrowserPatch(metadata.tasks[change.key], change.metadata);
+    const events = changedTaskKeys(beforeTasks, metadata).map((taskKey) => buildHistoryEvent({ key: taskKey, task: metadata.tasks[taskKey], before: beforeTasks[taskKey], after: metadata.tasks[taskKey], actor: 'operator', source: 'browser', action: 'board.move' })).filter(Boolean);
+    await writeMetadata(ctx.metadataPath, metadata);
+    for (const event of events) await appendHistoryEvent(ctx.historyPath, event);
+    return { changes: plan.map(({ key }) => ({ key, metadata: { ...metadata.tasks[key], blocks: deriveBlocks(metadata, key) } })) };
+  });
 }
 
 async function readJsonBody(req) {

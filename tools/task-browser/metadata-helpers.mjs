@@ -1,4 +1,5 @@
-import { appendFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { appendFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
 export const STATUSES = ['planned', 'active', 'blocked', 'review', 'paused', 'done'];
@@ -57,11 +58,104 @@ function normalizeStoredNextActor(task) {
   return { ...task, nextActor: NEXT_ACTORS.includes(task.nextActor) ? task.nextActor : null };
 }
 
+export function metadataTemporaryPath(path) {
+  return `${path}.${process.pid}.${randomUUID()}.tmp`;
+}
+
 export async function writeMetadata(path, metadata) {
   await mkdir(dirname(path), { recursive: true });
-  const temp = `${path}.tmp`;
-  await writeFile(temp, `${JSON.stringify(metadata, null, 2)}\n`);
-  await rename(temp, path);
+  const temp = metadataTemporaryPath(path);
+  try {
+    await writeFile(temp, `${JSON.stringify(metadata, null, 2)}\n`, { flag: 'wx' });
+    await rename(temp, path);
+  } catch (error) {
+    await rm(temp, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+export async function withMetadataLock(path, action, { timeoutMs = 5000, retryMs = 20, staleMs = 30_000, beforeReclaim = null } = {}) {
+  const lockPath = `${path}.lock`;
+  const token = randomUUID();
+  const ownerPath = join(lockPath, `owner.${token}.json`);
+  const deadline = Date.now() + timeoutMs;
+  await mkdir(dirname(path), { recursive: true });
+
+  while (true) {
+    try {
+      await mkdir(lockPath);
+      await writeLockOwner(ownerPath, token);
+      break;
+    } catch (error) {
+      if (error.code !== 'EEXIST') {
+        await rm(lockPath, { recursive: true, force: true }).catch(() => {});
+        throw error;
+      }
+      if (await reclaimAbandonedLock(lockPath, ownerPath, token, staleMs, beforeReclaim)) break;
+      if (Date.now() >= deadline) {
+        const owner = await findLockOwner(lockPath);
+        throw new Error(`Timed out waiting for metadata lock: ${lockPath}${owner?.pid ? ` (owner pid ${owner.pid})` : ''}`);
+      }
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, retryMs));
+    }
+  }
+
+  try {
+    return await action();
+  } finally {
+    const owner = await readLockOwner(ownerPath);
+    if (owner?.token === token) await rm(lockPath, { recursive: true, force: true });
+  }
+}
+
+async function reclaimAbandonedLock(lockPath, ownerPath, token, staleMs, beforeReclaim) {
+  const owner = await findLockOwner(lockPath);
+  if (owner?.transition || (owner?.pid && processExists(owner.pid))) return false;
+  if (!owner) {
+    const info = await stat(lockPath).catch(() => null);
+    if (!info || Date.now() - info.mtimeMs < staleMs) return false;
+    return claimOwnerlessLock(lockPath, ownerPath, token);
+  }
+  if (beforeReclaim) await beforeReclaim();
+  const stealingPath = join(lockPath, 'owner.stealing');
+  try { await rename(owner.path, stealingPath); }
+  catch (error) { if (['ENOENT', 'EEXIST', 'ENOTEMPTY'].includes(error.code)) return false; throw error; }
+  await writeLockOwner(ownerPath, token);
+  await rm(stealingPath, { force: true });
+  return true;
+}
+
+async function claimOwnerlessLock(lockPath, ownerPath, token) {
+  const claimingPath = join(lockPath, 'owner.claiming');
+  try { await writeFile(claimingPath, token, { flag: 'wx' }); }
+  catch (error) { if (error.code === 'EEXIST') return false; throw error; }
+  try { await writeLockOwner(ownerPath, token); }
+  finally { await rm(claimingPath, { force: true }); }
+  return true;
+}
+
+async function writeLockOwner(path, token) {
+  await writeFile(path, JSON.stringify({ pid: process.pid, token, createdAt: new Date().toISOString() }), { flag: 'wx' });
+}
+
+async function findLockOwner(lockPath) {
+  const names = await readdir(lockPath).catch((error) => { if (error.code === 'ENOENT') return []; throw error; });
+  if (names.includes('owner.stealing') || names.includes('owner.claiming')) return { transition: true };
+  const name = names.find((entry) => /^owner\.[^.]+\.json$/.test(entry));
+  if (!name) return null;
+  const path = join(lockPath, name);
+  const owner = await readLockOwner(path);
+  return owner ? { ...owner, path } : null;
+}
+
+async function readLockOwner(path) {
+  try { return JSON.parse(await readFile(path, 'utf8')); }
+  catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
+}
+
+function processExists(pid) {
+  try { process.kill(pid, 0); return true; }
+  catch (error) { return error.code === 'EPERM'; }
 }
 
 export function metadataChanges(before = {}, after = {}) {
