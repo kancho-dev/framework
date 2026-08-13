@@ -395,7 +395,21 @@ function metadataTags(value) {
   return normalizeTags([...(Array.isArray(value?.tags) ? value.tags : []), ...(Array.isArray(value?.labels) ? value.labels : [])]);
 }
 
-const METADATA_VERSION = 2;
+const METADATA_VERSION = 3;
+
+function normalizeSavedTopics(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).flatMap(([entryId, topic]) => {
+    const id = String(entryId || '').trim();
+    if (!id) return [];
+    return [[id, {
+      title: String(topic?.title || '').trim().slice(0, 240),
+      note: String(topic?.note || '').trim().slice(0, 1000),
+      prompt: String(topic?.prompt || '').trim().slice(0, 1000),
+      timestamp: String(topic?.timestamp || '').trim(),
+    }]];
+  }));
+}
 
 function emptyMetadata() {
   return { version: METADATA_VERSION, sessions: {} };
@@ -408,7 +422,7 @@ async function readMetadata(ctx) {
     const normalized = { ...emptyMetadata(), version: Math.max(Number(parsed?.version || 1), METADATA_VERSION) };
     for (const [key, value] of Object.entries(sessions)) {
       const tags = metadataTags(value);
-      normalized.sessions[key] = { bookmarked: Boolean(value?.bookmarked), tags };
+      normalized.sessions[key] = { bookmarked: Boolean(value?.bookmarked), tags, savedTopics: normalizeSavedTopics(value?.savedTopics) };
     }
     return { metadata: normalized, error: null };
   } catch (error) {
@@ -426,7 +440,8 @@ async function writeMetadata(ctx, metadata) {
 
 function metadataForSession(metadata, session) {
   const item = metadata.sessions[sessionKey(session)] || {};
-  return { bookmarkKey: sessionKey(session), bookmarked: Boolean(item.bookmarked), tags: metadataTags(item) };
+  const savedTopics = normalizeSavedTopics(item.savedTopics);
+  return { bookmarkKey: sessionKey(session), bookmarked: Boolean(item.bookmarked), tags: metadataTags(item), savedTopics, savedTopicCount: Object.keys(savedTopics).length };
 }
 
 function attachMetadata(session, metadata) {
@@ -437,16 +452,17 @@ async function updateSessionMetadata(ctx, path, patch) {
   const key = sessionKey(path);
   const { metadata, error } = await readMetadata(ctx);
   if (error) throw new Error(error);
-  const current = metadata.sessions[key] || { bookmarked: false, tags: [] };
+  const current = metadata.sessions[key] || { bookmarked: false, tags: [], savedTopics: {} };
   const patchTags = patch.tags === undefined ? patch.labels : patch.tags;
   const next = {
     bookmarked: patch.bookmarked === undefined ? Boolean(current.bookmarked) : Boolean(patch.bookmarked),
     tags: patchTags === undefined ? metadataTags(current) : normalizeTags(patchTags),
+    savedTopics: patch.savedTopics === undefined ? normalizeSavedTopics(current.savedTopics) : normalizeSavedTopics(patch.savedTopics),
   };
-  if (!next.bookmarked && next.tags.length === 0) delete metadata.sessions[key];
+  if (!next.bookmarked && next.tags.length === 0 && Object.keys(next.savedTopics).length === 0) delete metadata.sessions[key];
   else metadata.sessions[key] = next;
   await writeMetadata(ctx, metadata);
-  return { key, ...next };
+  return { key, ...next, savedTopicCount: Object.keys(next.savedTopics).length };
 }
 
 function isOpenCodeRef(ref) {

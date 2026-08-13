@@ -34,7 +34,7 @@ PORT=8790 npm start
 The tool helps you:
 
 - browse sessions by prompt, cwd, origin, source, recency, latest context load, bookmarks, and tags;
-- bookmark important sessions and add simple manual tags that persist locally;
+- bookmark important sessions, add simple manual tags, and save prompt-led topics locally;
 - skim conversations, topic anchors, assistant answers, and tool actions;
 - copy restore commands back into Pi, OpenCode, or Codex;
 - inspect patches, edits, todos, and copyable assistant code blocks.
@@ -196,8 +196,8 @@ Non-obvious constraints found by implementation — the things a change here is 
 ## UI Guide
 
 - **Search**: filter by prompt, cwd, name, id, path, or tag.
-- **Bookmarked filter**: show only sessions you marked with ★.
-- **Tag filter**: show sessions with a selected manual tag; filter dropdowns use the shared capped-height listbox styling.
+- **Curation filters**: use the gold-star **Bookmarked** and **Has saved topics** filters independently or together; combined filters use AND semantics.
+- **Tag filter**: show sessions with a selected manual tag; it sits with **Clear** below the curation filters and uses the shared capped-height listbox styling.
 - **More filters & sort**: expand only when needed for source, work-dir (`cwd`), and sort controls; opened dropdowns use the same shared slick listbox treatment as autocomplete suggestions.
 - **Clear**: reset search, filters, source, work-dir, and sort back to defaults.
 - **Origin pills**: cards for subdirectory sessions show a compact workspace-relative cwd label; hover for the full cwd. Workspace-root sessions omit the pill to reduce clutter.
@@ -205,14 +205,15 @@ Non-obvious constraints found by implementation — the things a change here is 
 - **Auto 10s**: enabled by default; refreshes session list and selected detail.
 - **Deferred detail refresh**: selecting reader text pauses detail refresh and shows a sticky warning; choose **Refresh now** to clear the selection and apply the waiting refresh.
 - **Context pill/bar**: latest recorded context load (`Xk ctx`) against the tool's static 200k preferred ceiling; this is an operational handoff threshold, not the model's context-window percentage.
-- **Topics rail**: jump between user prompts in the selected session.
+- **Topics rail**: jump between user prompts; saved topics have a leading gold ★, topics with notes also show a note icon, and clicking the link only navigates. **Saved only** appears when the selected session has saved topics. The first prompt has no separate star.
 - **Show tool calls**: off by default; reveal tool-only/action detail when needed.
-- **Bookmark**: mark/unmark the selected session as worth finding again.
+- **Bookmark**: manually mark/unmark the selected session as worth finding again. This remains independent from saved topics.
+- **Saved-topic count**: session cards with saved topics show an `N saved topics` relation-style pill; adding or removing topics never changes the manual session bookmark.
 - **Tags**: add or remove simple manual tags from the selected session with shared capped-height autocomplete suggestions.
 - **Copy restore cmd**: copy the source-specific command to resume a session in the native tool.
 - **Parent/child links**: OpenCode parent/child sessions and Claude Code parent/sub-agent sessions are shown as quick links when available.
 - **Patches/todos**: `apply_patch`/patch blocks and `todowrite` arrays are rendered best-effort.
-- **Copy prompt**: user messages get a small copy button for reusing prompts in new sessions.
+- **Prompt actions**: each user prompt ends with a thin action row containing labeled **Copy** and **Save** / **Edit saved** controls. Save/Edit opens the local saved-topic dialog.
 - **Code blocks**: fenced assistant markdown code blocks get a small copy button.
 - **Markdown tables**: assistant pipe tables render as scrollable tables and keep horizontal scroll position across auto-refresh.
 
@@ -232,15 +233,23 @@ Override it when needed:
 SESSION_BROWSER_METADATA=/path/to/session-browser-metadata.json npm start
 ```
 
-The file shape is intentionally simple and private/local. Older metadata files using `labels` are still read as a compatibility alias; run `node tools/session-browser/migrate-metadata.mjs` to rewrite them to canonical `tags`:
+The file shape is intentionally simple and private/local. Saved topics are keyed by the source topic-entry ID and may contain private prompt excerpts, titles, and notes. Older metadata files using `labels` are still read as a compatibility alias; run `node tools/session-browser/migrate-metadata.mjs` to rewrite them to canonical `tags` while preserving saved topics:
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "sessions": {
     "pi:/abs/path/to/session.jsonl": {
       "bookmarked": true,
-      "tags": ["framework", "release"]
+      "tags": ["framework", "release"],
+      "savedTopics": {
+        "user-message-id": {
+          "title": "Why browse-first beats transcript indexing",
+          "note": "Useful product decision",
+          "prompt": "Should Session Browser become search-first?",
+          "timestamp": "2026-08-12T15:35:00.000Z"
+        }
+      }
     },
     "opencode:session-id": {
       "bookmarked": false,
@@ -254,9 +263,11 @@ The file shape is intentionally simple and private/local. Older metadata files u
 }
 ```
 
-To reset bookmarks and tags, stop the server and delete the metadata file. To back them up, copy that file. Treat it as private because tags and session keys can reveal local paths, project names, or work topics.
+To reset bookmarks, tags, and saved topics, stop the server and delete the metadata file. To back them up, copy that file. Treat it as private because tags, saved titles/notes/prompt excerpts, and session keys can reveal local paths, project names, or work topics.
 
 For existing-workspace upgrades from older metadata paths, see the metadata-path move in `migrations/v0.14.0.md`, indexed from `MIGRATIONS.md`. Explicit `SESSION_BROWSER_METADATA` override paths remain supported.
+
+Saved topics intentionally remain attached to their source sessions: there is no separate global Saved collection and session text search does not search saved-topic titles, notes, or prompt excerpts. If a saved entry ID no longer resolves to a displayed prompt, its private metadata remains counted but is not rendered and Session Browser never guesses a replacement. This rare fail-soft case is documented as a risk; recovery can be added if real use demonstrates a need.
 
 The first slice is deliberately manual: the tool does not auto-tag sessions and does not expose CLI/API workflows for agents to write tags on your behalf.
 

@@ -34,11 +34,16 @@
       <div class="filters">
         <input id="filter" type="search" placeholder="Filter by prompt, cwd, name, id, tag…" autocomplete="off">
         <div class="quick-filters">
-          <label class="bookmark-filter"><input id="bookmark-filter" type="checkbox"><span>★ Bookmarked</span></label>
-          <select id="tag-filter" aria-label="Filter by tag">
-            <option value="all">All tags</option>
-          </select>
-          <button id="clear-filters" type="button">Clear</button>
+          <div class="curation-filters">
+            <label class="curation-filter"><input id="bookmark-filter" type="checkbox"><span><span class="filter-star" aria-hidden="true">★</span> Bookmarked</span></label>
+            <label class="curation-filter"><input id="saved-topic-session-filter" type="checkbox"><span><span class="filter-star" aria-hidden="true">★</span> Has saved topics</span></label>
+          </div>
+          <div class="tag-filter-row">
+            <select id="tag-filter" aria-label="Filter by tag">
+              <option value="all">All tags</option>
+            </select>
+            <button id="clear-filters" type="button">Clear</button>
+          </div>
         </div>
         <details class="filter-options">
           <summary>More filters & sort ▾</summary>
@@ -95,7 +100,10 @@
         </header>
         <div class="reader-layout">
           <nav class="topics">
-            <h3>Topics</h3>
+            <div class="topics-head">
+              <h3>Topics</h3>
+              <label id="saved-topics-filter-label" class="saved-topics-filter hidden"><input id="saved-topics-filter" type="checkbox"> Saved only</label>
+            </div>
             <ol id="topics"></ol>
           </nav>
           <article id="messages" class="messages"></article>
@@ -103,6 +111,21 @@
       </section>
     </main>
   </div>
+  <dialog id="saved-topic-dialog" class="saved-topic-dialog">
+    <form method="dialog">
+      <p class="eyebrow">saved topic</p>
+      <h2 id="saved-topic-dialog-heading">Save this topic</h2>
+      <label>Title<input id="saved-topic-title" maxlength="240"></label>
+      <label>Optional note<textarea id="saved-topic-note" maxlength="1000" rows="4"></textarea></label>
+      <p class="saved-topic-help">Stored only in Session Browser’s private local metadata.</p>
+      <div class="saved-topic-dialog-actions">
+        <button id="remove-saved-topic" type="button" class="remove-saved-topic hidden">Remove</button>
+        <span></span>
+        <button type="button" data-dialog-cancel>Cancel</button>
+        <button id="confirm-saved-topic" type="submit">Save topic</button>
+      </div>
+    </form>
+  </dialog>
   <!-- __FRAMEWORK_COCKPIT_CONFIG__ -->
   <script src="/shared/cockpit-nav.js"></script>
   <script src="/shared/workspace-badge.js"></script>

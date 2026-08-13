@@ -1,5 +1,6 @@
 import { renderMarkdown } from '/shared/browser/markdown.js';
 import { escapeHtml, textFromContent, formatDate } from './formatters.js';
+import { savedTopicPromptAction } from './saved-topics.js';
 
 function roleLabel(entry) {
   if (entry.type !== 'message') return entry.type;
@@ -141,7 +142,7 @@ function modeBadge(mode) {
   return mode ? `<span class="mode-badge">${escapeHtml(mode)}</span>` : '';
 }
 
-export function renderEntry(entry, allEntries) {
+export function renderEntry(entry, allEntries, { savedTopics = {} } = {}) {
   const role = roleLabel(entry);
   const timestamp = formatDate(entry.timestamp);
   if (entry.type === 'message' && role === 'toolResult') return '';
@@ -163,7 +164,8 @@ export function renderEntry(entry, allEntries) {
 
   if (entry.type === 'message' && role === 'user') {
     const text = textFromContent(entry.message.content);
-    return `<section class="message user" id="entry-${escapeHtml(entry.id)}"><button type="button" class="copy-user-prompt" title="Copy prompt" aria-label="Copy prompt">⧉</button><div class="message-head"><div class="message-role">user</div><div class="message-actions"><span class="timestamp">${escapeHtml(timestamp)}</span></div></div><div class="content">${escapeHtml(text)}</div></section>`;
+    const action = savedTopicPromptAction(entry.id, savedTopics);
+    return `<section class="message user" id="entry-${escapeHtml(entry.id)}"><div class="message-head"><div class="message-role">user</div><div class="message-actions"><span class="timestamp">${escapeHtml(timestamp)}</span></div></div><div class="content">${escapeHtml(text)}</div><div class="prompt-actions"><button type="button" class="copy-user-prompt" title="Copy prompt" aria-label="Copy prompt">⧉ Copy</button><button type="button" class="save-user-topic ${action.saved ? 'active' : ''}" data-prompt-save-id="${escapeHtml(entry.id)}" title="${action.saved ? 'Edit saved topic' : 'Save topic'}">${action.saved ? '★' : '☆'} ${action.label}</button></div></section>`;
   }
 
   if (entry.type === 'compaction') {

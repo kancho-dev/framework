@@ -7,10 +7,11 @@ import { sessionBrowserScope } from '/shared/browser/session-links.js';
 import { clearStaleRequestedSelection, nearestScrollTop, requestedSelection, requestedTopic } from './selection.js';
 import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
 import { tableScrollKeys } from './table-scroll.js';
+import { matchesSavedTopicSessionFilter, savedTopicDestination, savedTopicNoteIndicator, topicRows } from './saved-topics.js';
 import { workspaceFilterForTool } from '/shared/browser/workspace-tools.js';
 
 const sessionBrowserWorkspaceFilter = workspaceFilterForTool('session-browser');
-const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, tagFilter: 'all', sourceErrors: [], metadataError: null };
+const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, savedTopicSessionFilter: false, tagFilter: 'all', savedTopicsFilter: false, sourceErrors: [], metadataError: null };
 
 const els = {
   refresh: document.querySelector('#refresh'),
@@ -20,6 +21,7 @@ const els = {
   cwdFilter: document.querySelector('#cwd-filter'),
   sortMode: document.querySelector('#sort-mode'),
   bookmarkFilter: document.querySelector('#bookmark-filter'),
+  savedTopicSessionFilter: document.querySelector('#saved-topic-session-filter'),
   tagFilter: document.querySelector('#tag-filter'),
   clearFilters: document.querySelector('#clear-filters'),
   status: document.querySelector('#status'),
@@ -41,6 +43,14 @@ const els = {
   deferredRefresh: document.querySelector('#deferred-refresh'),
   applyDeferredRefresh: document.querySelector('#apply-deferred-refresh'),
   topics: document.querySelector('#topics'),
+  savedTopicsFilter: document.querySelector('#saved-topics-filter'),
+  savedTopicsFilterLabel: document.querySelector('#saved-topics-filter-label'),
+  savedTopicDialog: document.querySelector('#saved-topic-dialog'),
+  savedTopicDialogHeading: document.querySelector('#saved-topic-dialog-heading'),
+  savedTopicTitle: document.querySelector('#saved-topic-title'),
+  savedTopicNote: document.querySelector('#saved-topic-note'),
+  removeSavedTopic: document.querySelector('#remove-saved-topic'),
+  confirmSavedTopic: document.querySelector('#confirm-saved-topic'),
   messages: document.querySelector('#messages'),
 };
 
@@ -131,6 +141,8 @@ function restoreFilterState() {
   els.filter.value = saved.query || '';
   els.bookmarkFilter.checked = Boolean(saved.bookmarkFilter);
   state.bookmarkFilter = els.bookmarkFilter.checked;
+  els.savedTopicSessionFilter.checked = Boolean(saved.savedTopicSessionFilter);
+  state.savedTopicSessionFilter = els.savedTopicSessionFilter.checked;
   state.sourceFilter = saved.sourceFilter || 'all';
   state.cwdFilter = saved.cwdFilter || 'all';
   state.tagFilter = saved.tagFilter || 'all';
@@ -140,6 +152,7 @@ function persistFilterState() {
   localStorage.setItem(filtersContinuityKey(), JSON.stringify({
     query: els.filter.value,
     bookmarkFilter: state.bookmarkFilter,
+    savedTopicSessionFilter: state.savedTopicSessionFilter,
     sourceFilter: state.sourceFilter,
     cwdFilter: state.cwdFilter,
     tagFilter: state.tagFilter,
@@ -148,6 +161,7 @@ function persistFilterState() {
 }
 function applyFilterControlValues() {
   els.bookmarkFilter.checked = state.bookmarkFilter;
+  els.savedTopicSessionFilter.checked = state.savedTopicSessionFilter;
   els.sourceFilter.value = state.sourceFilter;
   els.cwdFilter.value = state.cwdFilter;
   els.cwdFilter.title = state.cwdFilter === 'all' ? 'All work dirs' : state.cwdFilter;
@@ -168,6 +182,7 @@ function matches(session, query) {
   if (state.sourceFilter !== 'all' && session.source !== state.sourceFilter) return false;
   if (state.cwdFilter !== 'all' && (session.cwd || '') !== state.cwdFilter) return false;
   if (state.bookmarkFilter && !isBookmarked(session)) return false;
+  if (!matchesSavedTopicSessionFilter(session, state.savedTopicSessionFilter)) return false;
   if (state.tagFilter !== 'all' && !sessionTags(session).includes(state.tagFilter)) return false;
   if (!query.trim()) return true;
   const haystack = [session.id, session.name, session.cwd, session.firstPrompt, session.path, sessionTags(session).join(' ')].join(' ').toLowerCase();
@@ -267,6 +282,7 @@ function renderSessions() {
         ${originRow(session)}
         <div class="prompt">${escapeHtml(session.name || session.firstPrompt || '(no user prompt found)')}</div>
         ${session.parentId ? '<div class="relation-line"><span class="relation-badge">child session</span></div>' : ''}
+        ${session.metadata?.savedTopicCount ? `<div class="relation-line"><span class="saved-topic-count">${session.metadata.savedTopicCount} saved topic${session.metadata.savedTopicCount === 1 ? '' : 's'}</span></div>` : ''}
         ${renderTagPills(sessionTags(session))}
         <div class="token-bar ${contextLoadLevel(session)}"><span style="width: ${contextLoadPercent(session)}%"></span></div>
       </button>
@@ -386,15 +402,21 @@ function renderSelectedDetail({ scrollTopic = true } = {}) {
   els.readerMeta.innerHTML = `<div class="meta-row primary">${primaryMeta.join('')}</div><div class="meta-row secondary">${secondaryMeta.map(([label, value]) => `<span><strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}</span>`).join('')}</div>`;
   renderTagEditor(detail);
   restoreSelectedTopic(detail);
-  els.topics.innerHTML = detail.topicAnchors.map((anchor) => `
-    <li><a class="${anchor.id === state.selectedTopicId ? 'active' : ''}" href="#entry-${escapeHtml(anchor.id)}" data-topic-id="${escapeHtml(anchor.id)}">${anchor.depth === 'first-prompt' ? '★ ' : ''}${escapeHtml(anchor.title)}</a></li>
-  `).join('');
+  const savedTopics = detail.metadata?.savedTopics || {};
+  const savedTopicCount = Object.keys(savedTopics).length;
+  if (!savedTopicCount) state.savedTopicsFilter = false;
+  els.savedTopicsFilter.checked = state.savedTopicsFilter;
+  els.savedTopicsFilterLabel.classList.toggle('hidden', !savedTopicCount);
+  els.topics.innerHTML = topicRows(detail.topicAnchors, savedTopics, state.savedTopicsFilter).map((anchor) => {
+    const saved = Boolean(anchor.saved);
+    return `<li class="topic-row ${saved ? 'saved' : ''}"><a class="${anchor.id === state.selectedTopicId ? 'active' : ''}" href="#entry-${escapeHtml(anchor.id)}" data-topic-id="${escapeHtml(anchor.id)}">${saved ? '<span class="saved-topic-mark" aria-hidden="true">★</span> ' : ''}${escapeHtml(anchor.saved?.title || anchor.title)}${savedTopicNoteIndicator(anchor.saved)}</a></li>`;
+  }).join('');
   scheduleSelectedTopicLinkScroll();
   const openDetails = new Set(Array.from(els.messages.querySelectorAll('details[data-detail-key][open]')).map((node) => node.dataset.detailKey));
   const tableScrollPositions = captureTableScrollPositions();
   const codeBlockScrollPositions = captureCodeBlockScrollPositions();
   els.messages.classList.toggle('hide-tools', !els.showTools.checked);
-  els.messages.innerHTML = detail.activeEntries.map((entry) => renderEntry(entry, detail.entries)).join('');
+  els.messages.innerHTML = detail.activeEntries.map((entry) => renderEntry(entry, detail.entries, { savedTopics })).join('');
   assignTableScrollKeys();
   for (const node of els.messages.querySelectorAll('details[data-detail-key]')) {
     if (openDetails.has(node.dataset.detailKey)) node.open = true;
@@ -545,10 +567,43 @@ detailRefresh.registerCommitUnit({
   },
 });
 
+let editingTopicId = null;
+function openSavedTopicDialog(topicId) {
+  const anchor = state.selectedDetail?.topicAnchors?.find((item) => item.id === topicId);
+  if (!anchor) return;
+  editingTopicId = topicId;
+  const saved = state.selectedDetail.metadata?.savedTopics?.[topicId];
+  els.savedTopicDialogHeading.textContent = saved ? 'Edit saved topic' : 'Save this topic';
+  els.confirmSavedTopic.textContent = saved ? 'Save changes' : 'Save topic';
+  els.savedTopicTitle.value = saved?.title || anchor.title;
+  els.savedTopicNote.value = saved?.note || '';
+  els.removeSavedTopic.classList.toggle('hidden', !saved);
+  els.savedTopicDialog.showModal();
+  els.savedTopicTitle.focus();
+  els.savedTopicTitle.select();
+}
+
+async function persistSavedTopic(remove = false) {
+  if (!editingTopicId || !state.selectedDetail) return;
+  const anchor = state.selectedDetail.topicAnchors.find((item) => item.id === editingTopicId);
+  if (!anchor) {
+    els.savedTopicDialog.close();
+    return;
+  }
+  const savedTopics = { ...(state.selectedDetail.metadata?.savedTopics || {}) };
+  if (remove) delete savedTopics[editingTopicId];
+  else savedTopics[editingTopicId] = { title: els.savedTopicTitle.value.trim() || anchor.title, note: els.savedTopicNote.value.trim(), prompt: anchor.title, timestamp: anchor.timestamp || '' };
+  await saveMetadata(state.selectedDetail.path, { savedTopics });
+  els.savedTopicDialog.close();
+}
+
 async function selectSession(path, options = {}) {
   const url = new URL(location.href);
   if (clearStaleRequestedSelection(url, path)) history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
-  if (state.selectedPath !== path) clearSelectedTopic(state.selectedPath);
+  if (state.selectedPath !== path) {
+    clearSelectedTopic(state.selectedPath);
+    state.savedTopicsFilter = false;
+  }
   state.selectedPath = path;
   state.selectedDetail = null;
   if (options.topicId) state.selectedTopicId = options.topicId;
@@ -599,6 +654,11 @@ els.bookmarkFilter.addEventListener('change', () => {
   persistFilterState();
   renderSessions();
 });
+els.savedTopicSessionFilter.addEventListener('change', () => {
+  state.savedTopicSessionFilter = els.savedTopicSessionFilter.checked;
+  persistFilterState();
+  renderSessions();
+});
 els.tagFilter.addEventListener('change', () => {
   state.tagFilter = els.tagFilter.value;
   persistFilterState();
@@ -623,6 +683,7 @@ els.sortMode.addEventListener('change', () => {
 els.clearFilters.addEventListener('click', () => {
   els.filter.value = '';
   state.bookmarkFilter = false;
+  state.savedTopicSessionFilter = false;
   state.sourceFilter = 'all';
   state.cwdFilter = 'all';
   state.tagFilter = 'all';
@@ -686,7 +747,12 @@ els.topics.addEventListener('click', (event) => {
   const link = event.target.closest('a[data-topic-id]');
   if (!link) return;
   event.preventDefault();
-  state.selectedTopicId = link.dataset.topicId;
+  const savedTopics = state.selectedDetail?.metadata?.savedTopics || {};
+  const destination = savedTopics[link.dataset.topicId]
+    ? savedTopicDestination(state.selectedDetail?.topicAnchors, savedTopics, link.dataset.topicId)
+    : { topicId: link.dataset.topicId };
+  if (!destination) return;
+  state.selectedTopicId = destination.topicId;
   persistSelectedTopic();
   renderSelectedDetail();
 });
@@ -694,6 +760,17 @@ els.topics.addEventListener('click', (event) => {
 els.applyDeferredRefresh.addEventListener('click', () => {
   applyDeferredRefresh().catch((error) => { els.readerTitle.textContent = error.message; });
 });
+
+els.savedTopicsFilter.addEventListener('change', () => {
+  state.savedTopicsFilter = els.savedTopicsFilter.checked;
+  renderSelectedDetail({ scrollTopic: false });
+});
+els.savedTopicDialog.querySelector('form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  persistSavedTopic(false).catch((error) => { els.readerTitle.textContent = error.message; });
+});
+els.savedTopicDialog.querySelector('[data-dialog-cancel]').addEventListener('click', () => els.savedTopicDialog.close());
+els.removeSavedTopic.addEventListener('click', () => persistSavedTopic(true).catch((error) => { els.readerTitle.textContent = error.message; }));
 
 els.messages.addEventListener('click', async (event) => {
   const copyCode = event.target.closest('.copy-code');
@@ -706,7 +783,10 @@ els.messages.addEventListener('click', async (event) => {
   if (copyPrompt) {
     const prompt = copyPrompt.closest('.message.user')?.querySelector('.content')?.textContent || '';
     await copyAndFlash(prompt, copyPrompt);
+    return;
   }
+  const saveTopic = event.target.closest('[data-prompt-save-id]');
+  if (saveTopic) openSavedTopicDialog(saveTopic.dataset.promptSaveId);
 });
 
 els.readerRelations.addEventListener('click', (event) => {

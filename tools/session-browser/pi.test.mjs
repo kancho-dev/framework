@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -42,6 +42,13 @@ async function getJson(server, path) {
   return res.json();
 }
 
+async function putMetadata(server, path, patch) {
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/metadata`, {
+    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, ...patch }),
+  });
+  return res.json();
+}
+
 test('Pi session without a completed response reports unknown context', async (t) => {
   const server = await startServer();
   t.after(() => server.close());
@@ -54,6 +61,33 @@ test('Pi detail reports latest active-branch context', async (t) => {
   t.after(() => server.close());
   const detail = await getJson(server, `/api/session?ref=${encodeURIComponent(join(sessionRoot, 'compact.jsonl'))}`);
   assert.deepEqual(detail.contextLoad, { latest: 50000, preferredCeiling: 200000 });
+});
+
+test('saved topics persist independently from the manual session bookmark', async (t) => {
+  const metadataPath = join(workspaceRoot, 'saved-topics-metadata.json');
+  const handler = createSessionBrowserHandler({ workspaceRoot, metadataPath });
+  const server = createServer(async (req, res) => { if (!(await handler(req, res))) { res.statusCode = 404; res.end(); } });
+  await new Promise((resolve) => server.listen(0, resolve));
+  t.after(() => server.close());
+  t.after(() => rm(metadataPath, { force: true }));
+  const path = join(sessionRoot, 'compact.jsonl');
+
+  let result = await putMetadata(server, path, { bookmarked: true });
+  assert.equal(result.metadata.bookmarked, true);
+  result = await putMetadata(server, path, { savedTopics: { u2: { title: 'Continue', note: 'Useful answer', prompt: 'continue', timestamp: '2026-01-01T00:02:00.000Z' } } });
+  assert.equal(result.metadata.bookmarked, true);
+  assert.equal(result.metadata.savedTopicCount, 1);
+
+  result = await putMetadata(server, path, { savedTopics: {} });
+  assert.equal(result.metadata.bookmarked, true);
+  assert.equal(result.metadata.savedTopicCount, 0);
+  const stored = JSON.parse(await readFile(metadataPath, 'utf8'));
+  assert.equal(stored.version, 3);
+  assert.equal(stored.sessions[`pi:${path}`].bookmarked, true);
+
+  const detail = await getJson(server, `/api/session?ref=${encodeURIComponent(path)}`);
+  assert.equal(detail.metadata.bookmarked, true);
+  assert.equal(detail.metadata.savedTopicCount, 0);
 });
 
 test('a repeated list scan reflects appended, added, and removed sessions', async (t) => {

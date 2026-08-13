@@ -46,16 +46,16 @@ async function main() {
   const sessions = parsed && typeof parsed.sessions === 'object' && !Array.isArray(parsed.sessions) ? parsed.sessions : {};
   let changed = false;
   let migrated = 0;
-  const next = { ...parsed, version: Math.max(Number(parsed?.version || 1), 2), sessions: {} };
+  const next = { ...parsed, version: Math.max(Number(parsed?.version || 1), 3), sessions: {} };
 
   for (const [key, value] of Object.entries(sessions)) {
     const tags = normalizeTags([...(Array.isArray(value?.tags) ? value.tags : []), ...(Array.isArray(value?.labels) ? value.labels : [])]);
-    const entry = { bookmarked: Boolean(value?.bookmarked), tags };
+    const entry = { bookmarked: Boolean(value?.bookmarked), tags, ...(value?.savedTopics ? { savedTopics: value.savedTopics } : {}) };
     if (value?.labels !== undefined || JSON.stringify(value?.tags || []) !== JSON.stringify(tags) || value?.bookmarked !== entry.bookmarked) {
       changed = true;
       if (value?.labels !== undefined) migrated += 1;
     }
-    if (entry.bookmarked || entry.tags.length > 0) next.sessions[key] = entry;
+    if (entry.bookmarked || entry.tags.length > 0 || Object.keys(entry.savedTopics || {}).length > 0) next.sessions[key] = entry;
     else changed = true;
   }
 
