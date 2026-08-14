@@ -213,6 +213,14 @@ The analyzer intentionally avoids context-window percentages and invoice-grade c
 
 OpenCode support reads assistant-message usage from the local `opencode.db`, and falls back to the `session` aggregate row only when no message-level usage exists. Its explicit per-response `tokens.total` is authoritative because it also covers `tokens.reasoning`, which is recorded beside `output` rather than inside it; when that total is missing, the analyzer derives it from `input + output + reasoning + cache.read + cache.write`. Reasoning tokens therefore count toward token totals but are not priced, so cost stays an input/output/cache estimate. Session Browser applies the same total and fallback rule (shared in `tools/shared-web/opencode-usage.mjs`), so both tools report the same OpenCode total.
 
+### Known limitation: sessions that change model mid-way
+
+Tokens and cost are attributed per usage record, and each record is priced with the model that produced it — Pi tracks `model_change`/`thinking_level_change` state, OpenCode and Claude Code carry the model on each message. **Totals and the by-model breakdown are therefore correct even when a session switches models.**
+
+What is not correct is the *label* on session-scoped views. A session rollup keeps the first record's model, and Session Browser shows the model in effect at the end of the session, in both cases with no indication that other models were used. Read a session row's model as "one of the models this session used", not "the model this session used", and use the by-model chart when the split matters. Mid-session model changes are uncommon enough that this is accepted behavior rather than a planned fix; the transcript in Session Browser still shows each `model_change` entry if you need the real sequence. Codex is the one source that discards the sequence at ingest — it keeps only the last `turn_context` model.
+
+Tiered pricing is a separate, real gap: bundled pricing entries for the GPT-5.5/5.6 family carry above-272k-input-token rates that the estimator does not apply, so very large-context requests on those models are estimated at the base rate and undercharged.
+
 Codex support reads local rollout JSONL files from `CODEX_SESSION_ROOT` or `$CODEX_HOME/sessions`. It uses `event_msg.token_count.info.last_token_usage` records and splits `cached_input_tokens` out of `input_tokens` so cached tokens are not double-counted. `total_token_usage` is cumulative and is not used for per-record accounting.
 
 Observed local Codex rollout records do not expose cache-write tokens or native recorded cost. The analyzer estimates Codex cost from input, output, and cache-read tokens only, without repeating cache-write warnings on every Codex record.
