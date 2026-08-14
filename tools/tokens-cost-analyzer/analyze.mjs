@@ -11,6 +11,7 @@ import { atomicWrite } from './atomic-write.mjs';
 import { SCHEMA, SCHEMA_VERSION, buildReportHeader, stampRecordIdentity } from './report-contract.mjs';
 import { loadSourcesConfig } from './sources-config.mjs';
 import { dailyUsage } from './rollups.mjs';
+import { COST_ESTIMATOR_VERSION, estimateCost } from './cost-estimator.mjs';
 import { createDerivationCache } from './derivation-cache.mjs';
 import { attributePiWorkspace, attributeWorkspace, parseSelfConfig, scanScope, SCAN_SCOPE_FILE } from './workspace-scope.mjs';
 import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel } from '../shared-web/model-normalization.mjs';
@@ -51,7 +52,7 @@ const deriveFile = createDerivationCache({
   outDir,
   generatorVersion,
   pricingFingerprint: pricing.pricingFingerprint,
-  contextFingerprint: fileFingerprint(JSON.stringify(scopes)),
+  contextFingerprint: fileFingerprint(JSON.stringify({ scopes, costEstimatorVersion: COST_ESTIMATOR_VERSION })),
 });
 const records = [];
 const warnings = [];
@@ -590,23 +591,6 @@ function buildRecord({ source, workspaceId, sessionId, messageId = null, nativeM
 
 function normalizeTokens(tokens) {
   return Object.fromEntries(Object.entries(tokens).map(([key, value]) => [key, { value: value ?? null, class: value == null ? 'unknown' : 'recorded' }]));
-}
-
-function estimateCost(tokens, price, options = {}) {
-  const warnings = [];
-  const omittedTokenWarnings = new Set(options.omittedTokenWarnings || []);
-  if (!price) return { cost: null, class: 'unknown', warnings: ['unpriced model'] };
-  let cost = 0;
-  for (const [field, priceField] of [['input', 'input'], ['output', 'output'], ['cacheRead', 'cacheRead'], ['cacheWrite', 'cacheWrite']]) {
-    const value = tokens[field].value;
-    if (value == null) {
-      if (!omittedTokenWarnings.has(field)) warnings.push(`unknown ${field} tokens`);
-      continue;
-    }
-    if (price[priceField] == null) { if (value > 0) warnings.push(`unpriced ${field} tokens`); continue; }
-    cost += (value / 1_000_000) * Number(price[priceField]);
-  }
-  return { cost: Number(cost.toFixed(6)), class: warnings.length ? 'estimated-partial' : 'estimated', warnings };
 }
 
 function findPrice(pricing, provider, model, modelLabel = null) {
