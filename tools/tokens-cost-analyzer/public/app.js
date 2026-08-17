@@ -220,8 +220,9 @@ function renderFilterBar(model, root) {
   }
   $('#usage-filter-all-trigger').innerHTML = triggerContent(model.combined, model);
   $('#usage-filter-all').innerHTML = model.facets.map((facet) => optionListHtml(facet, model, true)).join('');
-  $('#usage-filter-chips').innerHTML = model.chips.map(chipHtml).join('');
-  $('#usage-filter-clear').classList.toggle('hidden', !model.active);
+  $('#usage-filter-active-trigger').innerHTML = `<span>Filters · <span class="filter-count">${model.count}</span></span><i class="chevron" aria-hidden="true"></i><span class="sr-only"> active</span>`;
+  $('#usage-filter-active').innerHTML = activeFilterHtml(model);
+  $('#usage-filter-clear').disabled = !model.active;
   for (const selector of ['#daily-filter-state', '#breakdown-filter-state']) {
     const el = $(selector, root);
     el.classList.toggle('hidden', !state_.active);
@@ -245,6 +246,11 @@ function optionListHtml(facet, model, withHeading = false) {
 
 function chipHtml(chip) {
   return `<button type="button" class="filter-chip${chip.stale ? ' stale' : ''}" data-filter-chip="${chip.name}" value="${escapeHtml(chip.value)}" title="${escapeHtml(chip.remove)}" aria-label="${escapeHtml(chip.remove)}">${escapeHtml(chip.label)}<i aria-hidden="true">×</i></button>`;
+}
+
+function activeFilterHtml(model) {
+  if (!model.active) return `<p class="active-filter-empty">No active filters</p>`;
+  return model.activeGroups.map((group) => `<section class="active-filter-group"><h3>${escapeHtml(group.title)}</h3><div class="active-filter-chips">${group.chips.map(chipHtml).join('')}</div></section>`).join('');
 }
 
 function renderUsageBreakdown(data, usage, filters, root) {

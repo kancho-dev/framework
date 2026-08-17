@@ -21,14 +21,14 @@ test('a trigger names its facet and its selection before it is opened', () => {
   assert.equal(idle.active, false);
 
   const picked = filterBarModel(options, selection(['machine-a', 'machine-b']));
-  assert.equal(facet(picked, 'machine').label, 'Machines · 2 selected', 'the count is visible without opening the list');
+  assert.equal(facet(picked, 'machine').label, 'Machines · 2', 'the compact count is visible without changing the control width');
   assert.equal(facet(picked, 'workspace').label, 'Workspaces · All', 'an untouched facet still says All');
   assert.equal(picked.active, true);
 });
 
 test('the narrow-screen trigger sums every facet so nothing hides behind a collapse', () => {
   const model = filterBarModel(options, selection(['machine-a'], [workspaceFilterKey('machine-a', 'ws-1')]));
-  assert.equal(model.combined.label, 'Filters · 2 selected');
+  assert.equal(model.combined.label, 'Filters · 2');
   assert.equal(model.count, 2);
 });
 
@@ -49,6 +49,7 @@ test('selections appear as removable chips addressed by facet and value', () => 
     ['workspace', key, 'machine-a / ws-1'],
   ]);
   assert.equal(model.chips[1].remove, 'Remove workspace filter machine-a / ws-1');
+  assert.deepEqual(model.activeGroups.map((group) => [group.title, group.chips.length]), [['Machines', 1], ['Workspaces', 1]], 'the summary popover groups active values by facet');
   assert.deepEqual(filterBarModel(options, selection()).chips, [], 'nothing selected, nothing to clear');
 });
 
@@ -76,7 +77,7 @@ test('scope is stated once, by the model', () => {
 
 test('agent tool is a cohort facet like any other', () => {
   const model = filterBarModel(options, selection(['machine-a'], [], ['pi']));
-  assert.equal(facet(model, 'source').label, 'Agent tools · 1 selected');
+  assert.equal(facet(model, 'source').label, 'Agent tools · 1');
   assert.equal(model.count, 2, 'facets compose rather than replacing one another');
   const chip = model.chips.find((entry) => entry.name === 'source');
   assert.deepEqual([chip.value, chip.label, chip.remove], ['pi', 'pi', 'Remove agent tool filter pi']);
@@ -84,7 +85,7 @@ test('agent tool is a cohort facet like any other', () => {
 
 test('model is a cohort facet alongside the others', () => {
   const model = filterBarModel(options, selection([], [], [], ['anthropic/claude-opus-5']));
-  assert.equal(facet(model, 'model').label, 'Models · 1 selected');
+  assert.equal(facet(model, 'model').label, 'Models · 1');
   const chip = model.chips.find((entry) => entry.name === 'model');
   assert.equal(chip.remove, 'Remove model filter anthropic/claude-opus-5');
   assert.equal(filterBarModel(options, selection(['machine-a'], [], ['pi'], ['anthropic/claude-opus-5'])).count, 3, 'every facet counts toward the collapsed trigger');

@@ -33,6 +33,7 @@ export function filterBarModel(options = {}, selection = {}) {
   return {
     facets,
     chips: facets.flatMap((facet) => facet.options.filter((option) => option.checked).map((option) => chip(facet, option))),
+    activeGroups: facets.map((facet) => ({ name: facet.name, title: facet.title, chips: facet.options.filter((option) => option.checked).map((option) => chip(facet, option)) })).filter((group) => group.chips.length),
     active: count > 0,
     count,
     combined: { name: 'all', title: 'Filters', label: triggerLabel('Filters', count), count },
@@ -51,8 +52,8 @@ function buildFacet(facet, available, chosen) {
   return { ...facet, options: all, count: chosen.size, total: available.length, label: triggerLabel(facet.title, chosen.size) };
 }
 
-/** `Machines · All` before it is touched, `Machines · 2 selected` after. */
-function triggerLabel(title, count) { return `${title} · ${count ? `${count} selected` : 'All'}`; }
+/** Compact counts keep every toolbar control the same width as filters change. */
+function triggerLabel(title, count) { return `${title} · ${count || 'All'}`; }
 
 function chip(facet, option) {
   return { name: facet.name, value: option.value, label: option.label, stale: Boolean(option.stale), remove: `Remove ${facet.singular} filter ${option.label}` };
