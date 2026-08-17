@@ -3,6 +3,8 @@
 // definition, because a daily total that disagreed between the two would be
 // invisible until a user compared the widget with the dashboard.
 
+import { normalizeModelProvider } from '../shared-web/model-normalization.mjs';
+
 export function dailyUsage(records) {
   const byDay = new Map();
   for (const record of records) {
@@ -24,6 +26,104 @@ export function workspaceKey(record) {
   const machineId = record.sourceKey || 'unknown-machine';
   const workspaceId = record.workspaceId || 'unknown-workspace';
   return `${machineId}/${workspaceId}`;
+}
+
+/**
+ * The transport behind every filterable usage view. Records are folded
+ * server-side into one cell per (UTC day, agent tool, machine, workspace,
+ * provider, model) so the browser can filter and re-bucket exactly without ever
+ * receiving the private record set. Cells partition the dated records, which is
+ * what makes conservation a property of the data rather than of the chart code.
+ *
+ * The grain is the day rather than the week the first chart happens to draw:
+ * the daily heatmap follows the same machine/workspace cohort, and a coarser
+ * cell cannot be split back apart. On this workspace's ~48k records the daily
+ * grain is ~300 cells, so the finer transport costs nothing worth trading.
+ *
+ * Model identity travels as the adapter's own normalized label *plus* its
+ * normalized provider, kept apart rather than pre-joined: whether a provider
+ * qualifies a label is a display decision, and the browser owns it (see
+ * `modelIdentity` in `public/usage-breakdown.js`). Adding both fields to the
+ * grain cost 306 → 344 cells on the real local report — a tenth more, because a
+ * machine's model mix barely varies within one UTC day.
+ *
+ * Missing attribution is carried as an empty string, not as an invented label:
+ * the display name for "unknown" is a UI decision, and the browser owns it.
+ */
+export function usageCells(records) {
+  const cells = new Map();
+  let undatedTokens = 0;
+  let undatedRecords = 0;
+  for (const record of records) {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(record.date || '') ? record.date : null;
+    if (!date) {
+      // Undated records cannot sit on a time axis, so they are disclosed as a
+      // count rather than silently dropped or given a fabricated bucket.
+      undatedTokens += Number(record.totalTokens) || 0;
+      undatedRecords += 1;
+      continue;
+    }
+    const source = record.source || '';
+    const machineId = record.sourceKey || '';
+    const workspaceId = record.workspaceId || '';
+    const provider = normalizeModelProvider(record.source, record.provider);
+    const model = record.modelLabel || record.model || '';
+    // JSON rather than a delimiter: the parts are free-form strings, and the
+    // previous NUL separator made this file binary to git, so its diffs were
+    // unreviewable. A structural key cannot collide and stays readable.
+    const key = JSON.stringify([date, source, machineId, workspaceId, provider, model]);
+    const current = cells.get(key) || newCell(date, source, machineId, workspaceId, provider, model);
+    current.tokens += Number(record.totalTokens) || 0;
+    current.records += 1;
+    current.unknownCostRecords += isUnknownCost(record) ? 1 : 0;
+    addCosts(current, record);
+    cells.set(key, current);
+  }
+  return { cells: [...cells.values()].map(finishCell).sort(compareCells), undatedTokens, undatedRecords };
+}
+
+function newCell(date, source, machineId, workspaceId, provider, model) {
+  return {
+    date, source, machineId, workspaceId, provider, model,
+    tokens: 0, records: 0, unknownCostRecords: 0,
+    recordedCost: 0, estimatedCost: 0,
+    recordedCostRecords: 0, estimatedCostRecords: 0,
+    costExcludedRecords: 0, costExcludedTokens: 0,
+  };
+}
+
+/**
+ * Cost travels as a sum *and* as a count of the records that actually carried a
+ * value, because a cost metric has three states one number cannot express:
+ * priced, unpriced, and excluded by decision. Without the counts a group with no
+ * available cost renders as `$0` and reads as free usage. Currency-excluded
+ * records are carried apart from unpriced ones: their tokens stay attributable,
+ * their cost was removed deliberately, and conflating the two would report a
+ * merge decision as a data-quality problem.
+ */
+function addCosts(cell, record) {
+  if (record.costExcluded) {
+    cell.costExcludedRecords += 1;
+    cell.costExcludedTokens += Number(record.totalTokens) || 0;
+    return;
+  }
+  if (record.recordedCost != null) {
+    cell.recordedCost += Number(record.recordedCost) || 0;
+    cell.recordedCostRecords += 1;
+  }
+  if (record.estimatedCost != null) {
+    cell.estimatedCost += Number(record.estimatedCost) || 0;
+    cell.estimatedCostRecords += 1;
+  }
+}
+
+function finishCell(cell) {
+  return { ...cell, recordedCost: round(cell.recordedCost), estimatedCost: round(cell.estimatedCost) };
+}
+
+function compareCells(a, b) {
+  return a.date.localeCompare(b.date) || a.source.localeCompare(b.source) || a.machineId.localeCompare(b.machineId)
+    || a.workspaceId.localeCompare(b.workspaceId) || a.provider.localeCompare(b.provider) || a.model.localeCompare(b.model);
 }
 
 export function summarize(normalized, daily, subscriptions, merge = null) {
@@ -52,6 +152,7 @@ export function summarize(normalized, daily, subscriptions, merge = null) {
     byModel: rows(group(records, (r) => r.modelLabel || r.model || 'unknown-model')),
     bySource: rows(group(records, (r) => r.source || 'unknown-source')),
     byWorkspace: rows(group(records, workspaceKey)),
+    usage: usageCells(records),
     merge,
     monthly,
     daily,

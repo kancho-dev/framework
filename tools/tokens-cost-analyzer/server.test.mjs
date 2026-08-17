@@ -494,6 +494,21 @@ test('a currency-excluded source contributes tokens without inflating the unpric
   assert.deepEqual(unknownBy(payload.byModel), [['unknown-model', 1]]);
   assert.deepEqual(unknownBy(payload.bySource), [['pi', 1]]);
   assert.deepEqual(unknownBy(payload.byWorkspace).sort(), [['eu/eu-ws', 0], ['workstation/framework', 1]]);
+
+  // The aggregate cells carry the same three cost states as the headline, since
+  // the cost breakdowns are drawn from them and never from the records.
+  const excluded = payload.usage.cells.find((cell) => cell.machineId === 'eu');
+  const local = payload.usage.cells.find((cell) => cell.machineId === 'workstation');
+  assert.equal(excluded.tokens, 5, 'excluded costs never exclude tokens');
+  assert.equal(excluded.recordedCost, 0);
+  assert.equal(excluded.recordedCostRecords, 0, 'no EUR amount can enter a USD stack');
+  assert.equal(excluded.costExcludedRecords, 1);
+  assert.equal(excluded.costExcludedTokens, 5);
+  assert.equal(local.recordedCost, 2);
+  assert.equal(local.recordedCostRecords, 1);
+  assert.equal(local.costExcludedRecords, 0);
+  assert.equal(local.unknownCostRecords, 1, 'the genuinely unpriced record stays a pricing gap');
+  assert.equal(payload.usage.cells.some((cell) => 'subscriptionCost' in cell), false, 'subscription spend has no record to attach to');
 });
 
 test('a limited external source makes the whole aggregate limited', async (t) => {
