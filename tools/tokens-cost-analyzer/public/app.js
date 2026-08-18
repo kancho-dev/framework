@@ -3,7 +3,7 @@ import { escapeHtml } from '/shared/browser/dom.js';
 import { formatDateTime, formatTokens, money } from '/shared/browser/format.js';
 import { sessionBrowserHrefFor, storeSessionBrowserSelection } from '/shared/browser/session-links.js';
 import { provenanceLabel, scopeMismatchWarning, sessionLinkFor, sourceRows, totalsDisclosure } from './provenance.js';
-import { axisLabelled, axisLabelRank, BUCKETS, buildUsageBreakdown, bucketMode, dailySeries, DEFAULT_BUCKET, DEFAULT_GROUPING, DEFAULT_METRIC, GROUPINGS, isCostMetric, METRICS, metricMode, metricValue, OTHER, seriesSlots, unpricedRecords, usageFilterOptions, zeroMetricCopy } from './usage-breakdown.js';
+import { BUCKETS, buildUsageBreakdown, bucketMode, dailySeries, DEFAULT_BUCKET, DEFAULT_GROUPING, DEFAULT_METRIC, GROUPINGS, isCostMetric, METRICS, metricMode, metricValue, OTHER, seriesSlots, unpricedRecords, usageFilterOptions, zeroMetricCopy } from './usage-breakdown.js';
 import { createMorphCommit } from '/shared/browser/refresh-commit.js';
 import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
 import { breakdownFooterModel } from './breakdown-footer.js';
@@ -363,9 +363,6 @@ function renderBreakdownChart(breakdown, slots, currency, root) {
     return;
   }
   const max = Math.max(1, ...breakdown.bucketTotals);
-  // Labels thin out (the rule lives in the pure module); every bar still keeps
-  // its full range in the tooltip and its full-height column as the hover target.
-  const count = breakdown.buckets.length;
   const metric = breakdown.metric;
   el.innerHTML = breakdown.buckets.map((bucket, position) => {
     const total = breakdown.bucketTotals[position];
@@ -375,7 +372,7 @@ function renderBreakdownChart(breakdown, slots, currency, root) {
     // idiom as the monthly cockpit. An empty bucket gets no label: a `0` on an
     // absent bar is noise, and the gap is already the answer.
     const totalLabel = total > 0 ? `<span class="token-label" style="bottom:${(total / max) * 94}%">${unitMarkup(barTotalLabel(total, metric, currency))}</span>` : '';
-    const label = axisLabelled(position, count) ? `<label class="${axisLabelRank(position, count) % 2 ? 'thin' : ''}">${escapeHtml(bucket.label)}</label>` : '';
+    const label = `<label>${escapeHtml(bucket.label)}</label>`;
     return `<div class="month" title="${escapeHtml(`${bucket.range}\n${formatMetric(total, metric, currency)} total`)}">
       <div class="stack">${totalLabel}${stack}</div>${label}
     </div>`;

@@ -134,27 +134,6 @@ function zeroCounts(state) {
 // already uses before it is compared or displayed.
 export function roundCost(value) { return Math.round((Number(value) || 0) * 1000000) / 1000000; }
 
-/**
- * How many bars share one axis label. A dense axis cannot carry a label per bar,
- * and overlapping rotated labels are less readable than fewer of them; the step
- * is anchored at the newest bucket, which is where a reader orients.
- */
-export const MAX_AXIS_LABELS = 12;
-export function axisLabelStep(bucketCount, maxLabels = MAX_AXIS_LABELS) {
-  return Math.max(1, Math.ceil(Math.max(1, bucketCount) / Math.max(1, maxLabels)));
-}
-export function axisLabelled(position, bucketCount, maxLabels = MAX_AXIS_LABELS) {
-  return (bucketCount - 1 - position) % axisLabelStep(bucketCount, maxLabels) === 0;
-}
-/**
- * A labelled bar's ordinal counting back from the newest. Rank parity is what
- * lets a narrow screen drop every second label in CSS: at phone width the same
- * 12 labels collide, and a stylesheet cannot recompute the step.
- */
-export function axisLabelRank(position, bucketCount, maxLabels = MAX_AXIS_LABELS) {
-  return Math.floor((bucketCount - 1 - position) / axisLabelStep(bucketCount, maxLabels));
-}
-
 export function bucketMode(bucket) { return BUCKETS[bucket] || BUCKETS[DEFAULT_BUCKET]; }
 export function groupingMode(groupBy) { return GROUPINGS[groupBy] || GROUPINGS[DEFAULT_GROUPING]; }
 

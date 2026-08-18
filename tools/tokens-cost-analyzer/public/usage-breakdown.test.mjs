@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { dailyUsage, usageCells } from '../rollups.mjs';
-import { axisLabelled, axisLabelRank, axisLabelStep, buildUsageBreakdown, METRICS, GROUPINGS, modelAliases, modelIdentity, UNKNOWN_MODEL, bucketStart, windowRangeLabel, dailySeries, OTHER, seriesSlots, selectCells, timeBuckets, zeroMetricCopy, zeroMetricState, UNKNOWN_TOOL, unknownAttributionTokens, usageFilterOptions, weekBuckets, weekStart, workspaceFilterKey } from './usage-breakdown.js';
+import { buildUsageBreakdown, METRICS, GROUPINGS, modelAliases, modelIdentity, UNKNOWN_MODEL, bucketStart, windowRangeLabel, dailySeries, OTHER, seriesSlots, selectCells, timeBuckets, zeroMetricCopy, zeroMetricState, UNKNOWN_TOOL, unknownAttributionTokens, usageFilterOptions, weekBuckets, weekStart, workspaceFilterKey } from './usage-breakdown.js';
 
 // A Thursday, so "the current week" and "today" are never the same date.
 const NOW = Date.parse('2026-08-13T12:00:00Z');
@@ -491,19 +491,6 @@ test('colour slots follow the grouping and still exclude unknown values', () => 
   assert.equal(slots.has('Unknown machine'), false, 'unknown keeps its reserved colour, not a slot');
 });
 
-test('axis labels thin out from the newest bucket instead of overlapping', () => {
-  assert.equal(axisLabelStep(12), 1, '12 bars still carry a label each');
-  assert.equal(axisLabelStep(24), 2);
-  assert.equal(axisLabelStep(30), 3);
-  assert.equal(axisLabelStep(18), 2);
-  for (const count of [24, 30, 18]) {
-    const labelled = Array.from({ length: count }, (_, position) => axisLabelled(position, count)).filter(Boolean);
-    assert.ok(labelled.length <= 12, `${count} bars never show more than 12 labels`);
-    assert.ok(labelled.length >= 6, `${count} bars keep enough time orientation`);
-    assert.equal(axisLabelled(count - 1, count), true, 'the newest bucket is always labelled');
-  }
-});
-
 test('the chart keeps a bar hit target at every width', () => {
   const css = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
   assert.match(css, /\.chart\{[^}]*overflow-x:auto/, 'dense axes scroll rather than shrink to hairlines');
@@ -513,23 +500,11 @@ test('the chart keeps a bar hit target at every width', () => {
   assert.match(css, /\.month\{[^}]*align-self:stretch/, 'the hover target is the full-height column, not the visible stack');
 });
 
-test('label ranks let a narrow screen drop every second label without moving the rest', () => {
-  const count = 24;
-  const labelled = Array.from({ length: count }, (_, position) => position).filter((position) => axisLabelled(position, count));
-  const ranks = labelled.map((position) => axisLabelRank(position, count));
-  assert.deepEqual(ranks, [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0], 'ranks count back from the newest bucket');
-  assert.equal(axisLabelRank(count - 1, count), 0, 'the newest label survives the narrow-screen halving');
-  assert.equal(ranks.filter((rank) => rank % 2 === 0).length, 6, 'halving 24 weekly bars leaves 6 labels');
-});
-
-test('narrow screens halve the labels rather than shrinking the bars away', () => {
+test('every usage-breakdown bar renders its bucket label at every width', () => {
+  const app = readFileSync(new URL('./app.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
-  assert.match(css, /@media\(max-width:800px\)\{\.breakdown-chart \.month label\.thin\{display:none\}\}/, 'the halving rule exists');
-  const narrowBlocks = [...css.matchAll(/@media\(max-width:(\d+)px\)\{([^@]*)\}/g)].filter(([, width]) => Number(width) <= 800);
-  for (const [, width, body] of narrowBlocks) {
-    const floors = [...body.matchAll(/\.breakdown-chart \.month\{[^}]*min-width:(\d+)px/g)].map(([, value]) => Number(value));
-    for (const floor of floors) assert.ok(floor >= 10, `the ≤${width}px block must not drop the bar hit target to ${floor}px`);
-  }
+  assert.match(app, /const label = `<label>\$\{escapeHtml\(bucket\.label\)\}<\/label>`/, 'the label is unconditional inside the bucket render');
+  assert.doesNotMatch(css, /label\.thin\{display:none\}/, 'narrow screens do not hide alternating labels');
 });
 
 // --- Slice 3 follow-up: whole-window history navigation ---------------------

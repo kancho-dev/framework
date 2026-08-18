@@ -76,7 +76,6 @@
 /* Narrow screens keep every bucket reachable by scrolling the chart, which is
    why the bar floor is a min-width and not a percentage: 24 bars squeezed into
    a phone would be unhoverable long before they were unreadable. */
-@media(max-width:800px){.breakdown-chart .month label.thin{display:none}}
 @media(max-width:600px){.breakdown-controls{gap:6px}.control-group{flex-wrap:wrap}.control-label{font-size:10px}.segmented .segment{padding:5px 8px}.breakdown-chart{gap:3px}}
 
 /* The analysis-context bar. It rides in the sticky header because the views it
