@@ -592,7 +592,7 @@ function unitMarkup(label) {
 
 function compactCurrency(value, currency) {
   const amount = Number(value) || 0;
-  return new Intl.NumberFormat('en', { style: 'currency', currency, notation: 'compact', maximumFractionDigits: Math.abs(amount) >= 100 ? 0 : 1 }).format(amount);
+  return new Intl.NumberFormat('en', { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1 }).format(amount);
 }
 function barHeight(value, max) {
   const amount = Number(value) || 0;

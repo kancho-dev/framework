@@ -812,6 +812,11 @@ test('the legend ends with the selected-window total', () => {
   assert.match(render, /class="breakdown-total"[\s\S]*Total ·/, 'the accumulated total follows the group values');
 });
 
+test('monthly cockpit compact money keeps one decimal of thousands precision', () => {
+  const app = readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  assert.match(app, /notation: 'compact', maximumFractionDigits: 1/, 'in-bar money such as $1.2K is not rounded to $1K');
+});
+
 test('the per-bar total is metric-aware and the bar floor leaves room for it', () => {
   const app = readFileSync(new URL('./app.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
