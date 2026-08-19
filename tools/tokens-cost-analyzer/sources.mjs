@@ -20,6 +20,7 @@ const MINUTE_MS = 60_000;
 // Keyed `cacheDir\0sourceId`: one Cockpit process serves several workspaces from
 // one module instance, so the directory has to be part of the identity.
 const sourceFlights = new Map();
+const sourceInitializations = new Map();
 const sourceSnapshots = new Map();
 
 // Cache fallback is limited to transport failures. A report that arrives and
@@ -134,10 +135,10 @@ async function loadSource(entry, index, context, force) {
   if (source.type === 'archived') return loadArchived(source, index, context);
 
   const key = sourceKeyFor(context, source.id);
-  const snapshot = await currentSnapshot(key, source, context);
-  // Nothing to serve yet, so this one is awaited — at most once per source per
-  // install, and it is what makes adding a source give immediate feedback.
-  if (!snapshot) return describeSnapshot(source, await startRefresh(key, source, index, context), context);
+  const { snapshot, fetchedInitial } = await initializeSnapshot(key, source, index, context);
+  // Nothing existed to serve, so the initial fetch was awaited. Do not turn a
+  // forced cold request into a second detached fetch after that first one lands.
+  if (fetchedInitial) return describeSnapshot(source, snapshot, context);
   // A forced refresh bypasses the cadence guard and reaches the network, but not
   // the response — it returns last-known-good immediately and runs detached under
   // startRefresh's catch, exactly like an ordinary revalidation. A forced refresh
@@ -153,11 +154,24 @@ async function loadSource(entry, index, context, force) {
  * observe a half-updated source and a fetch landing mid-merge cannot change
  * what the in-progress response contains.
  */
-async function currentSnapshot(key, source, context) {
-  if (sourceSnapshots.has(key)) return sourceSnapshots.get(key);
-  const stored = await readCache(context.cacheDir, source.id);
-  if (stored) sourceSnapshots.set(key, stored);
-  return stored;
+function initializeSnapshot(key, source, index, context) {
+  if (sourceSnapshots.has(key)) return Promise.resolve({ snapshot: sourceSnapshots.get(key), fetchedInitial: false });
+
+  let initialization = sourceInitializations.get(key);
+  if (!initialization) {
+    initialization = readCache(context.cacheDir, source.id).then(async (stored) => {
+      if (stored) {
+        sourceSnapshots.set(key, stored);
+        return { snapshot: stored, fetchedInitial: false };
+      }
+      // Cache lookup and first fetch share one boundary. Protecting only the
+      // fetch lets two cold callers both miss, then start consecutive fetches.
+      return { snapshot: await startRefresh(key, source, index, context), fetchedInitial: true };
+    });
+    sourceInitializations.set(key, initialization);
+    initialization.finally(() => sourceInitializations.delete(key)).catch(() => {});
+  }
+  return initialization;
 }
 
 function dueForRefresh(snapshot, context, force) {

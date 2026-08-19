@@ -432,7 +432,7 @@ test('report and daily requests share one in-flight external fetch', async (t) =
   let release;
   const fetch = async () => {
     calls += 1;
-    await new Promise((resolveFetch) => { release = resolveFetch; });
+    if (calls === 1) await new Promise((resolveFetch) => { release = resolveFetch; });
     return { ok: false, state: 'unreachable', detail: 'asleep' };
   };
   const loadExternal = (options) => loadExternalSources({ ...options, fetch });
@@ -440,9 +440,9 @@ test('report and daily requests share one in-flight external fetch', async (t) =
   const report = request(outputDir, { loadExternal });
   const daily = request(outputDir, { loadExternal }, '/api/daily-usage');
   while (!release) await new Promise((resolveWait) => setImmediate(resolveWait));
-  assert.equal(calls, 1);
   release();
   assert.deepEqual((await Promise.all([report, daily])).map((response) => response.status), [200, 200]);
+  assert.equal(calls, 1, 'both cold requests share the cache lookup and initial fetch');
 });
 
 test('the daily endpoint serves merged records so the widget cannot disagree with the dashboard', async (t) => {
