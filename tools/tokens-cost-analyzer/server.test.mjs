@@ -294,22 +294,22 @@ test('the payload carries this machine identity and its local workspace roots', 
 // every deep link vanished with nothing said. `scan-scope.json` is written by
 // the run that stamped the ids, so the two cannot drift apart.
 test('an artifact scanned under one root keeps its links when the server is rooted elsewhere', async (t) => {
-  const outputDir = await fixtureOutputDir(t, { records: [localRecord({ workspaceId: 'kancho' })], workspaces: ['kancho'] });
-  await writeFile(join(outputDir, 'scan-scope.json'), JSON.stringify({ machineId: 'workstation', workspaces: [{ id: 'kancho', root: '/home/kancho' }] }));
+  const outputDir = await fixtureOutputDir(t, { records: [localRecord({ workspaceId: 'alice' })], workspaces: ['alice'] });
+  await writeFile(join(outputDir, 'scan-scope.json'), JSON.stringify({ machineId: 'workstation', workspaces: [{ id: 'alice', root: '/home/alice' }] }));
 
   const { payload } = await request(outputDir);
 
-  assert.deepEqual(payload.linkTargets.workspaces, [{ id: 'kancho', root: '/home/kancho' }], 'link targets follow the scan, not the server root');
+  assert.deepEqual(payload.linkTargets.workspaces, [{ id: 'alice', root: '/home/alice' }], 'link targets follow the scan, not the server root');
   assert.deepEqual(payload.linkTargets.unresolvedWorkspaces, [], 'every scanned workspace resolves');
 });
 
 test('a scope the local configuration cannot resolve is reported instead of silently unlinking', async (t) => {
-  const outputDir = await fixtureOutputDir(t, { records: [localRecord({ workspaceId: 'kancho' })], workspaces: ['kancho'] });
+  const outputDir = await fixtureOutputDir(t, { records: [localRecord({ workspaceId: 'alice' })], workspaces: ['alice'] });
   const { payload } = await request(outputDir);
 
   // No scan-scope.json: the fallback derives ids from the server root, which
-  // cannot know about `kancho`. The rows go inert — and now say so.
-  assert.deepEqual(payload.linkTargets.unresolvedWorkspaces, ['kancho']);
+  // cannot know about `alice`. The rows go inert — and now say so.
+  assert.deepEqual(payload.linkTargets.unresolvedWorkspaces, ['alice']);
 });
 
 test('an unusable sources.json costs the deep links, not the dashboard', async (t) => {

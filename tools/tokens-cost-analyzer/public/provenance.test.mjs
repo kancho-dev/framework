@@ -213,7 +213,7 @@ test('a cross-workspace link is built once, with the target workspace on the hre
 
 // The failure this guards is silent by nature: every link simply disappears.
 test('a scope the artifact used but local configuration does not resolve is announced', () => {
-  assert.match(scopeMismatchWarning({ unresolvedWorkspaces: ['kancho'] }), /Session links are unavailable for kancho.*Re-run the analysis/);
+  assert.match(scopeMismatchWarning({ unresolvedWorkspaces: ['alice'] }), /Session links are unavailable for alice.*Re-run the analysis/);
   assert.equal(scopeMismatchWarning({ unresolvedWorkspaces: [] }), null);
   assert.equal(scopeMismatchWarning(undefined), null);
 });

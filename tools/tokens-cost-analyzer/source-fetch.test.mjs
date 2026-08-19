@@ -73,13 +73,13 @@ test('malformed source entries are rejected as invalid rather than throwing', ()
 });
 
 test('every ssh failure mode maps to a typed state and never leaks stderr', async () => {
-  const secrets = 'kancho@laptop.local: Permission denied (publickey). identity file /home/kancho/.ssh/id_ed25519';
+  const secrets = 'alice@build-host.invalid: Permission denied (publickey). identity file /home/alice/.ssh/id_ed25519';
   const cases = [
     { name: 'auth refused', result: { code: 255, stderr: secrets }, state: 'unauthorized' },
     { name: 'would prompt', result: { code: 255, stderr: 'Host key verification failed for laptop.local' }, state: 'unauthorized' },
     { name: 'unreachable', result: { code: 255, stderr: 'ssh: connect to host laptop.local port 22: Connection timed out' }, state: 'unreachable' },
-    { name: 'missing report', result: { code: 1, stderr: 'cat: /home/kancho/report.v1.json: No such file or directory' }, state: 'missing' },
-    { name: 'directory not file', result: { code: 1, stderr: 'cat: /home/kancho/.tools-config: Is a directory' }, state: 'unreadable' },
+    { name: 'missing report', result: { code: 1, stderr: 'cat: /home/alice/report.v1.json: No such file or directory' }, state: 'missing' },
+    { name: 'directory not file', result: { code: 1, stderr: 'cat: /home/alice/.tools-config: Is a directory' }, state: 'unreadable' },
     { name: 'unreadable', result: { code: 1, stderr: 'cat: /root/report.v1.json: Permission denied' }, state: 'unreadable' },
     { name: 'other non-zero exit', result: { code: 3, stderr: 'weird failure on laptop.local' }, state: 'unreadable' },
     { name: 'timing out mid-stream', result: { code: null, timedOut: true, stdout: '{"partial"' }, state: 'unreadable' },
@@ -93,7 +93,7 @@ test('every ssh failure mode maps to a typed state and never leaks stderr', asyn
     assert.equal(outcome.ok, false, name);
     assert.equal(outcome.state, state, name);
     assert.equal(typeof outcome.detail, 'string', name);
-    assert.doesNotMatch(outcome.detail, /kancho|laptop\.local|id_ed25519|\.ssh/, `${name} detail must not echo ssh stderr`);
+    assert.doesNotMatch(outcome.detail, /alice|build-host\.invalid|laptop\.local|id_ed25519|\.ssh/, `${name} detail must not echo ssh stderr`);
   }
 });
 
