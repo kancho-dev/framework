@@ -19,7 +19,7 @@ By default the analyzer reads all in-scope local sessions/files. For a faster re
 
 The browser automatically refreshes the report every 10 minutes; manual and automatic refreshes rebuild full-history analysis by default. To make server/Cockpit refreshes bounded, launch the tool or Cockpit with `TOKENS_COST_ANALYZER_LIMIT=N`; use `TOKENS_COST_ANALYZER_LIMIT=all` to be explicit about full-history refresh. Limited reports show a trust flag and generated metadata so they are not mistaken for full-history totals.
 
-Each analysis run prints a `Timing:` line giving its total duration split into scan time per source and artifact emission, so a slowdown can be attributed to a source rather than guessed at as history grows. Derived records are cached in per-source shards and reused when the source is unchanged. Source file metadata (or OpenCode's `time_updated` watermark), pricing inputs, analyzer version, and workspace attribution configuration all participate in invalidation; a missing or corrupt shard is rebuilt automatically.
+Each analysis run prints a `Timing:` line giving its total duration split into scan time per source and artifact emission, so a slowdown can be attributed to a source rather than guessed at as history grows. Derived records are cached in per-source shards and reused when the source is unchanged. Source file metadata (or OpenCode's `time_updated` watermark), pricing inputs, cost-estimator semantics, derivation semantics, the analyzer version, and workspace attribution configuration all participate in invalidation; a missing or corrupt shard is rebuilt automatically.
 
 By default it writes private generated output to:
 
@@ -234,3 +234,26 @@ Codex support reads local rollout JSONL files from `CODEX_SESSION_ROOT` or `$COD
 Observed local Codex rollout records do not expose cache-write tokens or native recorded cost. The analyzer estimates Codex cost from input, output, and cache-read tokens only, without repeating cache-write warnings on every Codex record.
 
 Claude Code support reads local session JSONL files from `CLAUDE_PROJECTS_ROOT` (default `$CLAUDE_HOME/projects`, i.e. `~/.claude/projects`) and filters them to the workspace using each assistant message's recorded `cwd`. It maps Anthropic per-message `usage` directly — `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` — with no de-duplication, because Anthropic's `input_tokens` already excludes cached reads. Sub-agent (sidechain) messages under `<parentSessionId>/subagents/agent-*.jsonl` are counted under the same `claude-code` source, and each record's `sessionBrowserPath` matches the Session Browser ref (`claude-code:<sessionId>` or `claude-code:<parentId>/agent-<agentId>`). Claude Code JSONL does not record native cost, so cost is a pricing-table estimate; models absent from the bundled estimated pricing table show as unpriced with a clear warning.
+
+## Versioning
+
+The analyzer's version is **provenance**: it is stamped into the `report.v1.json` header and onto
+every record's `derivation`, so a merged multi-machine report says which build produced each record.
+It is not a compatibility contract — that is the independently versioned `report.v1.json` schema, and
+reports from different analyzer versions merge freely.
+
+Cache invalidation does not *rely* on the version number moving. `DERIVATION_SEMANTICS_VERSION`
+(`derivation-semantics.mjs`) covers changes to how a session file becomes a record, and
+`COST_ESTIMATOR_VERSION` covers cost arithmetic. Increment the relevant one whenever you change that
+behavior — that is the lever to reach for, and it works whether or not the release version moves.
+
+The analyzer version **also** participates in the derivation cache key, deliberately. It is a
+backstop for the case the constants exist to handle: someone changes an adapter and forgets to
+increment. Over-invalidating is the harmless direction; serving stale records is not.
+
+The practical consequence is that **every version bump costs one full re-derivation**. Measured here
+on 50,280 records across 788 shards: cold **6.8 s** against a warm **1.4 s**, after which runs are
+warm again. Shards are rewritten in place — the shard path is a hash of the source file path — so
+nothing accumulates on disk, and no configuration, artifact, or stored data is affected. That cost
+scales with total history; if archived stores ever push cold derivation into tens of seconds, drop
+the version from the cache key and let the semantic constants carry invalidation alone.

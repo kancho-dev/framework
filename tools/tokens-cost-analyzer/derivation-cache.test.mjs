@@ -31,6 +31,11 @@ test('reuses an unchanged file shard and restores out-of-band native identity', 
   assert.deepEqual(warm.records, [{ value: 'cold', restoredId: 'native-1' }]);
 });
 
+// The generator-version term is a deliberate backstop, not leftover coupling (#161). Semantic
+// invalidation is owned by DERIVATION_SEMANTICS_VERSION and COST_ESTIMATOR_VERSION inside
+// contextFingerprint; keeping the release version here additionally catches an adapter change that
+// shipped without incrementing either. It costs one full re-derivation per version bump — see the
+// README's Versioning section for the measured figure and the trigger for dropping it.
 test('source, pricing, and generator changes each invalidate the shard', async (t) => {
   const { root, source } = await fixture(t);
   const calls = { count: 0 };

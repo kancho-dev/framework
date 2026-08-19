@@ -11,7 +11,8 @@ import { atomicWrite } from './atomic-write.mjs';
 import { SCHEMA, SCHEMA_VERSION, buildReportHeader, stampRecordIdentity } from './report-contract.mjs';
 import { loadSourcesConfig } from './sources-config.mjs';
 import { dailyUsage } from './rollups.mjs';
-import { COST_ESTIMATOR_VERSION, estimateCost } from './cost-estimator.mjs';
+import { estimateCost } from './cost-estimator.mjs';
+import { derivationContextFingerprint } from './derivation-semantics.mjs';
 import { createDerivationCache } from './derivation-cache.mjs';
 import { attributePiWorkspace, attributeWorkspace, parseSelfConfig, scanScope, SCAN_SCOPE_FILE } from './workspace-scope.mjs';
 import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel } from '../shared-web/model-normalization.mjs';
@@ -52,7 +53,7 @@ const deriveFile = createDerivationCache({
   outDir,
   generatorVersion,
   pricingFingerprint: pricing.pricingFingerprint,
-  contextFingerprint: fileFingerprint(JSON.stringify({ scopes, costEstimatorVersion: COST_ESTIMATOR_VERSION })),
+  contextFingerprint: derivationContextFingerprint({ scopes }),
 });
 const records = [];
 const warnings = [];

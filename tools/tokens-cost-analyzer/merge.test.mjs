@@ -252,3 +252,21 @@ test('a malformed load costs that source its records, not the whole merge', () =
   const salvaged = mergeReports({ local: { machineId: 'workstation', records: [null, 42, record()] } });
   assert.equal(salvaged.records.length, 1, 'the usable local record survives its malformed neighbours');
 });
+
+// The Analyzer's package version is stamped as `generatorVersion` on every record's `derivation`,
+// so machines upgrade at different times and a merge routinely spans versions. Nothing about that
+// may gate the merge: `generatorVersion` is provenance and a local cache key, never a compatibility
+// contract — the compatibility contract is the independently versioned `report.v1.json` schema.
+test('records derived by different generator versions still merge', () => {
+  const older = record({ machineId: 'laptop', messageId: 'uuid-old', derivation: { generatorVersion: '0.6.0', pricingFingerprint: 'sha256:p' } });
+  const newer = record({ messageId: 'uuid-new', derivation: { generatorVersion: '1.0.0', pricingFingerprint: 'sha256:p' } });
+
+  const merged = mergeReports({ local: local({ records: [newer] }), external: [source({ id: 'laptop', records: [older] })] });
+
+  assert.equal(merged.records.length, 2, 'a version difference excludes nothing');
+  assert.deepEqual(
+    merged.records.map((r) => r.derivation.generatorVersion).sort(),
+    ['0.6.0', '1.0.0'],
+    'both derivations survive the merge with their own provenance intact',
+  );
+});
