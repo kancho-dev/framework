@@ -263,6 +263,14 @@ The file shape is intentionally simple and private/local. Saved topics are keyed
 }
 ```
 
+To move existing annotations onto one configured archived machine's session keys, declare that machine's `originalRoots` and run a dry run first:
+
+```bash
+node tools/session-browser/migrate-metadata.mjs --remap-machine old-linux
+```
+
+Use `--machines /path/to/machines.json` to inspect a non-default machine config. The command rewrites only keys that resolve to files or IDs in that archive and skips sessions that still resolve in current live stores. It preserves unmatched keys and merges existing archived metadata additively: bookmarks use OR, tags use set union, and saved topics merge by entry ID. Current saved-topic values win conflicts, which are reported. Review the output, then add `--apply` to write; apply creates a timestamped metadata backup first. Reapplying a completed remap is a no-op.
+
 To reset bookmarks, tags, and saved topics, stop the server and delete the metadata file. To back them up, copy that file. Treat it as private because tags, saved titles/notes/prompt excerpts, and session keys can reveal local paths, project names, or work topics.
 
 For existing-workspace upgrades from older metadata paths, see the metadata-path move in `migrations/v0.14.0.md`, indexed from `MIGRATIONS.md`. Explicit `SESSION_BROWSER_METADATA` override paths remain supported.

@@ -1,8 +1,7 @@
 import { flashButton } from '/shared/browser/clipboard.js';
+import { restoreCommand } from './restore-command.js';
 
-export function shellQuote(value) {
-  return `'${String(value || '').replace(/'/g, `'\\''`)}'`;
-}
+export { restoreCommand, shellQuote } from './restore-command.js';
 
 export async function copyText(text) {
   if (navigator.clipboard?.writeText) {
@@ -17,15 +16,6 @@ export async function copyText(text) {
   textarea.select();
   document.execCommand('copy');
   textarea.remove();
-}
-
-export function restoreCommand(detail) {
-  if (detail.source === 'pi') return `pi --session ${shellQuote(detail.path)}`;
-  if (detail.source === 'opencode') return `opencode --session ${shellQuote(detail.id)} ${shellQuote(detail.cwd || '.')}`;
-  if (detail.source === 'codex') return `codex resume ${shellQuote(detail.id)}`;
-  // Claude Code sub-agent (sidechain) sessions are not independently resumable; hide the button.
-  if (detail.source === 'claude-code') return detail.isSidechain ? '' : `claude --resume ${shellQuote(detail.id)}`;
-  return '';
 }
 
 export async function copyRestoreCommand(detail, button) {

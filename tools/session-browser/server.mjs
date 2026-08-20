@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -8,7 +8,10 @@ import { promisify } from 'node:util';
 import { exists, normalizeBasePath, readStaticText, safeError, sendHtml, sendJson, serveStaticPath, stripBasePath } from '../shared-web/http.mjs';
 import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel, piModelState } from '../shared-web/model-normalization.mjs';
 import { openCodeSessionUsage, openCodeTokenSql } from '../shared-web/opencode-usage.mjs';
+import { createImmutableSourceMemo } from './immutable-source-memo.mjs';
 import { createSingleFlight, createSummaryCache } from './summary-cache.mjs';
+import { loadLegacyMachines, translateCwd } from './legacy-machines.mjs';
+import { formatSessionRef, isSourceRef, parseSessionRef, sessionKey } from './session-ref.mjs';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = parsePort(process.env.PORT || '8787');
@@ -277,7 +280,7 @@ function collectStats(entries) {
   return stats;
 }
 
-function summarizeSession(path, fileStat, parsed) {
+function summarizeSession(path, fileStat, parsed, { trustFileTimes = true } = {}) {
   const header = parsed.find((entry) => entry?.type === 'session') || null;
   const entries = parsed.filter((entry) => entry?.type !== 'session');
   const leafId = findNewestLeafId(entries);
@@ -289,9 +292,11 @@ function summarizeSession(path, fileStat, parsed) {
   const firstPrompt = truncate(textFromContent(userEntries[0]?.message?.content));
   const entryUpdatedAt = entries.at(-1)?.timestamp;
   const fileUpdatedAt = fileStat.mtime?.toISOString();
-  const updatedAt = [entryUpdatedAt, fileUpdatedAt]
-    .filter(Boolean)
-    .sort((a, b) => new Date(b) - new Date(a))[0];
+  // An archived store was copied from another machine, so its mtimes describe the copy,
+  // not the session. Trust the recorded entries and fall back to mtime only without them.
+  const updatedAt = trustFileTimes
+    ? [entryUpdatedAt, fileUpdatedAt].filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0]
+    : entryUpdatedAt || fileUpdatedAt;
   let stats = collectStats(activeEntries);
   if (!stats.tokens.total) {
     stats = collectStats(entries);
@@ -323,10 +328,10 @@ function summarizeSession(path, fileStat, parsed) {
   };
 }
 
-async function loadSessionFile(path) {
+async function loadSessionFile(path, options = {}) {
   const [fileStat, content] = await Promise.all([stat(path), readFile(path, 'utf8')]);
   const parsed = parseJsonl(content);
-  const summary = summarizeSession(path, fileStat, parsed);
+  const summary = summarizeSession(path, fileStat, parsed, options);
   const entries = parsed.filter((entry) => entry?.type !== 'session');
   const activeEntries = enrichPiModelEvents(buildActiveEntries(entries, summary.leafId));
   const topicAnchors = activeEntries
@@ -352,38 +357,56 @@ function sessionSummary({ entries, activeEntries, topicAnchors, ...summary }) {
   return summary;
 }
 
-async function listFileSessions(ctx, root, cache, load) {
-  const files = await walkJsonlFiles(root);
-  const settled = await Promise.allSettled(
-    files.map((file) => cache.summarize(file, async (path) => sessionSummary(await load(path))))
-  );
-  cache.prune(files);
-  return settled
-    .filter((result) => result.status === 'fulfilled')
-    .map((result) => result.value)
-    .filter((session) => isUnderRoot(session.cwd, ctx.workspaceRoot))
-    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+function withLegacyMachine(session, machine) {
+  if (!machine) return session;
+  const originalCwd = session.cwd || '';
+  const cwd = translateCwd(machine, originalCwd);
+  const value = session.source === 'pi' ? session.path : session.id;
+  return {
+    ...session,
+    path: formatSessionRef(session.source, value, machine.id),
+    cwd,
+    originalCwd,
+    machineId: machine.id,
+    machineLabel: machine.label,
+    retiredAt: machine.retiredAt,
+    archived: true,
+  };
 }
 
-async function listPiSessions(ctx) {
-  return listFileSessions(ctx, PI_SESSION_ROOT, SUMMARY_CACHES.pi, loadSessionFile);
+async function legacyMachineForRef(ctx, ref) {
+  const parsed = parseSessionRef(ref);
+  if (!parsed?.machineId) return { parsed, machine: null };
+  const { machines } = await ctx.legacyMachines;
+  const machine = machines[parsed.machineId];
+  if (!machine) throw new Error(`Unknown legacy machine: ${parsed.machineId}`);
+  return { parsed, machine };
+}
+
+async function listFileSessions(ctx, root, cache, load, machine = null) {
+  const files = await walkJsonlFiles(root);
+  const loadOptions = { trustFileTimes: !machine };
+  const cacheOptions = { provenance: machine ? 'archive' : 'live' };
+  const settled = await Promise.allSettled(
+    files.map((file) => cache.summarize(file, async (path) => sessionSummary(await load(path, loadOptions)), cacheOptions))
+  );
+  cache.prune(files, cacheOptions);
+  const summaries = settled
+    .filter((result) => result.status === 'fulfilled')
+    .map((result) => withLegacyMachine(result.value, machine));
+  const sessions = summaries
+    .filter((session) => session.cwd && isUnderRoot(session.cwd, ctx.workspaceRoot))
+    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  return machine ? { sessions, unmappedSessions: summaries.length - sessions.length } : sessions;
+}
+
+async function listPiSessions(ctx, machine = null) {
+  const root = machine?.roots.pi || PI_SESSION_ROOT;
+  return listFileSessions(ctx, root, SUMMARY_CACHES.pi, loadSessionFile, machine);
 }
 
 function opencodeRef(sessionId) {
-  return `opencode:${sessionId}`;
-}
-
-function sessionKey(sessionOrPath, source = null) {
-  if (typeof sessionOrPath === 'string') {
-    if (isOpenCodeRef(sessionOrPath)) return sessionOrPath;
-    if (isCodexRef(sessionOrPath)) return sessionOrPath;
-    if (isClaudeCodeRef(sessionOrPath)) return sessionOrPath;
-    return `pi:${resolve(sessionOrPath)}`;
-  }
-  if (sessionOrPath?.source === 'opencode') return opencodeRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^opencode:/, ''));
-  if (sessionOrPath?.source === 'codex') return codexRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^codex:/, ''));
-  if (sessionOrPath?.source === 'claude-code') return claudeCodeRef(sessionOrPath.id || String(sessionOrPath.path || '').replace(/^claude-code:/, ''));
-  return `pi:${resolve(sessionOrPath?.path || '')}`;
+  return formatSessionRef('opencode', sessionId);
 }
 
 function normalizeTags(tags) {
@@ -466,15 +489,15 @@ async function updateSessionMetadata(ctx, path, patch) {
 }
 
 function isOpenCodeRef(ref) {
-  return typeof ref === 'string' && ref.startsWith('opencode:');
+  return isSourceRef(ref, 'opencode');
 }
 
 function codexRef(sessionId) {
-  return `codex:${sessionId}`;
+  return formatSessionRef('codex', sessionId);
 }
 
 function isCodexRef(ref) {
-  return typeof ref === 'string' && ref.startsWith('codex:');
+  return isSourceRef(ref, 'codex');
 }
 
 function timestampFromMs(value) {
@@ -606,9 +629,10 @@ function openCodeContentBlocks(message, parts, diffs = [], cwd = '') {
   }).filter(Boolean);
 }
 
-async function loadOpenCodeDiffs(sessionId) {
+async function loadOpenCodeDiffs(sessionId, dataDir = OPENCODE_DATA_DIR) {
+  if (!dataDir) return [];
   try {
-    const content = await readFile(join(OPENCODE_DATA_DIR, 'storage', 'session_diff', `${sessionId}.json`), 'utf8');
+    const content = await readFile(join(dataDir, 'storage', 'session_diff', `${sessionId}.json`), 'utf8');
     const diffs = JSON.parse(content);
     return Array.isArray(diffs) ? diffs : [];
   } catch {
@@ -815,26 +839,29 @@ async function loadCodexFile(file) {
   return { ...summary, entries, activeEntries, topicAnchors };
 }
 
-async function listCodexSessions(ctx) {
-  return listFileSessions(ctx, CODEX_SESSION_ROOT, SUMMARY_CACHES.codex, loadCodexFile);
+async function listCodexSessions(ctx, machine = null) {
+  const root = machine?.roots.codex || CODEX_SESSION_ROOT;
+  return listFileSessions(ctx, root, SUMMARY_CACHES.codex, loadCodexFile, machine);
 }
 
 async function loadCodexSession(ctx, ref) {
-  const sessionId = ref.replace(/^codex:/, '');
-  const files = await walkJsonlFiles(CODEX_SESSION_ROOT);
+  const { parsed, machine } = await legacyMachineForRef(ctx, ref);
+  const sessionId = parsed?.value || ref.replace(/^codex:/, '');
+  const root = machine?.roots.codex || CODEX_SESSION_ROOT;
+  const files = await walkJsonlFiles(root);
   for (const file of files) {
     const detail = await loadCodexFile(file);
-    if (detail.id === sessionId) return detail;
+    if (detail.id === sessionId) return withLegacyMachine(detail, machine);
   }
   throw new Error('Codex session not found');
 }
 
 function claudeCodeRef(id) {
-  return `claude-code:${id}`;
+  return formatSessionRef('claude-code', id);
 }
 
 function isClaudeCodeRef(ref) {
-  return typeof ref === 'string' && ref.startsWith('claude-code:');
+  return isSourceRef(ref, 'claude-code');
 }
 
 // Claude Code stores one JSONL per parent session at <project>/<sessionId>.jsonl and
@@ -940,7 +967,8 @@ function claudeCodeEntries(parsed) {
 
 function summarizeClaudeCodeSession(file, fileStat, parsed) {
   const info = claudeCodeFileInfo(file);
-  const id = claudeCodeFileId(file);
+  const recordedParentId = info.isSidechain ? parsed.find((line) => line?.sessionId)?.sessionId : null;
+  const id = info.isSidechain && recordedParentId ? `${recordedParentId}/${info.agentName}` : claudeCodeFileId(file);
   const cwd = parsed.find((line) => line?.cwd)?.cwd || '';
   const title = parsed.find((line) => line?.type === 'ai-title')?.aiTitle || '';
   const entries = claudeCodeEntries(parsed);
@@ -955,7 +983,7 @@ function summarizeClaudeCodeSession(file, fileStat, parsed) {
     id,
     source: 'claude-code',
     path: claudeCodeRef(id),
-    parentId: info.isSidechain ? info.parentId : null,
+    parentId: info.isSidechain ? (recordedParentId || info.parentId) : null,
     isSidechain: info.isSidechain,
     cwd,
     name: title,
@@ -995,30 +1023,36 @@ async function loadClaudeCodeFile(file) {
   return { ...summary, entries, activeEntries, topicAnchors };
 }
 
-async function listClaudeCodeSessions(ctx) {
-  return listFileSessions(ctx, CLAUDE_PROJECTS_ROOT, SUMMARY_CACHES['claude-code'], loadClaudeCodeFile);
+async function listClaudeCodeSessions(ctx, machine = null) {
+  const root = machine?.roots['claude-code'] || CLAUDE_PROJECTS_ROOT;
+  const result = await listFileSessions(ctx, root, SUMMARY_CACHES['claude-code'], loadClaudeCodeFile, machine);
+  const sessions = machine ? result.sessions : result;
+  const unique = [...new Map(sessions.map((session) => [session.id, session])).values()];
+  return machine ? { ...result, sessions: unique } : unique;
 }
 
-function claudeCodeRelation(session) {
+function claudeCodeRelation(session, machine = null) {
+  const related = withLegacyMachine(session, machine);
   return {
-    id: session.id,
-    path: session.path,
+    id: related.id,
+    path: related.path,
     source: 'claude-code',
-    name: session.name || session.firstPrompt || session.id,
-    cwd: session.cwd,
+    machineId: related.machineId,
+    name: related.name || related.firstPrompt || related.id,
+    cwd: related.cwd,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
   };
 }
 
-async function loadClaudeCodeRelations(detail) {
-  const files = await walkJsonlFiles(CLAUDE_PROJECTS_ROOT).catch(() => []);
+async function loadClaudeCodeRelations(detail, root = CLAUDE_PROJECTS_ROOT, machine = null) {
+  const files = await walkJsonlFiles(root).catch(() => []);
   if (detail.isSidechain) {
     const parentId = String(detail.id).split('/')[0];
     for (const file of files) {
       if (!claudeCodeFileInfo(file).isSidechain && basename(file, '.jsonl') === parentId) {
         const parent = await loadClaudeCodeFile(file).catch(() => null);
-        if (parent) return { parentSession: claudeCodeRelation(parent), childSessions: [] };
+        if (parent) return { parentSession: claudeCodeRelation(parent, machine), childSessions: [] };
       }
     }
     return { parentSession: null, childSessions: [] };
@@ -1028,7 +1062,7 @@ async function loadClaudeCodeRelations(detail) {
     const info = claudeCodeFileInfo(file);
     if (info.isSidechain && info.parentId === detail.id) {
       const child = await loadClaudeCodeFile(file).catch(() => null);
-      if (child) childSessions.push(claudeCodeRelation(child));
+      if (child) childSessions.push(claudeCodeRelation(child, machine));
     }
   }
   childSessions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
@@ -1036,21 +1070,24 @@ async function loadClaudeCodeRelations(detail) {
 }
 
 async function loadClaudeCodeSession(ctx, ref) {
-  const id = ref.replace(/^claude-code:/, '');
-  const files = await walkJsonlFiles(CLAUDE_PROJECTS_ROOT);
+  const { parsed, machine } = await legacyMachineForRef(ctx, ref);
+  const id = parsed?.value || ref.replace(/^claude-code:/, '');
+  const root = machine?.roots['claude-code'] || CLAUDE_PROJECTS_ROOT;
+  const files = await walkJsonlFiles(root);
   for (const file of files) {
-    if (claudeCodeFileId(file) === id) {
-      const detail = await loadClaudeCodeFile(file);
-      const relations = await loadClaudeCodeRelations(detail);
+    const loaded = await loadClaudeCodeFile(file);
+    if (loaded.id === id) {
+      const detail = withLegacyMachine(loaded, machine);
+      const relations = await loadClaudeCodeRelations(detail, root, machine);
       return { ...detail, ...relations };
     }
   }
   throw new Error('Claude Code session not found');
 }
 
-async function loadOpenCodeRows(sessionId = null) {
+async function loadOpenCodeRows(sessionId = null, dbPath = OPENCODE_DB) {
   const sessionWhere = sessionId ? `where id = ${sqlString(sessionId)}` : '';
-  const sessions = await sqliteJson(OPENCODE_DB, `
+  const sessions = await sqliteJson(dbPath, `
     select id, directory, title, model, parent_id as parentId, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
     from session
     ${sessionWhere}
@@ -1059,13 +1096,13 @@ async function loadOpenCodeRows(sessionId = null) {
   if (!sessions.length) return { sessions: [], messages: [], parts: [] };
   const ids = sessions.map((session) => session.id);
   const placeholders = ids.map(sqlString).join(',');
-  const messages = await sqliteJson(OPENCODE_DB, `
+  const messages = await sqliteJson(dbPath, `
     select id, session_id as sessionId, time_created as createdAt, time_updated as updatedAt, data
     from message
     where session_id in (${placeholders})
     order by time_created, id
   `);
-  const parts = await sqliteJson(OPENCODE_DB, `
+  const parts = await sqliteJson(dbPath, `
     select id, message_id as messageId, session_id as sessionId, time_created as createdAt, time_updated as updatedAt, data
     from part
     where session_id in (${placeholders})
@@ -1078,20 +1115,20 @@ async function loadOpenCodeRows(sessionId = null) {
   };
 }
 
-async function loadOpenCodeRelations(session) {
+async function loadOpenCodeRelations(session, dbPath = OPENCODE_DB, machine = null) {
   if (!session?.id) return { parentSession: null, childSessions: [] };
-  const parentRows = session.parentId ? await sqliteJson(OPENCODE_DB, `
+  const parentRows = session.parentId ? await sqliteJson(dbPath, `
     select id, title, directory, time_created as createdAt, time_updated as updatedAt
     from session
     where id = ${sqlString(session.parentId)}
   `) : [];
-  const childRows = await sqliteJson(OPENCODE_DB, `
+  const childRows = await sqliteJson(dbPath, `
     select id, title, directory, time_created as createdAt, time_updated as updatedAt
     from session
     where parent_id = ${sqlString(session.id)}
     order by time_updated desc
   `);
-  const toRelation = (row) => ({
+  const toRelation = (row) => withLegacyMachine({
     id: row.id,
     path: opencodeRef(row.id),
     source: 'opencode',
@@ -1099,7 +1136,7 @@ async function loadOpenCodeRelations(session) {
     cwd: row.directory || '',
     createdAt: timestampFromMs(row.createdAt),
     updatedAt: timestampFromMs(row.updatedAt),
-  });
+  }, machine);
   return {
     parentSession: parentRows[0] ? toRelation(parentRows[0]) : null,
     childSessions: childRows.map(toRelation),
@@ -1175,30 +1212,33 @@ function openCodeUsageSql(sessionIds) {
   `;
 }
 
-async function listOpenCodeSessions(ctx) {
-  if (!await exists(OPENCODE_DB)) return [];
+async function listOpenCodeSessions(ctx, machine = null) {
+  const dbPath = machine?.roots.opencode || OPENCODE_DB;
+  if (!await exists(dbPath)) return machine ? { sessions: [], unmappedSessions: 0 } : [];
   const workspaceRootSql = sqlString(ctx.workspaceRoot);
   const workspacePrefixSql = sqlString(`${sqlLike(ctx.workspaceRoot)}/%`);
+  const workspaceWhere = machine ? '' : `and (directory = ${workspaceRootSql} or directory like ${workspacePrefixSql} escape '\\')`;
+  const limitClause = machine ? '' : `limit ${OPENCODE_SESSION_LIMIT}`;
   const sessions = await sqliteJson(
-    OPENCODE_DB,
+    dbPath,
     `select id, parent_id as parentId, directory, title, model, time_created as createdAt, time_updated as updatedAt, time_archived as archivedAt
      from session
      where time_archived is null
-       and (directory = ${workspaceRootSql} or directory like ${workspacePrefixSql} escape '\\')
+       ${workspaceWhere}
      order by time_updated desc
-     limit ${OPENCODE_SESSION_LIMIT}`
+     ${limitClause}`
   );
-  if (!sessions.length) return [];
+  if (!sessions.length) return machine ? { sessions: [], unmappedSessions: 0 } : [];
   const sessionIds = sessions.map((session) => sqlString(session.id)).join(',');
   let usageRows = [];
   let messageModelRows = [];
   try {
-    usageRows = await sqliteJson(OPENCODE_DB, openCodeUsageSql(sessionIds));
+    usageRows = await sqliteJson(dbPath, openCodeUsageSql(sessionIds));
   } catch {
     usageRows = [];
   }
   try {
-    messageModelRows = await sqliteJson(OPENCODE_DB, `
+    messageModelRows = await sqliteJson(dbPath, `
       select
         session_id as sessionId,
         json_extract(data, '$.providerID') as providerID,
@@ -1233,7 +1273,7 @@ async function listOpenCodeSessions(ctx) {
     if (label) fallbackModelBySession.set(row.sessionId, label);
   }
 
-  return sessions.map((session) => ({
+  const summaries = sessions.map((session) => withLegacyMachine({
     source: 'opencode',
     path: `opencode:${session.id}`,
     id: session.id,
@@ -1248,17 +1288,21 @@ async function listOpenCodeSessions(ctx) {
     ...emptyListStats(),
     ...(usageBySession.get(session.id) || emptyUsage()),
     archivedAt: timestampFromMs(session.archivedAt),
-  })).filter((summary) => isUnderRoot(summary.cwd, ctx.workspaceRoot));
+  }, machine));
+  const visible = summaries.filter((summary) => summary.cwd && isUnderRoot(summary.cwd, ctx.workspaceRoot));
+  return machine ? { sessions: visible, unmappedSessions: summaries.length - visible.length } : visible;
 }
 
 async function loadOpenCodeSession(ctx, ref) {
-  const sessionId = ref.replace(/^opencode:/, '');
-  const { sessions, messages, parts } = await loadOpenCodeRows(sessionId);
+  const { parsed, machine } = await legacyMachineForRef(ctx, ref);
+  const sessionId = parsed?.value || ref.replace(/^opencode:/, '');
+  const dbPath = machine?.roots.opencode || OPENCODE_DB;
+  const { sessions, messages, parts } = await loadOpenCodeRows(sessionId, dbPath);
   const session = sessions[0];
   if (!session) throw new Error('OpenCode session not found');
-  const summary = summarizeOpenCodeSession(session, messages, parts);
-  const relations = await loadOpenCodeRelations(session);
-  const diffs = await loadOpenCodeDiffs(session.id);
+  const summary = withLegacyMachine(summarizeOpenCodeSession(session, messages, parts), machine);
+  const relations = await loadOpenCodeRelations(session, dbPath, machine);
+  const diffs = await loadOpenCodeDiffs(session.id, machine ? machine.artifacts['opencode-data'] : OPENCODE_DATA_DIR);
   const partsByMessage = new Map();
   for (const part of parts) {
     if (!partsByMessage.has(part.messageId)) partsByMessage.set(part.messageId, []);
@@ -1307,33 +1351,96 @@ function sessionDashboardSummary(sessions) {
   return { latestBookmarkedSession: compact(latestBookmarkedSession), latestUpdatedSession: compact(latestUpdatedSession) };
 }
 
-async function scanSources(ctx) {
-  const sources = [
-    ['pi', () => listPiSessions(ctx)],
-    ['opencode', () => listOpenCodeSessions(ctx)],
-    ['codex', () => listCodexSessions(ctx)],
-    ['claude-code', () => listClaudeCodeSessions(ctx)],
-  ];
-  const enabledSources = sources.filter(([source]) => sourceEnabled(source));
-  const results = await Promise.allSettled(enabledSources.map(([source, list]) => withTimeout(list(), `${source} source`, SOURCE_TIMEOUT_MS)));
-  const sourceErrors = [];
+const LIST_BY_SOURCE = {
+  pi: listPiSessions,
+  opencode: listOpenCodeSessions,
+  codex: listCodexSessions,
+  'claude-code': listClaudeCodeSessions,
+};
+
+async function scanLiveSources(ctx) {
+  const entries = Object.entries(LIST_BY_SOURCE).filter(([source]) => sourceEnabled(source));
+  const results = await Promise.allSettled(entries.map(([source, list]) => withTimeout(list(ctx), `${source} source`, SOURCE_TIMEOUT_MS)));
   const sessions = [];
+  const sourceErrors = [];
   for (const [index, result] of results.entries()) {
-    const source = enabledSources[index][0];
+    const source = entries[index][0];
     if (result.status === 'fulfilled') sessions.push(...result.value);
     else sourceErrors.push(sourceError(source, result.reason));
   }
-  sessions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
   return { sessions, sourceErrors };
 }
 
-async function listSessions(ctx) {
-  const { metadata, error: metadataError } = await readMetadata(ctx);
-  const { sessions, sourceErrors } = await singleFlight(ctx.workspaceRoot, () => scanSources(ctx));
-  return { sessions: sessions.map((session) => attachMetadata(session, metadata)), sourceErrors, metadataError, metadataPath: ctx.metadataPath };
+function legacyScanEntries(ctx, legacyState) {
+  return Object.values(legacyState.machines).flatMap((machine) => Object.keys(machine.roots).flatMap((source) => {
+    if (!LIST_BY_SOURCE[source] || !sourceEnabled(source)) return [];
+    const key = `${source}@${machine.id}`;
+    return [{
+      key,
+      machine,
+      immutable: machine.immutable,
+      load: () => withTimeout(LIST_BY_SOURCE[source](ctx, machine), `${key} source`, SOURCE_TIMEOUT_MS),
+    }];
+  }));
 }
 
-function isAllowedSessionPath(ctx, candidate) {
+function archiveSnapshot(ctx, legacyState) {
+  const snapshot = ctx.archiveMemo.snapshot(legacyScanEntries(ctx, legacyState));
+  const sessions = [];
+  const sourceErrors = legacyState.errors.map((error) => ({ source: error.source, code: error.code, error: error.message }));
+  const unmappedByMachine = new Map();
+  for (const result of snapshot.results) {
+    if (result.status === 'rejected') {
+      sourceErrors.push(sourceError(result.entry.key, result.reason));
+      continue;
+    }
+    const value = result.value;
+    sessions.push(...value.sessions);
+    if (value.unmappedSessions) {
+      const id = result.entry.machine.id;
+      unmappedByMachine.set(id, (unmappedByMachine.get(id) || 0) + value.unmappedSessions);
+    }
+  }
+  const unmappedSessions = Object.values(legacyState.machines).map((machine) => ({
+    machineId: machine.id,
+    label: machine.label,
+    count: unmappedByMachine.get(machine.id) || 0,
+  }));
+  return { sessions, sourceErrors, unmappedSessions, archivesLoading: snapshot.loading };
+}
+
+async function listSessions(ctx, { archivesOnly = false } = {}) {
+  const [{ metadata, error: metadataError }, legacyState] = await Promise.all([readMetadata(ctx), ctx.legacyMachines]);
+  const live = archivesOnly && ctx.lastLive
+    ? ctx.lastLive
+    : await singleFlight(`${ctx.scanKey}\0live`, () => scanLiveSources(ctx));
+  ctx.lastLive = live;
+  const archives = archiveSnapshot(ctx, legacyState);
+  const sessions = [...live.sessions, ...archives.sessions].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  return {
+    sessions: sessions.map((session) => attachMetadata(session, metadata)),
+    sourceErrors: [...live.sourceErrors, ...archives.sourceErrors],
+    unmappedSessions: archives.unmappedSessions,
+    archivesLoading: archives.archivesLoading,
+    metadataError,
+    metadataPath: ctx.metadataPath,
+  };
+}
+
+async function isAllowedSessionPath(ctx, candidate) {
+  const parsed = parseSessionRef(candidate);
+  if (parsed?.machineId) {
+    const { machines } = await ctx.legacyMachines;
+    const machine = machines[parsed.machineId];
+    if (!machine?.roots[parsed.source]) return false;
+    if (parsed.source !== 'pi') return true;
+    try {
+      const [candidatePath, rootPath] = await Promise.all([realpath(parsed.value), realpath(machine.roots.pi)]);
+      return isUnderRoot(candidatePath, rootPath);
+    } catch {
+      return false;
+    }
+  }
   if (isOpenCodeRef(candidate)) return true;
   if (isCodexRef(candidate)) return true;
   if (isClaudeCodeRef(candidate)) return true;
@@ -1341,33 +1448,50 @@ function isAllowedSessionPath(ctx, candidate) {
   return isUnderRoot(resolved, PI_SESSION_ROOT);
 }
 
-export function createSessionBrowserHandler({ basePath = '/', cockpit = null, workspaceRoot = DEFAULT_WORKSPACE_ROOT, workspaceName = basename(workspaceRoot) || workspaceRoot, metadataPath = DEFAULT_METADATA_PATH } = {}) {
+export function createSessionBrowserHandler({ basePath = '/', cockpit = null, workspaceRoot = DEFAULT_WORKSPACE_ROOT, workspaceName = basename(workspaceRoot) || workspaceRoot, metadataPath = DEFAULT_METADATA_PATH, legacyMachinesPath } = {}) {
   const normalizedBase = normalizeBasePath(basePath);
-  const ctx = { workspaceRoot: resolve(workspaceRoot), workspaceName, metadataPath: resolve(metadataPath) };
+  const resolvedWorkspaceRoot = resolve(workspaceRoot);
+  const ctx = {
+    workspaceRoot: resolvedWorkspaceRoot,
+    workspaceName,
+    metadataPath: resolve(metadataPath),
+    scanKey: `${resolvedWorkspaceRoot}\0${resolve(legacyMachinesPath || join(resolvedWorkspaceRoot, '.tools-config', 'session-browser', 'machines.json'))}`,
+    archiveMemo: createImmutableSourceMemo(),
+    lastLive: null,
+    legacyMachines: loadLegacyMachines({ workspaceRoot: resolvedWorkspaceRoot, configPath: legacyMachinesPath }),
+  };
   return async function sessionBrowserHandler(req, res) {
     try {
       const url = new URL(req.url, `http://${req.headers.host}`);
       const pathname = stripBasePath(url.pathname, normalizedBase);
       if (pathname === null) return false;
       if (pathname === '/api/sessions') {
-        const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(ctx), '/api/sessions', REQUEST_TIMEOUT_MS)
-          .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: ctx.metadataPath }));
-        sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, metadataError, sessions: sessions.map(sessionSummary) });
+        const archivesOnly = url.searchParams.get('archivesOnly') === '1';
+        const { sessions, sourceErrors, unmappedSessions, archivesLoading, metadataError, metadataPath } = await withTimeout(listSessions(ctx, { archivesOnly }), '/api/sessions', REQUEST_TIMEOUT_MS)
+          .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], unmappedSessions: [], archivesLoading: false, metadataError: null, metadataPath: ctx.metadataPath }));
+        sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, sessionRoot: PI_SESSION_ROOT, piSessionRoot: PI_SESSION_ROOT, openCodeDb: OPENCODE_DB, metadataPath, sourceErrors, unmappedSessions, archivesLoading, metadataError, sessions: sessions.map(sessionSummary) });
         return true;
       }
       if (pathname === '/api/summary') {
-        const { sessions, sourceErrors, metadataError, metadataPath } = await withTimeout(listSessions(ctx), '/api/summary', REQUEST_TIMEOUT_MS)
-          .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], metadataError: null, metadataPath: ctx.metadataPath }));
-        sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, metadataPath, sourceErrors, metadataError, ...sessionDashboardSummary(sessions) });
+        const { sessions, sourceErrors, unmappedSessions, archivesLoading, metadataError, metadataPath } = await withTimeout(listSessions(ctx), '/api/summary', REQUEST_TIMEOUT_MS)
+          .catch((error) => ({ sessions: [], sourceErrors: [sourceError('aggregate', error)], unmappedSessions: [], archivesLoading: false, metadataError: null, metadataPath: ctx.metadataPath }));
+        sendJson(res, 200, { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, metadataPath, sourceErrors, unmappedSessions, archivesLoading, metadataError, ...sessionDashboardSummary(sessions) });
         return true;
       }
       if (pathname === '/api/session') {
         const path = url.searchParams.get('path') || url.searchParams.get('ref');
-        if (!path || !isAllowedSessionPath(ctx, path)) {
+        if (!path || !await isAllowedSessionPath(ctx, path)) {
           sendJson(res, 400, { error: 'Invalid session path' });
           return true;
         }
-        const session = isOpenCodeRef(path) ? await loadOpenCodeSession(ctx, path) : isCodexRef(path) ? await loadCodexSession(ctx, path) : isClaudeCodeRef(path) ? await loadClaudeCodeSession(ctx, path) : await loadSessionFile(path);
+        const { parsed: parsedRef, machine } = await legacyMachineForRef(ctx, path);
+        const session = isOpenCodeRef(path)
+          ? await loadOpenCodeSession(ctx, path)
+          : isCodexRef(path)
+            ? await loadCodexSession(ctx, path)
+            : isClaudeCodeRef(path)
+              ? await loadClaudeCodeSession(ctx, path)
+              : withLegacyMachine(await loadSessionFile(parsedRef?.value || path, { trustFileTimes: !machine }), machine);
         if (!isUnderRoot(session.cwd, ctx.workspaceRoot)) {
           sendJson(res, 404, { error: 'Session is outside the current workspace root' });
           return true;
@@ -1383,7 +1507,7 @@ export function createSessionBrowserHandler({ basePath = '/', cockpit = null, wo
           try {
             const payload = JSON.parse(body || '{}');
             const path = payload.path || payload.ref;
-            if (!path || !isAllowedSessionPath(ctx, path)) {
+            if (!path || !await isAllowedSessionPath(ctx, path)) {
               sendJson(res, 400, { error: 'Invalid session path' });
               return;
             }

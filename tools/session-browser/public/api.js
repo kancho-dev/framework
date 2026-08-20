@@ -1,5 +1,5 @@
-export async function fetchSessions({ signal } = {}) {
-  const res = await fetch('api/sessions', { signal });
+export async function fetchSessions({ signal, archivesOnly = false } = {}) {
+  const res = await fetch(`api/sessions${archivesOnly ? '?archivesOnly=1' : ''}`, { signal });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to load sessions');
   return data;

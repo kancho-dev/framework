@@ -25,21 +25,24 @@ async function observe(path) {
 export function createSummaryCache() {
   const cached = new Map();
 
+  const keyFor = (path, provenance) => `${provenance}\0${path}`;
+
   return {
-    async summarize(path, load) {
+    async summarize(path, load, { provenance = 'default' } = {}) {
       const { version, racy } = await observe(path);
-      const hit = cached.get(path);
+      const key = keyFor(path, provenance);
+      const hit = cached.get(key);
       if (hit && !hit.racy && hit.version === version) return hit.summary;
       const summary = await load(path);
-      cached.set(path, { version, racy, summary });
+      cached.set(key, { version, racy, summary });
       return summary;
     },
 
-    prune(paths) {
-      if (cached.size === paths.length) return;
-      const keep = new Set(paths);
-      for (const path of cached.keys()) {
-        if (!keep.has(path)) cached.delete(path);
+    prune(paths, { provenance = 'default' } = {}) {
+      const keep = new Set(paths.map((path) => keyFor(path, provenance)));
+      const prefix = `${provenance}\0`;
+      for (const key of cached.keys()) {
+        if (key.startsWith(prefix) && !keep.has(key)) cached.delete(key);
       }
     },
 

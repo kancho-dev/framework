@@ -26,6 +26,20 @@ test('unchanged settled files are summarized once', async () => {
   assert.equal(loads, 1);
 });
 
+test('the same file can cache summaries under distinct provenance', async () => {
+  const cache = createSummaryCache();
+  const path = file('provenance.jsonl');
+  await writeFile(path, 'one\n');
+  await settle(path);
+  let liveLoads = 0;
+  let archiveLoads = 0;
+
+  assert.equal(await cache.summarize(path, async () => `live-${++liveLoads}`, { provenance: 'live' }), 'live-1');
+  assert.equal(await cache.summarize(path, async () => `archive-${++archiveLoads}`, { provenance: 'archive' }), 'archive-1');
+  assert.equal(await cache.summarize(path, async () => `live-${++liveLoads}`, { provenance: 'live' }), 'live-1');
+  assert.equal(await cache.summarize(path, async () => `archive-${++archiveLoads}`, { provenance: 'archive' }), 'archive-1');
+});
+
 test('changed content invalidates the cached summary', async () => {
   const path = file('changing.jsonl');
   await writeFile(path, 'first\n');

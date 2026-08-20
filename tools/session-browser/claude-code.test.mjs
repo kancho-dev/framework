@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -31,11 +31,16 @@ await writeFile(join(projDir, 'PARENT.jsonl'), jsonl([
 ]));
 
 await writeFile(join(projDir, 'PARENT', 'subagents', 'agent-SUB.jsonl'), jsonl([
-  { type: 'user', uuid: 's-u1', cwd: workspaceRoot, isSidechain: true, timestamp: '2026-01-01T00:00:03.000Z', message: { role: 'user', content: 'sub task' } },
-  { type: 'assistant', uuid: 's-a1', cwd: workspaceRoot, isSidechain: true, timestamp: '2026-01-01T00:00:04.000Z', message: { role: 'assistant', model: 'claude-test', content: [
+  { type: 'user', uuid: 's-u1', cwd: workspaceRoot, sessionId: 'PARENT', agentId: 'SUB', isSidechain: true, timestamp: '2026-01-01T00:00:03.000Z', message: { role: 'user', content: 'sub task' } },
+  { type: 'assistant', uuid: 's-a1', cwd: workspaceRoot, sessionId: 'PARENT', agentId: 'SUB', isSidechain: true, timestamp: '2026-01-01T00:00:04.000Z', message: { role: 'assistant', model: 'claude-test', content: [
     { type: 'text', text: 'sub answer' },
   ], usage: { input_tokens: 1, output_tokens: 2, cache_read_input_tokens: 3, cache_creation_input_tokens: 4 } } },
 ]));
+await mkdir(join(projDir, 'STALE-PARENT', 'subagents'), { recursive: true });
+await copyFile(
+  join(projDir, 'PARENT', 'subagents', 'agent-SUB.jsonl'),
+  join(projDir, 'STALE-PARENT', 'subagents', 'agent-SUB.jsonl'),
+);
 
 // A session in a different workspace must be excluded by the cwd filter.
 await writeFile(join(projDir, 'OTHER.jsonl'), jsonl([
@@ -67,7 +72,8 @@ test('lists parent and sub-agent sessions, filtered by cwd', async (t) => {
   assert.deepEqual(data.sourceErrors, []);
   const ids = data.sessions.map((s) => s.id);
   assert.ok(ids.includes('PARENT'), 'lists parent');
-  assert.ok(ids.includes('PARENT/agent-SUB'), 'lists sub-agent');
+  assert.ok(ids.includes('PARENT/agent-SUB'), 'lists sub-agent under its recorded parent');
+  assert.equal(ids.filter((id) => id.endsWith('/agent-SUB')).length, 1, 'deduplicates a stale byte-identical sidechain copy under another parent');
   assert.ok(!ids.includes('OTHER'), 'excludes other-workspace session');
   const sub = data.sessions.find((s) => s.id === 'PARENT/agent-SUB');
   assert.equal(sub.parentId, 'PARENT', 'sub-agent carries parentId so the UI shows the child badge');

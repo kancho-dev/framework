@@ -56,6 +56,14 @@ test('Pi session without a completed response reports unknown context', async (t
   assert.deepEqual(detail.contextLoad, { latest: null, preferredCeiling: 200000 });
 });
 
+test('a live Pi session still tracks its file mtime as activity', async (t) => {
+  const server = await startServer();
+  t.after(() => server.close());
+  const detail = await getJson(server, `/api/session?ref=${encodeURIComponent(join(sessionRoot, 'no-response.jsonl'))}`);
+  // The fixture was written seconds ago, so an entry-only value would still read 2026-01-01.
+  assert.ok(new Date(detail.updatedAt) > new Date('2026-01-01T00:00:01.000Z'), `expected mtime-derived updatedAt, got ${detail.updatedAt}`);
+});
+
 test('Pi detail reports latest active-branch context', async (t) => {
   const server = await startServer();
   t.after(() => server.close());

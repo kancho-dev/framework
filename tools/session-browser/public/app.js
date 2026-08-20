@@ -2,6 +2,8 @@ import { contextLoadLevel, contextLoadPercent, contextLoadPill, escapeHtml, form
 import { restoreCommand, copyRestoreCommand, copyAndFlash } from './copy-restore.js';
 import { renderEntry } from './entry-rendering.js';
 import { fetchSessionDetail, fetchSessions, putMetadata } from './api.js';
+import { ARCHIVE_POLL_DELAY_MS, shouldPollArchives } from './archive-polling.js';
+import { archivalNote, archivalProvenanceText, machineFilterOptions, matchesMachineFilter, originTooltip, relationTooltip } from './archival-ui.js';
 import { formatToolTitle } from '/shared/browser/format.js';
 import { sessionBrowserScope } from '/shared/browser/session-links.js';
 import { clearStaleRequestedSelection, nearestScrollTop, requestedSelection, requestedTopic } from './selection.js';
@@ -11,13 +13,15 @@ import { matchesSavedTopicSessionFilter, savedTopicDestination, savedTopicNoteIn
 import { workspaceFilterForTool } from '/shared/browser/workspace-tools.js';
 
 const sessionBrowserWorkspaceFilter = workspaceFilterForTool('session-browser');
-const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, savedTopicSessionFilter: false, tagFilter: 'all', savedTopicsFilter: false, sourceErrors: [], metadataError: null };
+const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', machineFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, savedTopicSessionFilter: false, tagFilter: 'all', savedTopicsFilter: false, sourceErrors: [], unmappedSessions: [], archivesLoading: false, metadataError: null };
 
 const els = {
   refresh: document.querySelector('#refresh'),
   autoRefresh: document.querySelector('#auto-refresh'),
   filter: document.querySelector('#filter'),
   sourceFilter: document.querySelector('#source-filter'),
+  machineFilter: document.querySelector('#machine-filter'),
+  machineFilterWrap: document.querySelector('#machine-filter-wrap'),
   cwdFilter: document.querySelector('#cwd-filter'),
   sortMode: document.querySelector('#sort-mode'),
   bookmarkFilter: document.querySelector('#bookmark-filter'),
@@ -86,7 +90,7 @@ function originPill(session) {
   if (relative === '.') return '';
   const label = relative ? `${workspaceName}/${relative}` : pathBasename(session.cwd);
   if (!label) return '';
-  return `<span class="origin-pill" title="${escapeHtml(session.cwd)}">${escapeHtml(label)}</span>`;
+  return `<span class="origin-pill" title="${escapeHtml(originTooltip(session))}">${escapeHtml(label)}</span>`;
 }
 
 function originRow(session) {
@@ -144,6 +148,7 @@ function restoreFilterState() {
   els.savedTopicSessionFilter.checked = Boolean(saved.savedTopicSessionFilter);
   state.savedTopicSessionFilter = els.savedTopicSessionFilter.checked;
   state.sourceFilter = saved.sourceFilter || 'all';
+  state.machineFilter = saved.machineFilter || 'all';
   state.cwdFilter = saved.cwdFilter || 'all';
   state.tagFilter = saved.tagFilter || 'all';
   state.sortMode = saved.sortMode || 'updated-desc';
@@ -154,6 +159,7 @@ function persistFilterState() {
     bookmarkFilter: state.bookmarkFilter,
     savedTopicSessionFilter: state.savedTopicSessionFilter,
     sourceFilter: state.sourceFilter,
+    machineFilter: state.machineFilter,
     cwdFilter: state.cwdFilter,
     tagFilter: state.tagFilter,
     sortMode: state.sortMode,
@@ -163,6 +169,7 @@ function applyFilterControlValues() {
   els.bookmarkFilter.checked = state.bookmarkFilter;
   els.savedTopicSessionFilter.checked = state.savedTopicSessionFilter;
   els.sourceFilter.value = state.sourceFilter;
+  els.machineFilter.value = state.machineFilter;
   els.cwdFilter.value = state.cwdFilter;
   els.cwdFilter.title = state.cwdFilter === 'all' ? 'All work dirs' : state.cwdFilter;
   els.tagFilter.value = state.tagFilter;
@@ -180,6 +187,7 @@ function isBookmarked(session) {
 
 function matches(session, query) {
   if (state.sourceFilter !== 'all' && session.source !== state.sourceFilter) return false;
+  if (!matchesMachineFilter(session, state.machineFilter)) return false;
   if (state.cwdFilter !== 'all' && (session.cwd || '') !== state.cwdFilter) return false;
   if (state.bookmarkFilter && !isBookmarked(session)) return false;
   if (!matchesSavedTopicSessionFilter(session, state.savedTopicSessionFilter)) return false;
@@ -228,6 +236,12 @@ function renderTagPills(tags) {
   return `<div class="tag-row">${tags.map((tag) => `<span class="tag-pill" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</span>`).join('')}</div>`;
 }
 
+function archiveProvenanceLine(session) {
+  if (!session?.machineId) return '';
+  const text = escapeHtml(archivalProvenanceText(session)).replace(/^archived/, '<span class="archive-state">archived</span>');
+  return `<div class="archive-provenance"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5h11v8h-11zM1.5 2.5h13v3h-13M6 8h4"/></svg><span>${text}</span></div>`;
+}
+
 function scrollSelectedSessionCardIntoView() {
   if (!state.selectedPath) return;
   const card = Array.from(els.sessions.querySelectorAll('.session-card')).find((node) => node.dataset.path === state.selectedPath);
@@ -266,7 +280,11 @@ function renderSessionCountStatus() {
     ...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`),
     state.metadataError || '',
   ].filter(Boolean);
-  els.status.textContent = `${visibleCount} of ${state.sessions.length} sessions · ${workspaceDisplayName()}${errors.length ? ` · ${errors.join(', ')}` : ''}`;
+  const archiveStatus = state.archivesLoading ? ' · loading archived sessions…' : '';
+  const unmapped = (state.unmappedSessions || [])
+    .filter(({ count }) => count)
+    .map(({ label, machineId, count }) => `${label || machineId}: ${count} archived session${count === 1 ? '' : 's'} from other workspaces (not shown)`);
+  els.status.textContent = `${visibleCount} of ${state.sessions.length} sessions · ${workspaceDisplayName()}${archiveStatus}${unmapped.length ? ` · ${unmapped.join(' · ')}` : ''}${errors.length ? ` · ${errors.join(', ')}` : ''}`;
 }
 
 function renderSessions() {
@@ -279,6 +297,7 @@ function renderSessions() {
     <li>
       <button class="session-card ${session.path === state.selectedPath ? 'active' : ''} ${isBookmarked(session) ? 'bookmarked' : ''}" data-path="${escapeHtml(session.path)}">
         <div class="card-top"><span class="card-badges">${isBookmarked(session) ? '<span class="bookmark-mark on">★</span>' : ''}<span class="badge">${escapeHtml(sourceLabel(session.source))}</span> ${contextLoadPill(session)}</span><span class="card-times"><span>Updated: ${escapeHtml(formatDate(session.updatedAt))}</span><span>Created: ${escapeHtml(formatDate(session.createdAt))}</span></span></div>
+        ${archiveProvenanceLine(session)}
         ${originRow(session)}
         <div class="prompt">${escapeHtml(session.name || session.firstPrompt || '(no user prompt found)')}</div>
         ${session.parentId ? '<div class="relation-line"><span class="relation-badge">child session</span></div>' : ''}
@@ -292,7 +311,7 @@ function renderSessions() {
 }
 
 function relationButton(session, label) {
-  return `<button type="button" class="relation-link" data-path="${escapeHtml(session.path)}" title="${escapeHtml(session.name || session.id)}">${escapeHtml(label)} ${escapeHtml(session.name || session.id)}</button>`;
+  return `<button type="button" class="relation-link" data-path="${escapeHtml(session.path)}" title="${escapeHtml(relationTooltip(session))}">${escapeHtml(label)} ${escapeHtml(session.name || session.id)}</button>`;
 }
 
 function renderRelations(detail) {
@@ -321,6 +340,19 @@ function renderSourceFilter() {
   els.sourceFilter.innerHTML = ['all', ...sources].map((source) => `<option value="${escapeHtml(source)}">${escapeHtml(source === 'all' ? 'All sources' : sourceLabel(source))}</option>`).join('');
   els.sourceFilter.value = sources.includes(current) ? current : 'all';
   state.sourceFilter = els.sourceFilter.value;
+}
+
+function renderMachineFilter() {
+  const machines = machineFilterOptions(state.sessions);
+  const valid = new Set(['all', 'current', ...machines.map(([id]) => id)]);
+  if (!valid.has(state.machineFilter) && !state.archivesLoading) state.machineFilter = 'all';
+  els.machineFilter.innerHTML = [
+    '<option value="all">All machines</option>',
+    '<option value="current">This machine</option>',
+    ...machines.map(([id, label]) => `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`),
+  ].join('');
+  els.machineFilter.value = state.machineFilter;
+  els.machineFilterWrap.classList.toggle('hidden', machines.length === 0);
 }
 
 function renderCwdFilter() {
@@ -399,7 +431,8 @@ function renderSelectedDetail({ scrollTopic = true } = {}) {
     ['Lifetime:', formatTokens(detail.tokens)],
     ['Latest Context:', formatContextLoad(detail.contextLoad)],
   ];
-  els.readerMeta.innerHTML = `<div class="meta-row primary">${primaryMeta.join('')}</div><div class="meta-row secondary">${secondaryMeta.map(([label, value]) => `<span><strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}</span>`).join('')}</div>`;
+  const archiveNote = archivalNote(detail);
+  els.readerMeta.innerHTML = `<div class="meta-row primary">${primaryMeta.join('')}</div>${archiveProvenanceLine(detail)}<div class="meta-row secondary">${secondaryMeta.map(([label, value]) => `<span><strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}</span>`).join('')}</div>${archiveNote ? `<div class="archive-note">${escapeHtml(archiveNote)}</div>` : ''}`;
   renderTagEditor(detail);
   restoreSelectedTopic(detail);
   const savedTopics = detail.metadata?.savedTopics || {};
@@ -483,21 +516,36 @@ document.addEventListener('selectionchange', () => {
 });
 
 const listRefresh = createRefreshCoordinator({
-  fetchData: ({ signal }) => fetchSessions({ signal }),
-  onStatus: ({ phase, error }) => {
+  fetchData: ({ signal, reason }) => fetchSessions({ signal, archivesOnly: reason === 'poll' && state.archivesLoading }),
+  onStatus: ({ phase, error, reason }) => {
     if (phase === 'loading') els.status.textContent = 'Loading sessions…';
-    if (phase === 'refreshing') els.status.textContent = 'Refreshing sessions…';
-    if (phase === 'error') els.status.textContent = error.message;
+    if (phase === 'refreshing') {
+      if (reason === 'poll') renderSessionCountStatus();
+      else els.status.textContent = 'Refreshing sessions…';
+    }
+    if (phase === 'error') {
+      els.status.textContent = error.message;
+      if (reason === 'poll') scheduleArchivePoll({ archivesLoading: state.archivesLoading });
+    }
   },
 });
 
 let listHasCommitted = false;
+let archivePollTimer = null;
+function scheduleArchivePoll(data) {
+  clearTimeout(archivePollTimer);
+  archivePollTimer = null;
+  if (!shouldPollArchives(data)) return;
+  archivePollTimer = setTimeout(() => listRefresh.request({ reason: 'poll' }), ARCHIVE_POLL_DELAY_MS);
+}
 listRefresh.registerCommitUnit({
   key: 'list',
   commit: async ({ data, reason }) => {
     state.sessions = data.sessions;
     state.sessionRoot = data.sessionRoot;
     state.sourceErrors = data.sourceErrors || [];
+    state.unmappedSessions = data.unmappedSessions || [];
+    state.archivesLoading = Boolean(data.archivesLoading);
     state.workspaceRoot = data.workspaceRoot;
     state.workspaceName = data.workspaceName;
     updateDocumentTitle();
@@ -505,6 +553,7 @@ listRefresh.registerCommitUnit({
     state.metadataPath = data.metadataPath;
     restoreFilterState();
     renderSourceFilter();
+    renderMachineFilter();
     renderCwdFilter();
     renderTagFilter();
     applyFilterControlValues();
@@ -513,6 +562,7 @@ listRefresh.registerCommitUnit({
     const restoredPath = !hadSelection ? state.selectedPath : null;
     renderSessions();
     if (reason !== 'poll') requestAnimationFrame(scrollSelectedSessionCardIntoView);
+    scheduleArchivePoll(data);
     if (state.selectedPath && !state.sessions.some((session) => session.path === state.selectedPath)) {
       clearSelectedTopic();
       state.selectedPath = null;
@@ -669,6 +719,11 @@ els.sourceFilter.addEventListener('change', () => {
   persistFilterState();
   renderSessions();
 });
+els.machineFilter.addEventListener('change', () => {
+  state.machineFilter = els.machineFilter.value;
+  persistFilterState();
+  renderSessions();
+});
 els.cwdFilter.addEventListener('change', () => {
   state.cwdFilter = els.cwdFilter.value;
   els.cwdFilter.title = state.cwdFilter === 'all' ? 'All work dirs' : state.cwdFilter;
@@ -685,6 +740,7 @@ els.clearFilters.addEventListener('click', () => {
   state.bookmarkFilter = false;
   state.savedTopicSessionFilter = false;
   state.sourceFilter = 'all';
+  state.machineFilter = 'all';
   state.cwdFilter = 'all';
   state.tagFilter = 'all';
   state.sortMode = 'updated-desc';
@@ -799,7 +855,7 @@ document.querySelector('.reader-pane').addEventListener('click', () => {
 
 window.addEventListener('resize', updateReaderHeaderHeight);
 window.FrameworkAutocomplete?.attach(els.tagInput, { options: () => allTags(), maxVisible: 12 });
-for (const select of [els.tagFilter, els.sourceFilter, els.cwdFilter, els.sortMode]) {
+for (const select of [els.tagFilter, els.sourceFilter, els.machineFilter, els.cwdFilter, els.sortMode]) {
   window.FrameworkSelect?.attach(select, { maxVisible: 12 });
 }
 setBrowseMode(true);

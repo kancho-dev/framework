@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
+    "build-archive": "node build-archive.mjs",
     "migrate-metadata": "node migrate-metadata.mjs",
-    "test": "node --test summary-cache.test.mjs pi.test.mjs claude-code.test.mjs opencode.test.mjs codex.test.mjs public/formatters.test.mjs public/selection.test.mjs public/saved-topics.test.mjs public/table-scroll.test.mjs ../shared-web/opencode-usage.test.mjs ../shared-web/browser/markdown.test.mjs"
+    "test": "node --test build-archive.test.mjs immutable-source-memo.test.mjs metadata-remap.test.mjs migrate-metadata.test.mjs legacy-machines.test.mjs legacy-detail.test.mjs legacy-isolation.test.mjs session-ref.test.mjs session-guard.test.mjs summary-cache.test.mjs pi.test.mjs claude-code.test.mjs opencode.test.mjs codex.test.mjs public/archive-polling.test.mjs public/archival-ui.test.mjs public/restore-command.test.mjs public/formatters.test.mjs public/selection.test.mjs public/saved-topics.test.mjs public/table-scroll.test.mjs ../shared-web/opencode-usage.test.mjs ../shared-web/browser/markdown.test.mjs"
   }
 }
