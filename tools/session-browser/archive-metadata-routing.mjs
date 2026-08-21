@@ -26,12 +26,15 @@ export function validateImportLedger(input = { version: ARCHIVE_METADATA_LEDGER_
 }
 
 function bindingMap(bindings) {
-  if (bindings instanceof Map) return new Map(bindings);
-  if (!bindings || typeof bindings !== 'object' || Array.isArray(bindings)) throw new Error('Bindings must be an object or Map');
-  return new Map(Object.entries(bindings));
+  const entries = bindings instanceof Map ? [...bindings] : Object.entries(bindings || {});
+  if (!(bindings instanceof Map) && (!bindings || typeof bindings !== 'object' || Array.isArray(bindings))) throw new Error('Bindings must be an object or Map');
+  return new Map(entries.map(([archivedId, destinationId]) => [
+    normalizeWorkspaceId(archivedId, 'archived workspace binding id'),
+    normalizeWorkspaceId(destinationId, 'destination workspace binding id'),
+  ]));
 }
 
-export function routeMetadataSnapshots({ bundle, currentWorkspaces, bindings = {}, ledger = { version: 1, records: [] }, allowRebind = false }) {
+export function routeMetadataSnapshots({ bundle, currentWorkspaces, bindings = {}, ledger = { version: ARCHIVE_METADATA_LEDGER_VERSION, records: [] }, allowRebind = false }) {
   if (!bundle?.machine?.id || !Array.isArray(bundle.workspaces)) throw new Error('A validated metadata bundle is required');
   if (!Array.isArray(currentWorkspaces)) throw new Error('currentWorkspaces must be an array');
   validateImportLedger(ledger);
@@ -39,13 +42,11 @@ export function routeMetadataSnapshots({ bundle, currentWorkspaces, bindings = {
   for (const workspace of currentWorkspaces) {
     const id = normalizeWorkspaceId(workspace?.id);
     if (destinations.has(id)) throw new Error(`Duplicate current workspace id: ${id}`);
-    destinations.set(id, workspace);
+    destinations.set(id, { ...workspace, id });
   }
   const overrides = bindingMap(bindings);
   const archivedIds = new Set(bundle.workspaces.map(({ workspaceId }) => workspaceId));
-  for (const [archivedId, destinationId] of overrides) {
-    normalizeWorkspaceId(archivedId, 'archived workspace binding id');
-    normalizeWorkspaceId(destinationId, 'destination workspace binding id');
+  for (const [archivedId] of overrides) {
     if (!archivedIds.has(archivedId)) throw new Error(`Binding names unknown archived workspace: ${archivedId}`);
   }
 

@@ -29,6 +29,16 @@ test('routes by explicit override, then exact stable id, otherwise leaves snapsh
   assert.equal(unbound.find(({ snapshot }) => snapshot.workspaceId === 'retired').status, 'unbound');
 });
 
+test('normalizes destination and binding ids before collision and ledger use', () => {
+  const routes = routeMetadataSnapshots({
+    bundle,
+    currentWorkspaces: [{ id: ' framework ' }],
+    bindings: new Map([['retired', ' framework ']]),
+  });
+  assert.deepEqual(routes.slice(0, 2).map(({ status }) => status), ['invalid', 'invalid']);
+  assert.equal(routes[0].destination.id, 'framework');
+});
+
 test('an unbound snapshot becomes routable after history-only workspace registration', () => {
   const before = routeMetadataSnapshots({ bundle, currentWorkspaces: [{ id: 'framework' }] });
   assert.equal(before.find(({ snapshot }) => snapshot.workspaceId === 'retired').status, 'unbound');

@@ -8,11 +8,13 @@ import { promisify } from 'node:util';
 import { exists, normalizeBasePath, readStaticText, safeError, sendHtml, sendJson, serveStaticPath, stripBasePath } from '../shared-web/http.mjs';
 import { modelLabelFromParts, openCodeMessageModelParts, parseOpenCodeModel, piModelState } from '../shared-web/model-normalization.mjs';
 import { openCodeSessionUsage, openCodeTokenSql } from '../shared-web/opencode-usage.mjs';
+import { codexSessionIdFromFile } from './codex-session.mjs';
 import { createImmutableSourceMemo } from './immutable-source-memo.mjs';
 import { createSingleFlight, createSummaryCache } from './summary-cache.mjs';
 import { loadLegacyMachines, translateCwd } from './legacy-machines.mjs';
 import { formatSessionRef, isSourceRef, parseSessionRef, sessionKey } from './session-ref.mjs';
 import { emptyMetadata, METADATA_VERSION } from './metadata-schema.mjs';
+import { isUnderRoot } from './workspace-paths.mjs';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = parsePort(process.env.PORT || '8787');
@@ -87,13 +89,6 @@ async function findWorkspaceRoot(start) {
     if (parent === current) return resolve(start);
     current = parent;
   }
-}
-
-function isUnderRoot(candidate, root) {
-  if (!candidate) return false;
-  const resolvedCandidate = resolve(candidate);
-  const resolvedRoot = resolve(root);
-  return resolvedCandidate === resolvedRoot || resolvedCandidate.startsWith(`${resolvedRoot}/`);
 }
 
 async function walkJsonlFiles(dir, files = []) {
@@ -649,10 +644,6 @@ function openCodeUsage(messages, parts) {
 
 function codexPayload(entry) {
   return entry?.payload || {};
-}
-
-function codexSessionIdFromFile(file) {
-  return basename(file, '.jsonl').match(/([0-9a-f]{8}-[0-9a-f-]{27,})/)?.[1] || basename(file, '.jsonl');
 }
 
 function codexTextFromContent(content) {
