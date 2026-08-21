@@ -217,6 +217,27 @@ Non-obvious constraints found by implementation — the things a change here is 
 - **Code blocks**: fenced assistant markdown code blocks get a small copy button.
 - **Markdown tables**: assistant pipe tables render as scrollable tables and keep horizontal scroll position across auto-refresh.
 
+## Archived Machines And Shared Manifests
+
+Standalone Session Browser keeps its backward-compatible workspace-local machine configuration at:
+
+```text
+.tools-config/session-browser/machines.json
+```
+
+That version-1 file combines immutable machine inventory (`id`, `roots`, optional `artifacts` and `originalRoots`) with the workspace's `pathMap`. Relative archive roots resolve against the machine-config directory. Mapping `from` paths must be absolute; `to` paths resolve inside the current workspace. Archive sources are read-only and session keys use `<source>@<machineId>:<ref>`.
+
+Tool Orchestrator can instead reuse one physical archive and inventory across several workspaces. It supplies one shared manifest plus each workspace's explicit bindings to separate Session Browser handlers. In shared mode:
+
+- the manifest contains machine facts but no `pathMap`;
+- only explicitly bound machines are visible to that workspace;
+- nested workspaces may deliberately overlap through separate bindings;
+- handlers keep independent metadata paths, read guards, scan keys, and immutable-source memos;
+- workspace-local `machines.json` is ignored rather than merged, with an informational `local-config-ignored` diagnostic;
+- missing or malformed shared inventory fails soft with `legacy-config` diagnostics and never disables live sessions.
+
+See the Tool Orchestrator README for the shared configuration shape and migration procedure. Request parameters cannot add archive roots or bindings. Duplicate machine IDs and duplicate bindings are disabled rather than resolved by precedence; exact duplicate mappings are deduplicated, conflicting exact mappings are disabled, and valid nested mappings use longest-prefix matching.
+
 ## Bookmarks And Tags
 
 Bookmarks and tags are an Operator-curated local layer. They do not change Pi JSONL files, the OpenCode SQLite database, or Codex rollout files.
@@ -263,7 +284,7 @@ The file shape is intentionally simple and private/local. Saved topics are keyed
 }
 ```
 
-To move existing annotations onto one configured archived machine's session keys, declare that machine's `originalRoots` and run a dry run first:
+To move existing annotations onto one configured archived machine's session keys, run a dry run first. The remap needs that machine's `originalRoots` — the live session roots it had before retirement — which `build-archive.mjs` emits in the config block it prints, so no manual entry is needed for archives built by that script:
 
 ```bash
 node tools/session-browser/migrate-metadata.mjs --remap-machine old-linux

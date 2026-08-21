@@ -51,7 +51,11 @@ async function loadWorkspaceConfig() {
   const parsed = JSON.parse(await readFile(resolve(WORKSPACE_CONFIG_PATH), 'utf8'));
   if (!Array.isArray(parsed.workspaces) || parsed.workspaces.length === 0) throw new Error('Workspace config must include a non-empty workspaces array');
   const ids = new Set();
-  const workspaces = parsed.workspaces.map((entry) => normalizeWorkspace(entry, ids));
+  const configPath = resolve(WORKSPACE_CONFIG_PATH);
+  const sessionArchiveManifestPath = parsed.sessionArchiveManifestPath
+    ? resolve(dirname(configPath), requiredString(parsed.sessionArchiveManifestPath, 'sessionArchiveManifestPath'))
+    : null;
+  const workspaces = parsed.workspaces.map((entry) => normalizeWorkspace(entry, ids, sessionArchiveManifestPath));
   const fallbackId = workspaces.find((workspace) => workspace.root === WORKSPACE_ROOT)?.id || workspaces[0].id;
   const defaultWorkspace = parsed.defaultWorkspace && ids.has(parsed.defaultWorkspace) ? parsed.defaultWorkspace : fallbackId;
   return { defaultWorkspace, workspaces, configured: true, path: resolve(WORKSPACE_CONFIG_PATH) };
@@ -67,7 +71,7 @@ function defaultWorkspaceConfig() {
   };
 }
 
-function normalizeWorkspace(entry, ids) {
+function normalizeWorkspace(entry, ids, sessionArchiveManifestPath = null) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('Workspace entries must be objects');
   const id = String(entry.id || '').trim();
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(id)) throw new Error(`Invalid workspace id: ${id || '(missing)'}`);
@@ -82,6 +86,8 @@ function normalizeWorkspace(entry, ids) {
     taskMetadataPath: entry.taskMetadataPath ? resolve(String(entry.taskMetadataPath)) : null,
     taskHistoryPath: entry.taskHistoryPath ? resolve(String(entry.taskHistoryPath)) : null,
     sessionMetadataPath: entry.sessionMetadataPath ? resolve(String(entry.sessionMetadataPath)) : null,
+    sessionArchiveManifestPath,
+    sessionArchiveBindings: sessionArchiveManifestPath ? (Array.isArray(entry.sessionArchiveBindings) ? structuredClone(entry.sessionArchiveBindings) : []) : null,
     tokensCostAnalyzerOutputPath: entry.tokensCostAnalyzerOutputPath ? resolve(String(entry.tokensCostAnalyzerOutputPath)) : null,
     tools: Object.fromEntries(Object.entries(tools).map(([key, value]) => [key, value !== false])),
   };
@@ -215,6 +221,10 @@ function createWorkspaceHandlers(workspace) {
       workspaceRoot: workspace.root,
       workspaceName: workspace.name,
       ...(workspace.sessionMetadataPath ? { metadataPath: workspace.sessionMetadataPath } : {}),
+      ...(workspace.sessionArchiveManifestPath ? {
+        legacyMachinesPath: workspace.sessionArchiveManifestPath,
+        legacyMachineBindings: workspace.sessionArchiveBindings,
+      } : {}),
       cockpit: cockpitConfig(workspace, 'session-browser'),
     }),
     'tokens-cost-analyzer': createTokensCostAnalyzerHandler({

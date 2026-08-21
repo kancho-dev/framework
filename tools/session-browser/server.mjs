@@ -1448,17 +1448,17 @@ async function isAllowedSessionPath(ctx, candidate) {
   return isUnderRoot(resolved, PI_SESSION_ROOT);
 }
 
-export function createSessionBrowserHandler({ basePath = '/', cockpit = null, workspaceRoot = DEFAULT_WORKSPACE_ROOT, workspaceName = basename(workspaceRoot) || workspaceRoot, metadataPath = DEFAULT_METADATA_PATH, legacyMachinesPath } = {}) {
+export function createSessionBrowserHandler({ basePath = '/', cockpit = null, workspaceRoot = DEFAULT_WORKSPACE_ROOT, workspaceName = basename(workspaceRoot) || workspaceRoot, metadataPath = DEFAULT_METADATA_PATH, legacyMachinesPath, legacyMachineBindings } = {}) {
   const normalizedBase = normalizeBasePath(basePath);
   const resolvedWorkspaceRoot = resolve(workspaceRoot);
   const ctx = {
     workspaceRoot: resolvedWorkspaceRoot,
     workspaceName,
     metadataPath: resolve(metadataPath),
-    scanKey: `${resolvedWorkspaceRoot}\0${resolve(legacyMachinesPath || join(resolvedWorkspaceRoot, '.tools-config', 'session-browser', 'machines.json'))}`,
+    scanKey: `${resolvedWorkspaceRoot}\0${resolve(legacyMachinesPath || join(resolvedWorkspaceRoot, '.tools-config', 'session-browser', 'machines.json'))}\0${JSON.stringify(legacyMachineBindings ?? null)}`,
     archiveMemo: createImmutableSourceMemo(),
     lastLive: null,
-    legacyMachines: loadLegacyMachines({ workspaceRoot: resolvedWorkspaceRoot, configPath: legacyMachinesPath }),
+    legacyMachines: loadLegacyMachines({ workspaceRoot: resolvedWorkspaceRoot, configPath: legacyMachinesPath, bindings: legacyMachineBindings }),
   };
   return async function sessionBrowserHandler(req, res) {
     try {

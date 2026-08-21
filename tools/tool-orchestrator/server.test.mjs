@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +28,117 @@ async function waitFor(url, child) {
   }
   throw new Error('server did not become ready');
 }
+
+async function waitForArchives(url) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const payload = await (await fetch(url)).json();
+    if (!payload.archivesLoading) return payload;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error('archives did not finish loading');
+}
+
+test('relative shared archive manifests and per-workspace bindings reach Session Browser handlers', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'orchestrator-archives-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const configDir = join(root, 'config');
+  const archiveRoot = join(configDir, 'archive', 'old', 'pi');
+  await mkdir(archiveRoot, { recursive: true });
+  await writeFile(join(archiveRoot, 'session.jsonl'), `${JSON.stringify({ type: 'session', id: 'archived', cwd: '/old/work', timestamp: '2026-01-01T00:00:00.000Z' })}\n`);
+  await writeFile(join(configDir, 'archive-manifest.json'), JSON.stringify({
+    version: 1,
+    machines: [{ id: 'old', roots: { pi: 'archive/old/pi' } }],
+  }));
+  const configPath = join(configDir, 'workspaces.json');
+  await writeFile(configPath, JSON.stringify({
+    sessionArchiveManifestPath: './archive-manifest.json',
+    workspaces: [{
+      id: 'default', root,
+      sessionArchiveBindings: [{ machineId: 'old', pathMap: [{ from: '/old/work', to: '.' }] }],
+    }],
+  }));
+  const port = await unusedPort();
+  const child = spawn(process.execPath, [join(here, 'server.mjs')], {
+    env: { ...process.env, TOOL_ORCHESTRATOR_PORT: String(port), TOOL_ORCHESTRATOR_WORKSPACES_CONFIG: configPath },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  t.after(() => { if (child.exitCode == null) child.kill(); });
+  const origin = `http://127.0.0.1:${port}`;
+  await waitFor(origin, child);
+
+  const payload = await waitForArchives(`${origin}/tools/sessions/api/sessions?archivesOnly=1`);
+  assert.ok(payload.sessions.some(({ machineId, id }) => machineId === 'old' && id === 'archived'), JSON.stringify(payload));
+});
+
+test('shared archive handlers isolate nested workspace visibility, detail guards, failures, and metadata', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'orchestrator-shared-isolation-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const framework = join(root, 'framework');
+  const morph = join(root, 'morph');
+  const archive = join(root, 'config', 'archive', 'old', 'pi');
+  await Promise.all([mkdir(framework), mkdir(morph), mkdir(archive, { recursive: true })]);
+  await writeFile(join(archive, 'framework.jsonl'), `${JSON.stringify({ type: 'session', id: 'framework-session', cwd: '/old/home/framework/project', timestamp: '2026-01-01T00:00:00.000Z' })}\n`);
+  await writeFile(join(archive, 'morph.jsonl'), `${JSON.stringify({ type: 'session', id: 'morph-session', cwd: '/old/home/morph/project', timestamp: '2026-01-01T00:00:00.000Z' })}\n`);
+  await writeFile(join(root, 'config', 'manifest.json'), JSON.stringify({ version: 1, machines: [{ id: 'old', roots: { pi: 'archive/old/pi' } }] }));
+  const metadata = Object.fromEntries(['framework', 'morph', 'global', 'broken'].map((id) => [id, join(root, 'metadata', `${id}.json`)]));
+  const binding = (from) => [{ machineId: 'old', pathMap: [{ from, to: '.' }] }];
+  const configPath = join(root, 'config', 'workspaces.json');
+  await writeFile(configPath, JSON.stringify({
+    sessionArchiveManifestPath: './manifest.json',
+    workspaces: [
+      { id: 'framework', root: framework, sessionMetadataPath: metadata.framework, sessionArchiveBindings: binding('/old/home/framework') },
+      { id: 'morph', root: morph, sessionMetadataPath: metadata.morph, sessionArchiveBindings: binding('/old/home/morph') },
+      { id: 'global', root, sessionMetadataPath: metadata.global, sessionArchiveBindings: binding('/old/home') },
+      { id: 'broken', root, sessionMetadataPath: metadata.broken, sessionArchiveBindings: [{ machineId: 'missing', pathMap: [] }] },
+    ],
+  }));
+  const port = await unusedPort();
+  const child = spawn(process.execPath, [join(here, 'server.mjs')], {
+    env: { ...process.env, TOOL_ORCHESTRATOR_PORT: String(port), TOOL_ORCHESTRATOR_WORKSPACES_CONFIG: configPath },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  t.after(() => { if (child.exitCode == null) child.kill(); });
+  const origin = `http://127.0.0.1:${port}`;
+  await waitFor(origin, child);
+  const sessionsFor = (id) => waitForArchives(`${origin}/tools/sessions/api/sessions?archivesOnly=1&workspace=${id}`);
+
+  const [frameworkPayload, morphPayload, globalPayload, brokenPayload] = await Promise.all(['framework', 'morph', 'global', 'broken'].map(sessionsFor));
+  assert.deepEqual(frameworkPayload.sessions.map(({ id }) => id), ['framework-session']);
+  assert.deepEqual(morphPayload.sessions.map(({ id }) => id), ['morph-session']);
+  assert.deepEqual(new Set(globalPayload.sessions.map(({ id }) => id)), new Set(['framework-session', 'morph-session']));
+  assert.ok(brokenPayload.sourceErrors.some(({ code }) => code === 'unknown-machine-binding'));
+
+  const morphRef = globalPayload.sessions.find(({ id }) => id === 'morph-session').path;
+  assert.equal((await fetch(`${origin}/tools/sessions/api/session?workspace=framework&ref=${encodeURIComponent(morphRef)}`)).status, 404);
+  const frameworkRef = frameworkPayload.sessions[0].path;
+  const saved = await fetch(`${origin}/tools/sessions/api/metadata?workspace=framework`, {
+    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref: frameworkRef, bookmarked: true }),
+  });
+  assert.equal(saved.status, 200);
+  assert.match(await readFile(metadata.framework, 'utf8'), /"bookmarked": true/);
+  await assert.rejects(readFile(metadata.global, 'utf8'), { code: 'ENOENT' });
+});
+
+test('an explicitly configured missing shared manifest reports a legacy-config diagnostic', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'orchestrator-missing-archive-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const configPath = join(root, 'workspaces.json');
+  await writeFile(configPath, JSON.stringify({
+    sessionArchiveManifestPath: './missing.json',
+    workspaces: [{ id: 'default', root, sessionArchiveBindings: [] }],
+  }));
+  const port = await unusedPort();
+  const child = spawn(process.execPath, [join(here, 'server.mjs')], {
+    env: { ...process.env, TOOL_ORCHESTRATOR_PORT: String(port), TOOL_ORCHESTRATOR_WORKSPACES_CONFIG: configPath },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  t.after(() => { if (child.exitCode == null) child.kill(); });
+  const origin = `http://127.0.0.1:${port}`;
+  await waitFor(origin, child);
+
+  const payload = await waitForArchives(`${origin}/tools/sessions/api/sessions?archivesOnly=1`);
+  assert.ok(payload.sourceErrors.some(({ source, code }) => source === 'legacy-config' && code === 'invalid-config'), JSON.stringify(payload));
+});
 
 test('tool assets load without a workspace query while pages and APIs remain gated', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'orchestrator-assets-'));

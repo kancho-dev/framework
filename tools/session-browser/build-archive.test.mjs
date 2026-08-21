@@ -4,7 +4,7 @@ import { access, chmod, mkdtemp, mkdir, readFile, stat, symlink, utimes, writeFi
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { buildArchive } from './build-archive.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -58,6 +58,19 @@ test('builds the configured archive layout and reports counts', async () => {
   });
   assert.equal(result.config.roots.pi, 'archive/old-linux/pi/sessions');
   assert.equal(result.config.artifacts['opencode-data'], 'archive/old-linux/opencode');
+  assert.equal(result.config.originalRoots.pi, resolve(sources.pi));
+});
+
+test('the printed config captures the live roots the metadata remap needs after retirement', async () => {
+  const { root, sources, fakeSqlite } = await fixture();
+  const result = await buildArchive({ machineId: 'old-linux', archiveRoot: join(root, 'archive'), sources, sqliteCommand: fakeSqlite });
+
+  assert.deepEqual(Object.keys(result.config.originalRoots), Object.keys(result.config.roots));
+  for (const [name, original] of Object.entries(result.config.originalRoots)) {
+    assert.equal(isAbsolute(original), true, `${name} originalRoot must be absolute`);
+    assert.equal(original, resolve(sources[name]));
+  }
+  assert.equal(result.config.originalRoots['opencode-diffs'], undefined);
 });
 
 test('copied session files keep the source machine own timestamps', async () => {
@@ -109,6 +122,7 @@ test('sqlite failure publishes completed JSONL sources without a partial databas
 
   assert.deepEqual(result.failures.map(({ source }) => source), ['opencode']);
   assert.deepEqual(Object.keys(result.config.roots), ['pi', 'claude-code', 'codex']);
+  assert.deepEqual(Object.keys(result.config.originalRoots), ['pi', 'claude-code', 'codex']);
   assert.equal(await readFile(join(result.target, 'pi', 'sessions', 'one.jsonl'), 'utf8'), 'pi\n');
   await assert.rejects(access(join(result.target, 'opencode.db')));
 });

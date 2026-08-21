@@ -175,11 +175,12 @@ Reconsider standalone widget modules plus one shared registry when a real change
 
 There is no `build-cockpit-widget` skill yet. This codebase-specific checklist is sufficient until at least two new widgets use it and reveal recurring procedural mistakes or a stable scaffoldable workflow. A future skill should orchestrate the canonical guide rather than duplicate it.
 
-Optional multi-workspace config:
+Optional multi-workspace config, including one shared immutable session archive inventory:
 
 ```json
 {
   "defaultWorkspace": "main",
+  "sessionArchiveManifestPath": "../session-browser/archive-manifest.json",
   "workspaces": [
     {
       "id": "main",
@@ -188,6 +189,10 @@ Optional multi-workspace config:
       "taskMetadataPath": "/home/user/work/framework-ws/.tools-config/task-browser/tasks.json",
       "taskHistoryPath": "/home/user/work/framework-ws/.tools-config/task-browser/task-history.jsonl",
       "sessionMetadataPath": "/home/user/work/framework-ws/.tools-config/session-browser/metadata.json",
+      "sessionArchiveBindings": [{
+        "machineId": "old-linux",
+        "pathMap": [{ "from": "/home/user/work/framework-ws", "to": "." }]
+      }],
       "tools": { "task-browser": true, "session-browser": true, "tokens-cost-analyzer": true }
     },
     {
@@ -199,6 +204,25 @@ Optional multi-workspace config:
   ]
 }
 ```
+
+The optional top-level `sessionArchiveManifestPath` is absolute or resolves relative to the directory containing `workspaces.json`. Its version-1 manifest declares machine facts once:
+
+```json
+{
+  "version": 1,
+  "machines": [{
+    "id": "old-linux",
+    "label": "Old Linux",
+    "immutable": true,
+    "roots": { "pi": "archive/old-linux/pi/sessions" },
+    "originalRoots": { "pi": "/home/user/.pi/agent/sessions" }
+  }]
+}
+```
+
+Manifest-relative roots resolve against the manifest directory. Each workspace independently opts in with `sessionArchiveBindings`; absolute `from` prefixes map by longest match to `to` targets constrained inside that workspace. A broad Global workspace may intentionally bind `/home/user` while narrower workspaces bind their own old roots, so the same immutable session can appear in separate handlers without sharing metadata or cache state.
+
+Shared mode wins and does not merge a workspace-local `.tools-config/session-browser/machines.json`. To migrate, copy machine facts once into the shared manifest, move each local file's `pathMap` into that workspace's binding, start the Orchestrator and verify workspaces independently, then retain local files only if standalone Session Browser still needs them. Archive files, session keys, and metadata sidecars do not move. Missing manifests, invalid machines, and invalid bindings fail soft per handler; they cannot widen readable paths or disable live sessions.
 
 Workspace IDs are URL-safe and selected with `?workspace=<id>`, so two browser tabs can keep different workspace contexts. Cockpit navigation shows only tools enabled for the selected workspace, and each tool's workspace switcher shows only workspaces where that tool is enabled. If only one eligible workspace remains, the switcher renders a label rather than a dropdown. Home links always use the Cockpit icon. Availability checks determine whether an enabled tool is ready or warning. Missing metadata/history paths use each tool's existing default for that workspace. Task Browser and Session Browser default to enabled when their entries are omitted; Tokens / Cost Analyzer requires an explicit `"tokens-cost-analyzer": true` per workspace because analysis can scan full local session history.
 

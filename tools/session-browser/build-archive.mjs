@@ -177,6 +177,9 @@ export async function buildArchive({
     throw error;
   }
 
+  // Captured here because the live root is only observable while the machine still exists;
+  // the metadata remap that consumes it runs after retirement.
+  const archivedRoots = Object.keys(reports).filter((name) => ROOT_SOURCES.has(name));
   return {
     target,
     reports,
@@ -185,8 +188,9 @@ export async function buildArchive({
     config: {
       id: machineId,
       label: machineId,
-      roots: Object.fromEntries(Object.keys(reports).filter((name) => ROOT_SOURCES.has(name)).map((name) => [name, join('archive', machineId, ARCHIVE_PATHS[name])])),
+      roots: Object.fromEntries(archivedRoots.map((name) => [name, join('archive', machineId, ARCHIVE_PATHS[name])])),
       ...(reports['opencode-diffs'] ? { artifacts: { 'opencode-data': join('archive', machineId, 'opencode') } } : {}),
+      originalRoots: Object.fromEntries(archivedRoots.map((name) => [name, resolve(sources[name])])),
       pathMap: [{ from: workspace, to: '.' }],
     },
   };

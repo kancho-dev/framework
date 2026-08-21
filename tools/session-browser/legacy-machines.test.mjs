@@ -33,9 +33,12 @@ const machineConfig = () => ({
   }],
 });
 
-test('absent config means no machines and no error', async () => {
+test('absent local config means no machines and no error, but an explicit shared manifest reports the failure', async () => {
   const { workspace, configPath } = await fixture();
   assert.deepEqual(await loadLegacyMachines({ workspaceRoot: workspace, configPath }), { machines: {}, errors: [] });
+  const shared = await loadLegacyMachines({ workspaceRoot: workspace, configPath, bindings: [] });
+  assert.deepEqual(shared.machines, {});
+  assert.deepEqual(shared.errors.map(({ source, code }) => ({ source, code })), [{ source: 'legacy-config', code: 'invalid-config' }]);
 });
 
 test('loads resolved roots into an immutable machine map', async () => {
@@ -110,6 +113,77 @@ test('machine ids matching inherited object keys remain valid', async () => {
 
   assert.ok(Object.hasOwn(result.machines, 'constructor'));
   assert.equal(result.errors.length, 0);
+});
+
+test('shared mode reports that an existing workspace-local manifest is ignored', async () => {
+  const { workspace } = await fixture(machineConfig());
+  const sharedDir = join(workspace, 'shared');
+  await mkdir(join(sharedDir, 'archive', 'old', 'pi', 'sessions'), { recursive: true });
+  const sharedPath = join(sharedDir, 'manifest.json');
+  await writeFile(sharedPath, JSON.stringify({ version: 1, machines: [{ id: 'old', roots: { pi: 'archive/old/pi/sessions' } }] }));
+
+  const result = await loadLegacyMachines({
+    workspaceRoot: workspace,
+    configPath: sharedPath,
+    bindings: [{ machineId: 'old', pathMap: [{ from: '/old/work', to: '.' }] }],
+  });
+
+  assert.deepEqual(result.errors.map(({ source, code }) => ({ source, code })), [{ source: 'legacy-config', code: 'local-config-ignored' }]);
+  assert.deepEqual(Object.keys(result.machines), ['old']);
+});
+
+test('shared inventory composes only explicitly bound machines with workspace-local mappings', async () => {
+  const config = machineConfig();
+  delete config.machines[0].pathMap;
+  const { workspace, configPath } = await fixture(config);
+  const result = await loadLegacyMachines({
+    workspaceRoot: workspace,
+    configPath,
+    bindings: [{ machineId: 'old', pathMap: [{ from: '/old/work', to: '.' }] }],
+  });
+
+  assert.deepEqual(Object.keys(result.machines), ['old']);
+  assert.equal(translateCwd(result.machines.old, '/old/work/src'), join(workspace, 'src'));
+  assert.equal(result.errors.length, 0);
+});
+
+test('shared inventory disables ambiguous machines and bindings while isolating unknown bindings', async () => {
+  const config = machineConfig();
+  delete config.machines[0].pathMap;
+  config.machines.push({ ...config.machines[0] });
+  const { workspace, configPath } = await fixture(config);
+  const result = await loadLegacyMachines({
+    workspaceRoot: workspace,
+    configPath,
+    bindings: [
+      { machineId: 'old', pathMap: [{ from: '/old', to: '.' }] },
+      { machineId: 'old', pathMap: [{ from: '/old', to: '.' }] },
+      { machineId: 'missing', pathMap: [] },
+    ],
+  });
+
+  assert.deepEqual(result.machines, {});
+  assert.deepEqual(result.errors.map(({ code }) => code).sort(), ['duplicate-machine', 'duplicate-machine-binding', 'unknown-machine-binding']);
+});
+
+test('shared mappings reject conflicting exact prefixes, deduplicate identical entries, and retain nested prefixes', async () => {
+  const config = machineConfig();
+  delete config.machines[0].pathMap;
+  const { workspace, configPath } = await fixture(config);
+  const result = await loadLegacyMachines({
+    workspaceRoot: workspace,
+    configPath,
+    bindings: [{ machineId: 'old', pathMap: [
+      { from: '/old/work', to: '.' },
+      { from: '/old/work', to: '.' },
+      { from: '/old/conflict', to: '.' },
+      { from: '/old/conflict', to: 'other' },
+      { from: '/old/work/nested', to: 'nested' },
+    ] }],
+  });
+
+  assert.deepEqual(result.machines.old.pathMap.map(({ from }) => from), ['/old/work/nested', '/old/work']);
+  assert.deepEqual(result.errors.map(({ code }) => code), ['conflicting-path-mapping']);
 });
 
 test('duplicate and malformed machines do not displace the first valid machine', async () => {
