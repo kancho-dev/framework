@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-import { cp, lstat, mkdir, readdir, rename, rm, utimes } from 'node:fs/promises';
+import { cp, lstat, mkdir, readFile, readdir, rename, rm, utimes } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { normalizeWorkspaceId } from '../shared-web/workspace-identity.mjs';
+import { planMetadataBundleExport, sha256File, writeMetadataBundle } from './archive-metadata-bundle.mjs';
 const DEFAULT_SOURCES = {
   pi: join(homedir(), '.pi', 'agent', 'sessions'),
   'claude-code': join(homedir(), '.claude', 'projects'),
@@ -110,6 +112,35 @@ async function findWorkspaceRoot(start) {
   }
 }
 
+async function loadMetadataExportConfig(configPath, target) {
+  const resolvedConfig = resolve(configPath);
+  const parsed = JSON.parse(await readFile(resolvedConfig, 'utf8'));
+  if (!Array.isArray(parsed.workspaces) || !parsed.workspaces.length) throw new Error('Workspace config must include a non-empty workspaces array');
+  if (!parsed.sessionArchiveManifestPath) throw new Error('Workspace config must include sessionArchiveManifestPath for metadata export');
+  const archiveManifestPath = resolve(dirname(resolvedConfig), String(parsed.sessionArchiveManifestPath));
+  const ids = new Set();
+  const workspaces = parsed.workspaces.map((entry) => {
+    const id = normalizeWorkspaceId(entry?.id);
+    if (ids.has(id)) throw new Error(`Duplicate workspace id: ${id}`);
+    ids.add(id);
+    const root = resolve(String(entry.root || ''));
+    if (!entry.root) throw new Error(`Missing workspace ${id} root`);
+    return {
+      id,
+      name: String(entry.name || basename(root) || id),
+      root,
+      sessionMetadataPath: entry.sessionMetadataPath ? resolve(String(entry.sessionMetadataPath)) : null,
+    };
+  });
+  return {
+    workspaces,
+    archiveManifest: {
+      path: relative(join(target, 'metadata'), archiveManifestPath).replaceAll('\\', '/'),
+      sha256: await sha256File(archiveManifestPath),
+    },
+  };
+}
+
 export async function buildArchive({
   machineId,
   archiveRoot,
@@ -117,6 +148,7 @@ export async function buildArchive({
   overwrite = false,
   sqliteCommand = 'sqlite3',
   workspaceRoot,
+  workspaceConfigPath,
 } = {}) {
   validateMachineId(machineId);
   const workspace = resolve(workspaceRoot || process.env.WORKSPACE_ROOT || await findWorkspaceRoot(process.cwd()));
@@ -130,6 +162,12 @@ export async function buildArchive({
   const staging = join(root, `.${machineId}.building-${process.pid}`);
   const previous = join(root, `.${machineId}.previous-${process.pid}`);
   await rm(staging, { recursive: true, force: true });
+  const metadataConfig = workspaceConfigPath ? await loadMetadataExportConfig(workspaceConfigPath, target) : null;
+  const metadataPlan = metadataConfig ? await planMetadataBundleExport({
+    machine: { id: machineId, label: machineId },
+    archiveManifest: metadataConfig.archiveManifest,
+    workspaces: metadataConfig.workspaces,
+  }) : null;
 
   for (const sourceName of Object.keys(sources)) {
     if (!ARCHIVE_PATHS[sourceName]) throw new Error(`Unknown source: ${sourceName}`);
@@ -138,6 +176,7 @@ export async function buildArchive({
   const reports = {};
   const failures = [];
   const skipped = [];
+  let metadataBundle = null;
   try {
     await mkdir(staging);
     for (const [sourceName, sourcePath] of Object.entries(sources)) {
@@ -159,6 +198,7 @@ export async function buildArchive({
       const reason = failures.length ? 'Every available source failed to archive.' : 'Every configured source is missing.';
       throw new Error(reason);
     }
+    if (metadataPlan) metadataBundle = await writeMetadataBundle(metadataPlan, join(staging, 'metadata'));
 
     let movedPrevious = false;
     if (await exists(target)) {
@@ -185,6 +225,7 @@ export async function buildArchive({
     reports,
     failures,
     skipped,
+    ...(metadataBundle ? { metadataBundle: { ...metadataBundle, bundlePath: join(target, 'metadata', 'bundle.json') } } : {}),
     config: {
       id: machineId,
       label: machineId,
@@ -197,7 +238,7 @@ export async function buildArchive({
 }
 
 function usage() {
-  return 'Usage: node build-archive.mjs <machine-id> [--overwrite] [--archive-root <path>]';
+  return 'Usage: node build-archive.mjs <machine-id> [--overwrite] [--archive-root <path>] [--workspaces <path>]';
 }
 
 function parseArgs(argv) {
@@ -205,14 +246,16 @@ function parseArgs(argv) {
   const machineId = args.shift();
   let overwrite = false;
   let archiveRoot;
+  let workspaceConfigPath;
   while (args.length) {
     const arg = args.shift();
     if (arg === '--overwrite') overwrite = true;
     else if (arg === '--archive-root' && args.length) archiveRoot = args.shift();
+    else if (arg === '--workspaces' && args.length) workspaceConfigPath = args.shift();
     else throw new Error(`Unknown or incomplete option: ${arg}\n${usage()}`);
   }
   if (!machineId) throw new Error(usage());
-  return { machineId, overwrite, archiveRoot };
+  return { machineId, overwrite, archiveRoot, workspaceConfigPath };
 }
 
 function formatBytes(bytes) {
@@ -231,6 +274,12 @@ async function main() {
   }
   for (const item of result.skipped) console.warn(`${item.source}: skipped (${item.reason})`);
   for (const item of result.failures) console.error(`${item.source}: failed (${item.reason})`);
+  if (result.metadataBundle) {
+    for (const entry of result.metadataBundle.bundle.workspaces) {
+      console.log(`metadata ${entry.workspaceId}: ${entry.bytes} byte(s), ${entry.sha256}${entry.absentSource ? ' (source absent)' : ''}`);
+    }
+    console.log(`Metadata bundle: ${result.metadataBundle.bundlePath} (${result.metadataBundle.sha256})`);
+  }
   console.log('\nAdd this entry to .tools-config/session-browser/machines.json:');
   console.log(JSON.stringify(result.config, null, 2));
   if (result.failures.length) process.exitCode = 1;

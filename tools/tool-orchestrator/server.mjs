@@ -6,6 +6,7 @@ import { createTaskBrowserHandler } from '../task-browser/server.mjs';
 import { createSessionBrowserHandler } from '../session-browser/server.mjs';
 import { createTokensCostAnalyzerHandler } from '../tokens-cost-analyzer/server.mjs';
 import { exists, readStaticText, safeError, sendHtml, sendJson, serveStaticPath } from '../shared-web/http.mjs';
+import { normalizeWorkspaceId } from '../shared-web/workspace-identity.mjs';
 import { createSubscriptionLimitsReader } from './subscription-limits.mjs';
 
 const baseToolNav = [
@@ -73,8 +74,7 @@ function defaultWorkspaceConfig() {
 
 function normalizeWorkspace(entry, ids, sessionArchiveManifestPath = null) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('Workspace entries must be objects');
-  const id = String(entry.id || '').trim();
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(id)) throw new Error(`Invalid workspace id: ${id || '(missing)'}`);
+  const id = normalizeWorkspaceId(entry.id);
   if (ids.has(id)) throw new Error(`Duplicate workspace id: ${id}`);
   ids.add(id);
   const root = resolve(requiredString(entry.root, `workspace ${id} root`));

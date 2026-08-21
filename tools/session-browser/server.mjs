@@ -12,6 +12,7 @@ import { createImmutableSourceMemo } from './immutable-source-memo.mjs';
 import { createSingleFlight, createSummaryCache } from './summary-cache.mjs';
 import { loadLegacyMachines, translateCwd } from './legacy-machines.mjs';
 import { formatSessionRef, isSourceRef, parseSessionRef, sessionKey } from './session-ref.mjs';
+import { emptyMetadata, METADATA_VERSION } from './metadata-schema.mjs';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = parsePort(process.env.PORT || '8787');
@@ -418,8 +419,6 @@ function metadataTags(value) {
   return normalizeTags([...(Array.isArray(value?.tags) ? value.tags : []), ...(Array.isArray(value?.labels) ? value.labels : [])]);
 }
 
-const METADATA_VERSION = 3;
-
 function normalizeSavedTopics(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value).flatMap(([entryId, topic]) => {
@@ -432,10 +431,6 @@ function normalizeSavedTopics(value) {
       timestamp: String(topic?.timestamp || '').trim(),
     }]];
   }));
-}
-
-function emptyMetadata() {
-  return { version: METADATA_VERSION, sessions: {} };
 }
 
 async function readMetadata(ctx) {

@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { buildArchive } from './build-archive.mjs';
+import { sha256File } from './archive-metadata-bundle.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -168,6 +169,58 @@ test('missing sources are skipped, but an entirely empty archive is rejected', a
     /Every configured source is missing/,
   );
   await assert.rejects(access(join(root, 'archive', 'empty')));
+});
+
+test('publishes workspace metadata inside the atomic machine archive', async () => {
+  const { root, sources, fakeSqlite } = await fixture();
+  const metadata = join(root, 'framework-metadata.json');
+  const originalBytes = '{"version":3,"sessions":{"pi:one":{"bookmarked":true}}}\n';
+  await writeFile(metadata, originalBytes);
+  const archiveManifest = join(root, 'archive-manifest.json');
+  await writeFile(archiveManifest, '{"version":1,"machines":[]}\n');
+  const workspaceConfigPath = join(root, 'workspaces.json');
+  await writeFile(workspaceConfigPath, JSON.stringify({
+    sessionArchiveManifestPath: './archive-manifest.json',
+    workspaces: [
+      { id: 'framework', name: 'Framework', root: join(root, 'framework'), sessionMetadataPath: metadata },
+      { id: 'history', name: 'History', root: join(root, 'history') },
+    ],
+  }));
+
+  const result = await buildArchive({ machineId: 'old-linux', archiveRoot: join(root, 'archive'), sources, sqliteCommand: fakeSqlite, workspaceConfigPath });
+  const bundle = JSON.parse(await readFile(join(result.target, 'metadata', 'bundle.json'), 'utf8'));
+  const framework = bundle.workspaces.find(({ workspaceId }) => workspaceId === 'framework');
+  const history = bundle.workspaces.find(({ workspaceId }) => workspaceId === 'history');
+
+  assert.equal(await readFile(join(result.target, 'metadata', framework.snapshotPath), 'utf8'), originalBytes);
+  assert.equal(framework.sha256, await sha256File(join(result.target, 'metadata', framework.snapshotPath)));
+  assert.equal(history.absentSource, true);
+  assert.equal(history.sourceMetadataPath, null);
+  assert.equal(result.metadataBundle.sha256, await sha256File(result.metadataBundle.bundlePath));
+  assert.equal(bundle.archiveManifest.sha256, await sha256File(archiveManifest));
+});
+
+test('metadata export failure leaves no published or staged machine archive', async () => {
+  const { root, sources, fakeSqlite } = await fixture();
+  const archiveManifest = join(root, 'archive-manifest.json');
+  await writeFile(archiveManifest, '{}\n');
+  const workspaceConfigPath = join(root, 'workspaces.json');
+  await writeFile(workspaceConfigPath, JSON.stringify({
+    sessionArchiveManifestPath: archiveManifest,
+    workspaces: [
+      { id: 'Client', root, sessionMetadataPath: join(root, 'client.json') },
+      { id: 'client', root, sessionMetadataPath: join(root, 'other.json') },
+    ],
+  }));
+
+  const archiveRoot = join(root, 'archive');
+  await assert.rejects(
+    buildArchive({ machineId: 'collision', archiveRoot, sources, sqliteCommand: fakeSqlite, workspaceConfigPath }),
+    /collide on a case-insensitive filesystem/,
+  );
+  await assert.rejects(access(join(archiveRoot, 'collision')));
+  const entries = await (await import('node:fs/promises')).readdir(archiveRoot);
+  assert.equal(entries.some((entry) => entry.startsWith('.collision.building-')), false);
 });
 
 test('real sqlite backup includes rows from an active WAL database', async (t) => {
