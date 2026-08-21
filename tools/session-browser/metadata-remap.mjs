@@ -1,4 +1,4 @@
-function object(value) {
+export function object(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
@@ -34,7 +34,7 @@ export function mergeMetadataEntries(currentValue, archivedValue) {
   };
 }
 
-function hasContent(entry) {
+export function hasContent(entry) {
   return entry.bookmarked || entry.tags.length > 0 || Object.keys(entry.savedTopics).length > 0;
 }
 
