@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { readFile, readdir } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { codexSessionIdFromFile } from './codex-session.mjs';
@@ -52,14 +52,16 @@ function claudeIdentity(file, entries) {
   return { id: `${parent}/${basename(file, '.jsonl')}`, cwd: entries.find((entry) => entry?.cwd)?.cwd || '' };
 }
 
-async function fileSessionMatches(root, source, id) {
-  const matches = [];
+async function buildFileSessionIndex(root, source, readSessionFile = readFile) {
+  const index = new Map();
   for (const file of await walkJsonl(root)) {
-    const entries = parseJsonl(await readFile(file, 'utf8'));
+    const entries = parseJsonl(await readSessionFile(file, 'utf8'));
     const identity = source === 'codex' ? codexIdentity(file, entries) : claudeIdentity(file, entries);
-    if (identity.id === id) matches.push({ ...identity, file });
+    const matches = index.get(identity.id) || [];
+    matches.push({ ...identity, file });
+    index.set(identity.id, matches);
   }
-  return matches;
+  return index;
 }
 
 async function defaultOpenCodeLookup(database, id) {
@@ -93,16 +95,48 @@ async function piSession(machine, parsed) {
   }
 }
 
+export function createLiveSessionLookup({ roots = {}, openCodeLookup = defaultOpenCodeLookup, readSessionFile = readFile } = {}) {
+  const fileIndexes = new Map();
+  const openCodeResults = new Map();
+  const matchesFor = (source, value) => {
+    if (!fileIndexes.has(source)) fileIndexes.set(source, buildFileSessionIndex(roots[source], source, readSessionFile));
+    return fileIndexes.get(source).then((index) => index.get(value) || []);
+  };
+  return async (source, value) => {
+    if (source === 'pi') {
+      try { await access(resolve(value)); return true; } catch (error) {
+        if (error?.code === 'ENOENT') return false;
+        throw error;
+      }
+    }
+    if (source === 'codex' || source === 'claude-code') return (await matchesFor(source, value)).length > 0;
+    if (source === 'opencode' && roots.opencode) {
+      if (!openCodeResults.has(value)) openCodeResults.set(value, openCodeLookup(roots.opencode, value));
+      return (await openCodeResults.get(value)).length > 0;
+    }
+    return false;
+  };
+}
+
 export function createOwnershipAwareResolver({
   machine,
   archivedWorkspace,
   destinationWorkspace,
   liveSessionExists = async () => false,
   openCodeLookup = defaultOpenCodeLookup,
+  readSessionFile = readFile,
+  lookupCache = { fileIndexes: new Map(), openCodeResults: new Map() },
 } = {}) {
   if (!machine?.id) throw new Error('machine is required');
   if (!archivedWorkspace?.oldRoot) throw new Error('archivedWorkspace.oldRoot is required');
   if (!destinationWorkspace?.root) throw new Error('destinationWorkspace.root is required');
+
+  const matchesFor = (source, value) => {
+    const root = machine.roots?.[source];
+    const cacheKey = `${source}\0${root || ''}`;
+    if (!lookupCache.fileIndexes.has(cacheKey)) lookupCache.fileIndexes.set(cacheKey, buildFileSessionIndex(root, source, readSessionFile));
+    return lookupCache.fileIndexes.get(cacheKey).then((index) => index.get(value) || []);
+  };
 
   return async (sourceKey) => {
     const parsed = parseSessionRef(sourceKey);
@@ -113,9 +147,14 @@ export function createOwnershipAwareResolver({
     let matches;
     if (parsed.source === 'pi') matches = await piSession(machine, parsed);
     else if (parsed.source === 'codex' || parsed.source === 'claude-code') {
-      matches = await fileSessionMatches(machine.roots?.[parsed.source], parsed.source, parsed.value);
+      matches = await matchesFor(parsed.source, parsed.value);
     } else if (parsed.source === 'opencode') {
-      matches = machine.roots?.opencode ? await openCodeLookup(machine.roots.opencode, parsed.value) : [];
+      if (!machine.roots?.opencode) matches = [];
+      else {
+        const cacheKey = `${machine.roots.opencode}\0${parsed.value}`;
+        if (!lookupCache.openCodeResults.has(cacheKey)) lookupCache.openCodeResults.set(cacheKey, openCodeLookup(machine.roots.opencode, parsed.value));
+        matches = await lookupCache.openCodeResults.get(cacheKey);
+      }
     }
     if (!matches?.length) return { reason: 'archived session not found' };
     if (matches.length > 1) return { reason: 'ambiguous archived session id' };

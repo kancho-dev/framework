@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createOwnershipAwareResolver } from './archive-session-ownership.mjs';
+import { createLiveSessionLookup, createOwnershipAwareResolver } from './archive-session-ownership.mjs';
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'archive-ownership-'));
@@ -116,6 +116,37 @@ test('snapshot ownership and destination containment are both required despite G
     openCodeLookup: async () => [{ id: 'framework', cwd: '/old/framework/project' }],
   });
   assert.match((await wrongDestination('opencode:framework')).reason, /outside destination workspace/);
+});
+
+test('indexes file stores once per resolver run and caches OpenCode ids', async () => {
+  const { machine } = await fixture();
+  await writeFile(join(machine.roots.codex, 'codex-two.jsonl'), `${JSON.stringify({ type: 'session_meta', payload: { id: 'codex-two', cwd: '/old/framework/two' } })}\n`);
+  let reads = 0;
+  let openCodeReads = 0;
+  const readSessionFile = async (...args) => { reads += 1; return readFile(...args); };
+  const resolveKey = resolver(machine, {
+    readSessionFile,
+    openCodeLookup: async (_database, id) => { openCodeReads += 1; return [{ id, cwd: '/old/framework/open' }]; },
+  });
+  await resolveKey('codex:codex-one');
+  await resolveKey('codex:codex-two');
+  await resolveKey('opencode:open-one');
+  await resolveKey('opencode:open-one');
+  assert.equal(reads, 2);
+  assert.equal(openCodeReads, 1);
+});
+
+test('live lookup indexes each file root once per run', async () => {
+  const { machine } = await fixture();
+  await writeFile(join(machine.roots.codex, 'codex-two.jsonl'), `${JSON.stringify({ type: 'session_meta', payload: { id: 'codex-two', cwd: '/live/two' } })}\n`);
+  let reads = 0;
+  const lookup = createLiveSessionLookup({
+    roots: { codex: machine.roots.codex },
+    readSessionFile: async (...args) => { reads += 1; return readFile(...args); },
+  });
+  assert.equal(await lookup('codex', 'codex-one'), true);
+  assert.equal(await lookup('codex', 'codex-two'), true);
+  assert.equal(reads, 2);
 });
 
 test('requires an explicit path mapping before producing a destination key', async () => {
