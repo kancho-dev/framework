@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createLiveSessionLookup, createOwnershipAwareResolver } from './archive-session-ownership.mjs';
@@ -116,6 +116,17 @@ test('snapshot ownership and destination containment are both required despite G
     openCodeLookup: async () => [{ id: 'framework', cwd: '/old/framework/project' }],
   });
   assert.match((await wrongDestination('opencode:framework')).reason, /outside destination workspace/);
+});
+
+test('Pi realpath containment rejects an escaping symlink while normal keys resolve', async () => {
+  const { root, machine, piFile } = await fixture();
+  const outside = join(root, 'outside.jsonl');
+  await writeFile(outside, `${JSON.stringify({ type: 'session', id: 'outside', cwd: '/old/framework/outside' })}\n`);
+  await symlink(outside, join(machine.roots.pi, 'escape.jsonl'));
+  const resolveKey = resolver(machine);
+
+  assert.match((await resolveKey('pi:/old/pi-store/escape.jsonl')).reason, /not found/);
+  assert.equal((await resolveKey('pi:/old/pi-store/one.jsonl')).targetKey, `pi@old-linux:${piFile}`);
 });
 
 test('indexes file stores once per resolver run and caches OpenCode ids', async () => {

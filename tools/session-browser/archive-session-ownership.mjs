@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { access, readFile, readdir } from 'node:fs/promises';
+import { access, readFile, readdir, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { codexSessionIdFromFile } from './codex-session.mjs';
@@ -76,7 +76,6 @@ async function piSession(machine, parsed) {
   let file;
   if (parsed.machineId) {
     file = resolve(parsed.value);
-    if (!isUnderRoot(file, archiveRoot)) return [];
   } else {
     const originalRoot = machine.originalRoots?.pi;
     if (!originalRoot) return [];
@@ -86,6 +85,9 @@ async function piSession(machine, parsed) {
     file = resolve(archiveRoot, suffix);
   }
   try {
+    const [realFile, realRoot] = await Promise.all([realpath(file), realpath(archiveRoot)]);
+    if (!isUnderRoot(realFile, realRoot)) return [];
+    file = realFile;
     const entries = parseJsonl(await readFile(file, 'utf8'));
     const header = entries.find((entry) => entry?.type === 'session');
     return header ? [{ id: header.id || basename(file, '.jsonl'), cwd: header.cwd || '', file }] : [];

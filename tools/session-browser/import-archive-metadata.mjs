@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-import { readFile, realpath } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { copyFile, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sha256, sha256File, validateBundleManifest } from './archive-metadata-bundle.mjs';
 import { mergeArchivedMetadata } from './archive-metadata-merge.mjs';
-import { ARCHIVE_METADATA_LEDGER_VERSION, routeMetadataSnapshots } from './archive-metadata-routing.mjs';
+import { appendSuccessfulImport, ARCHIVE_METADATA_LEDGER_VERSION, routeMetadataSnapshots } from './archive-metadata-routing.mjs';
 import { createLiveSessionLookup, createOwnershipAwareResolver } from './archive-session-ownership.mjs';
 import { loadLegacyMachines } from './legacy-machines.mjs';
 import { isUnderRoot } from './workspace-paths.mjs';
@@ -75,7 +76,7 @@ async function inspectBoundRoute(route, context) {
       lookupCache: archiveLookupCache,
     }),
   });
-  return {
+  const report = {
     status: 'bound',
     archivedWorkspaceId: route.snapshot.workspaceId,
     destinationWorkspaceId: route.destination.id,
@@ -99,6 +100,8 @@ async function inspectBoundRoute(route, context) {
     changed: merge.changed,
     diagnostics: state.errors,
   };
+  Object.defineProperty(report, 'plannedMetadata', { value: merge.metadata });
+  return report;
 }
 
 export async function createArchiveMetadataDryRun({
@@ -172,8 +175,101 @@ export async function createArchiveMetadataDryRun({
   return report;
 }
 
+async function fileState(path) {
+  try {
+    const bytes = await readFile(path);
+    return { exists: true, sha256: sha256(bytes) };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { exists: false, sha256: null };
+    throw error;
+  }
+}
+
+function sameFileState(left, right) {
+  return left.exists === right.exists && left.sha256 === right.sha256;
+}
+
+async function writeJsonAtomically(path, value) {
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    await rename(temporary, path);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
+
+function backupSuffix(date) {
+  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+}
+
+export async function applyArchiveMetadata({ beforeDestinationCommit, now = () => new Date(), ...options } = {}) {
+  const report = await createArchiveMetadataDryRun(options);
+  report.dryRun = false;
+  let ledger = await readJson(report.ledgerPath, { version: ARCHIVE_METADATA_LEDGER_VERSION, records: [] });
+  for (const entry of report.workspaces.filter(({ status }) => status === 'bound')) {
+    try {
+      if (await sha256File(entry.snapshotPath) !== entry.snapshotSha256) throw new Error('snapshot changed after planning');
+      const plannedState = { exists: entry.destinationExists, sha256: entry.destinationSha256 };
+      const observedState = await fileState(entry.destinationMetadataPath);
+      if (!sameFileState(plannedState, observedState)) throw new Error('destination metadata changed after planning');
+      let backupPath = null;
+      let postSha256 = observedState.sha256;
+      if (entry.changed) {
+        await mkdir(dirname(entry.destinationMetadataPath), { recursive: true });
+        if (observedState.exists) {
+          backupPath = `${entry.destinationMetadataPath}.backup-${backupSuffix(now())}-${entry.destinationWorkspaceId}`;
+          await copyFile(entry.destinationMetadataPath, backupPath, fsConstants.COPYFILE_EXCL);
+        }
+        const temporary = `${entry.destinationMetadataPath}.${process.pid}.${entry.destinationWorkspaceId}.tmp`;
+        try {
+          await writeFile(temporary, `${JSON.stringify(entry.plannedMetadata, null, 2)}\n`, 'utf8');
+          if (beforeDestinationCommit) await beforeDestinationCommit(entry);
+          const immediateState = await fileState(entry.destinationMetadataPath);
+          if (!sameFileState(observedState, immediateState)) throw new Error('destination metadata became stale before write');
+          await rename(temporary, entry.destinationMetadataPath);
+        } finally {
+          await rm(temporary, { force: true });
+        }
+        const written = await readJson(entry.destinationMetadataPath);
+        if (!written || Number(written.version) < 3 || !written.sessions || typeof written.sessions !== 'object' || Array.isArray(written.sessions)) {
+          throw new Error('written destination metadata failed validation');
+        }
+        postSha256 = await sha256File(entry.destinationMetadataPath);
+      }
+      const record = {
+        machineId: report.machineId,
+        archivedWorkspaceId: entry.archivedWorkspaceId,
+        snapshotSha256: entry.snapshotSha256,
+        destinationWorkspaceId: entry.destinationWorkspaceId,
+        bundlePath: report.bundlePath,
+        bundleSha256: report.bundleSha256,
+        destinationMetadataPath: entry.destinationMetadataPath,
+        preSha256: observedState.sha256,
+        postSha256,
+        importedAt: now().toISOString(),
+        counts: entry.counts,
+        ...(backupPath ? { backupPath } : {}),
+      };
+      ledger = appendSuccessfulImport(ledger, record);
+      await writeJsonAtomically(report.ledgerPath, ledger);
+      entry.status = 'imported';
+      entry.backupPath = backupPath;
+      entry.preSha256 = observedState.sha256;
+      entry.postSha256 = postSha256;
+    } catch (error) {
+      entry.status = 'failed';
+      entry.reason = error.message;
+    }
+  }
+  report.summary = Object.fromEntries(['imported', 'unbound', 'invalid', 'already-imported', 'failed'].map((status) => [status, report.workspaces.filter((entry) => entry.status === status).length]));
+  report.ok = report.summary.invalid === 0 && report.summary.failed === 0;
+  return report;
+}
+
 function usage() {
-  return 'Usage: node import-archive-metadata.mjs --bundle <path> --workspaces <path> [--bind archived=current] [--allow-rebind] [--json]';
+  return 'Usage: node import-archive-metadata.mjs --bundle <path> --workspaces <path> [--bind archived=current] [--allow-rebind] [--apply] [--json]';
 }
 
 function parseArgs(argv) {
@@ -190,7 +286,7 @@ function parseArgs(argv) {
       options.bindings[archived] = current;
     } else if (arg === '--allow-rebind') options.allowRebind = true;
     else if (arg === '--json') options.json = true;
-    else if (arg === '--apply') throw new Error('--apply is not available in this implementation slice');
+    else if (arg === '--apply') options.apply = true;
     else throw new Error(`Unknown or incomplete option: ${arg}\n${usage()}`);
   }
   if (!options.bundlePath || !options.workspaceConfigPath) throw new Error(usage());
@@ -198,7 +294,7 @@ function parseArgs(argv) {
 }
 
 export function printReport(report) {
-  console.log(`Dry run: ${report.bundlePath}`);
+  console.log(`${report.dryRun ? 'Dry run' : 'Apply'}: ${report.bundlePath}`);
   console.log(`Archive manifest provenance changed: ${report.archiveManifest.provenanceChanged ? 'yes' : 'no'}`);
   for (const entry of report.workspaces) {
     const destination = entry.destinationWorkspaceId ? ` -> ${entry.destinationWorkspaceId}` : '';
@@ -218,7 +314,7 @@ export function printReport(report) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const report = await createArchiveMetadataDryRun(options);
+  const report = options.apply ? await applyArchiveMetadata(options) : await createArchiveMetadataDryRun(options);
   if (options.json) console.log(JSON.stringify(report, null, 2));
   else printReport(report);
   if (!report.ok) process.exitCode = 1;
