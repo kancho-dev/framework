@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { mkdir, readdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -874,6 +874,32 @@ function claudeCodeFileId(file) {
   return info.isSidechain ? `${info.parentId}/${info.agentName}` : basename(file, '.jsonl');
 }
 
+async function claudeCodeRecordedParentId(file) {
+  const handle = await open(file, 'r');
+  try {
+    const buffer = Buffer.alloc(16 * 1024);
+    let remainder = '';
+    let position = 0;
+    while (true) {
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
+      const lines = bytesRead
+        ? `${remainder}${buffer.toString('utf8', 0, bytesRead)}`.split(/\r?\n/)
+        : [remainder];
+      remainder = bytesRead ? (lines.pop() || '') : '';
+      position += bytesRead;
+      for (const line of lines) {
+        try {
+          const sessionId = JSON.parse(line)?.sessionId;
+          if (sessionId) return sessionId;
+        } catch { /* keep scanning malformed lines */ }
+      }
+      if (!bytesRead) return null;
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
 function parseClaudeCodeJsonl(content) {
   const lines = [];
   for (const line of content.split(/\r?\n/)) {
@@ -1077,14 +1103,23 @@ async function loadClaudeCodeRelations(detail, root = CLAUDE_PROJECTS_ROOT, mach
     }
     return { parentSession: null, childSessions: [] };
   }
-  const childSessions = [];
-  for (const file of files) {
+  const sidechainFiles = files.filter((file) => claudeCodeFileInfo(file).isSidechain);
+  const candidateFiles = (await Promise.all(sidechainFiles.map(async (file) => {
     const info = claudeCodeFileInfo(file);
-    if (info.isSidechain && info.parentId === detail.id) {
-      const child = await cachedClaudeCodeSummary(file, machine).catch(() => null);
-      if (child) childSessions.push(claudeCodeRelation(child, machine));
+    if (info.parentId === detail.id) return file;
+    const recordedParentId = await claudeCodeRecordedParentId(file).catch(() => null);
+    return recordedParentId === detail.id ? file : null;
+  }))).filter(Boolean);
+  const sidechains = await Promise.all(
+    candidateFiles.map((file) => cachedClaudeCodeSummary(file, machine).catch(() => null)),
+  );
+  const childSessionsById = new Map();
+  for (const child of sidechains) {
+    if (child?.parentId === detail.id && !childSessionsById.has(child.id)) {
+      childSessionsById.set(child.id, claudeCodeRelation(child, machine));
     }
   }
+  const childSessions = [...childSessionsById.values()];
   childSessions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
   return { parentSession: null, childSessions };
 }

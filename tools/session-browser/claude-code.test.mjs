@@ -44,6 +44,9 @@ await copyFile(
 await writeFile(join(projDir, 'STALE-PARENT', 'subagents', 'agent-REMAP.jsonl'), jsonl([
   { type: 'user', uuid: 'r-u1', cwd: workspaceRoot, sessionId: 'RECORDED-PARENT', agentId: 'REMAP', isSidechain: true, timestamp: '2026-01-01T00:00:05.000Z', message: { role: 'user', content: 'remapped task' } },
 ]));
+await writeFile(join(projDir, 'RECORDED-PARENT.jsonl'), jsonl([
+  { type: 'user', uuid: 'rp-u1', cwd: workspaceRoot, sessionId: 'RECORDED-PARENT', timestamp: '2026-01-01T00:00:00.000Z', message: { role: 'user', content: 'recorded parent' } },
+]));
 
 // A session in a different workspace must be excluded by the cwd filter.
 await writeFile(join(projDir, 'OTHER.jsonl'), jsonl([
@@ -112,4 +115,11 @@ test('sidechain detail resolves a recorded parent id that differs from its direc
   const detail = await getJson(server, `/api/session?ref=${encodeURIComponent('claude-code:RECORDED-PARENT/agent-REMAP')}`);
   assert.equal(detail.id, 'RECORDED-PARENT/agent-REMAP');
   assert.equal(detail.parentId, 'RECORDED-PARENT');
+});
+
+test('recorded parent detail links a sidechain stored under a stale directory parent', async (t) => {
+  const server = await startServer();
+  t.after(() => server.close());
+  const detail = await getJson(server, `/api/session?ref=${encodeURIComponent('claude-code:RECORDED-PARENT')}`);
+  assert.deepEqual(detail.childSessions.map((child) => child.path), ['claude-code:RECORDED-PARENT/agent-REMAP']);
 });
