@@ -14,6 +14,7 @@ import { createSingleFlight, createSummaryCache } from './summary-cache.mjs';
 import { loadLegacyMachines, translateCwd } from './legacy-machines.mjs';
 import { formatSessionRef, isSourceRef, parseSessionRef, sessionKey } from './session-ref.mjs';
 import { emptyMetadata, METADATA_VERSION } from './metadata-schema.mjs';
+import { createEffectiveMetadataStore } from './effective-session-metadata.mjs';
 import { isUnderRoot } from './workspace-paths.mjs';
 
 const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
@@ -451,31 +452,17 @@ async function writeMetadata(ctx, metadata) {
   await rename(tmp, ctx.metadataPath);
 }
 
-function metadataForSession(metadata, session) {
-  const item = metadata.sessions[sessionKey(session)] || {};
-  const savedTopics = normalizeSavedTopics(item.savedTopics);
-  return { bookmarkKey: sessionKey(session), bookmarked: Boolean(item.bookmarked), tags: metadataTags(item), savedTopics, savedTopicCount: Object.keys(savedTopics).length };
-}
-
-function attachMetadata(session, metadata) {
-  return { ...session, metadata: metadataForSession(metadata, session) };
-}
-
-async function updateSessionMetadata(ctx, path, patch) {
-  const key = sessionKey(path);
-  const { metadata, error } = await readMetadata(ctx);
-  if (error) throw new Error(error);
-  const current = metadata.sessions[key] || { bookmarked: false, tags: [], savedTopics: {} };
-  const patchTags = patch.tags === undefined ? patch.labels : patch.tags;
-  const next = {
-    bookmarked: patch.bookmarked === undefined ? Boolean(current.bookmarked) : Boolean(patch.bookmarked),
-    tags: patchTags === undefined ? metadataTags(current) : normalizeTags(patchTags),
-    savedTopics: patch.savedTopics === undefined ? normalizeSavedTopics(current.savedTopics) : normalizeSavedTopics(patch.savedTopics),
-  };
-  if (!next.bookmarked && next.tags.length === 0 && Object.keys(next.savedTopics).length === 0) delete metadata.sessions[key];
-  else metadata.sessions[key] = next;
-  await writeMetadata(ctx, metadata);
-  return { key, ...next, savedTopicCount: Object.keys(next.savedTopics).length };
+function effectiveStore(ctx, legacyState) {
+  if (!ctx.effectiveStore) ctx.effectiveStore = createEffectiveMetadataStore({
+    workspace: { id: ctx.workspaceId, root: ctx.workspaceRoot, metadataPath: ctx.metadataPath },
+    machines: legacyState.machines,
+    sessionArchiveBindings: ctx.legacyMachineBindings,
+    metadataPath: ctx.metadataPath,
+    readLive: () => readMetadata(ctx),
+    writeLive: (metadata) => writeMetadata(ctx, metadata),
+    isAllowed: (session) => isAllowedSessionPath(ctx, typeof session === 'string' ? session : session.path),
+  });
+  return ctx.effectiveStore;
 }
 
 function isOpenCodeRef(ref) {
@@ -1396,19 +1383,20 @@ function archiveSnapshot(ctx, legacyState) {
 }
 
 async function listSessions(ctx, { archivesOnly = false } = {}) {
-  const [{ metadata, error: metadataError }, legacyState] = await Promise.all([readMetadata(ctx), ctx.legacyMachines]);
+  const legacyState = await ctx.legacyMachines;
   const live = archivesOnly && ctx.lastLive
     ? ctx.lastLive
     : await singleFlight(`${ctx.scanKey}\0live`, () => scanLiveSources(ctx));
   ctx.lastLive = live;
   const archives = archiveSnapshot(ctx, legacyState);
   const sessions = [...live.sessions, ...archives.sessions].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  const overlay = await effectiveStore(ctx, legacyState).readForSessions(sessions);
   return {
-    sessions: sessions.map((session) => attachMetadata(session, metadata)),
-    sourceErrors: [...live.sourceErrors, ...archives.sourceErrors],
+    sessions: sessions.map((session) => ({ ...session, metadata: overlay.entries.get(sessionKey(session)) })),
+    sourceErrors: [...live.sourceErrors, ...archives.sourceErrors, ...overlay.diagnostics.map((item) => ({ source: item.source, code: item.code, error: item.message }))],
     unmappedSessions: archives.unmappedSessions,
     archivesLoading: archives.archivesLoading,
-    metadataError,
+    metadataError: overlay.error,
     metadataPath: ctx.metadataPath,
   };
 }
@@ -1434,13 +1422,15 @@ async function isAllowedSessionPath(ctx, candidate) {
   return isUnderRoot(resolved, PI_SESSION_ROOT);
 }
 
-export function createSessionBrowserHandler({ basePath = '/', cockpit = null, workspaceRoot = DEFAULT_WORKSPACE_ROOT, workspaceName = basename(workspaceRoot) || workspaceRoot, metadataPath = DEFAULT_METADATA_PATH, legacyMachinesPath, legacyMachineBindings } = {}) {
+export function createSessionBrowserHandler({ basePath = '/', cockpit = null, workspaceRoot = DEFAULT_WORKSPACE_ROOT, workspaceName = basename(workspaceRoot) || workspaceRoot, workspaceId = 'default', metadataPath = DEFAULT_METADATA_PATH, legacyMachinesPath, legacyMachineBindings } = {}) {
   const normalizedBase = normalizeBasePath(basePath);
   const resolvedWorkspaceRoot = resolve(workspaceRoot);
   const ctx = {
     workspaceRoot: resolvedWorkspaceRoot,
     workspaceName,
+    workspaceId,
     metadataPath: resolve(metadataPath),
+    legacyMachineBindings,
     scanKey: `${resolvedWorkspaceRoot}\0${resolve(legacyMachinesPath || join(resolvedWorkspaceRoot, '.tools-config', 'session-browser', 'machines.json'))}\0${JSON.stringify(legacyMachineBindings ?? null)}`,
     archiveMemo: createImmutableSourceMemo(),
     lastLive: null,
@@ -1482,8 +1472,26 @@ export function createSessionBrowserHandler({ basePath = '/', cockpit = null, wo
           sendJson(res, 404, { error: 'Session is outside the current workspace root' });
           return true;
         }
-        const { metadata, error: metadataError } = await readMetadata(ctx);
-        sendJson(res, 200, { ...attachMetadata(session, metadata), metadataError });
+        const legacyState = await ctx.legacyMachines;
+        const overlay = await effectiveStore(ctx, legacyState).readForSessions([session]);
+        sendJson(res, 200, { ...session, metadata: overlay.entries.get(sessionKey(session)), metadataError: overlay.error, sourceErrors: overlay.diagnostics });
+        return true;
+      }
+      if (pathname === '/api/metadata/override' && req.method === 'DELETE') {
+        let body = '';
+        req.on('data', (chunk) => { body += chunk; if (body.length > 64 * 1024) req.destroy(); });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}');
+            const path = payload.path || payload.ref;
+            if (!path || !await isAllowedSessionPath(ctx, path)) return sendJson(res, 400, { error: 'Invalid session path' });
+            const legacyState = await ctx.legacyMachines;
+            const updated = await effectiveStore(ctx, legacyState).reset(path);
+            sendJson(res, 200, { metadataPath: ctx.metadataPath, metadata: updated });
+          } catch (error) {
+            sendJson(res, 400, { error: safeError(error), metadataPath: ctx.metadataPath });
+          }
+        });
         return true;
       }
       if (pathname === '/api/metadata' && req.method === 'PUT') {
@@ -1497,7 +1505,8 @@ export function createSessionBrowserHandler({ basePath = '/', cockpit = null, wo
               sendJson(res, 400, { error: 'Invalid session path' });
               return;
             }
-            const updated = await updateSessionMetadata(ctx, path, payload);
+            const legacyState = await ctx.legacyMachines;
+            const updated = await effectiveStore(ctx, legacyState).mutate(path, payload);
             sendJson(res, 200, { metadataPath: ctx.metadataPath, metadata: updated });
           } catch (error) {
             sendJson(res, 500, { error: safeError(error), metadataPath: ctx.metadataPath });

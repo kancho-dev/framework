@@ -249,36 +249,22 @@ node tools/session-browser/build-archive.mjs old-linux \
 
 The workspace config must declare `sessionArchiveManifestPath`. Each workspace is exported by stable `id`, `root`, and its explicit `sessionMetadataPath`; the builder never discovers metadata files or falls back to the Session Browser process default. An omitted or missing sidecar produces a canonical empty snapshot marked `absentSource`. The whole machine archive is staged and atomically published, so a metadata read/write failure prevents publication. Re-export requires rebuilding the whole machine archive under the existing `--overwrite` gate.
 
-The published machine contains `metadata/bundle.json` and one byte-preserving snapshot under `metadata/workspaces/<workspace-id>/metadata.json`. The bundle records machine/workspace identity, old roots, source provenance, checksums, byte counts, and export time. These files are immutable archive artifacts; imports never edit them.
+The published machine contains `metadata/bundle.json` and one byte-preserving snapshot under `metadata/workspaces/<workspace-id>/metadata.json`. The bundle records machine/workspace identity, old roots, source provenance, checksums, byte counts, and export time. These files are immutable archive artifacts; Session Browser never edits them.
 
-Import is explicit and dry-run-first. The machine must be registered in the current shared manifest and each destination must have an explicit archive binding and `sessionMetadataPath`:
+Each workspace opts into archived defaults through its existing `sessionArchiveBindings`. Add `metadataBundlePath`, resolved relative to Tool Orchestrator's `workspaces.json`; exact current workspace ID is selected unless an explicit `archivedWorkspaceId` names a renamed or history-only snapshot:
 
-```bash
-node tools/session-browser/import-archive-metadata.mjs \
-  --bundle /path/to/archive/old-linux/metadata/bundle.json \
-  --workspaces /path/to/.tools-config/tool-orchestrator/workspaces.json
-
-# Machine-readable report
-# (same validation, routing, ownership, conflict, and count details)
-... --json
-
-# Apply after reviewing the dry run
-... --apply
+```json
+{
+  "machineId": "old-linux",
+  "metadataBundlePath": "../session-browser/archive/old-linux/metadata/bundle.json",
+  "archivedWorkspaceId": "retired-client",
+  "pathMap": [{ "from": "/home/user/old-client", "to": "." }]
+}
 ```
 
-Routing uses an explicit override first, exact stable workspace-ID equality second, and otherwise leaves the snapshot `unbound`. It never infers from labels, folder names, roots, path suffixes, or Global containment. Connect a renamed or history-only destination explicitly:
+Session Browser verifies machine/workspace identity, bundle containment, snapshot size/checksum, archived session existence, original `cwd` ownership, binding translation, and destination containment. It canonicalizes legacy `labels` to tags in memory without modifying archived bytes. Missing, corrupt, mismatched, unbound, or ambiguous snapshots fail soft per workspace and never hide sessions or disable live metadata. Global visibility does not transfer ownership: every workspace reads only its exact snapshot and writes only its own live sidecar.
 
-```bash
-... --bind retired-client=client-history
-```
-
-A destination may receive only one archived workspace per invocation. Import verifies bundle containment/checksums, archived session existence and original `cwd` ownership, binding translation, destination containment, and protection of sessions that still resolve in live stores. Global visibility does not transfer metadata ownership: Framework's snapshot imports only into Framework, while Global receives only its own snapshot.
-
-Dry-run and `--json` output classify each snapshot as `bound`, `unbound`, `invalid`, `already-imported`, or `failed`; they include provenance drift, source/destination checksums, canonicalization, eligible and unmatched keys, saved-topic conflicts with archived values, expected counts, diagnostics, and summary totals. A changed shared-manifest checksum is reported as provenance drift but does not invalidate an otherwise current registration/binding.
-
-`--apply` rechecks the plan and snapshot, compares destination state before rename, backs up an existing changed sidecar, writes atomically, validates the result, and then records success in the private external ledger (default `.tools-config/session-browser/archive-metadata-imports.json` relative to the Tool Orchestrator config). An absent destination is created without a meaningless backup. Reimporting the same machine/workspace/snapshot/destination tuple is a no-op. Importing the same archived workspace into another destination is blocked unless `--allow-rebind` explicitly acknowledges the fan-out risk; old ledger records remain immutable.
-
-Imports are fail-soft per workspace. A ledger-write failure occurs after the sidecar publication by design and is reported as failed; the timestamped backup remains available, and rerunning safely re-merges the additive metadata before retrying the ledger write. Bookmarks merge by OR, tags by union, and saved topics by entry ID; current saved-topic values win destructive conflicts while archived values remain in the report.
+With no live entry, the archived entry is displayed as **Archived default**. The first bookmark, tag, or saved-topic edit atomically writes the complete effective entry to the live sidecar; that whole **Live override** remains authoritative even if every field is cleared. **Reset to archived default** deletes only that archived session's live entry and reveals the immutable snapshot again. Current-session metadata behavior is unchanged.
 
 ## Bookmarks And Tags
 

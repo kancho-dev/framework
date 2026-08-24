@@ -1,7 +1,7 @@
 import { contextLoadLevel, contextLoadPercent, contextLoadPill, escapeHtml, formatContextLoad, formatDate, shortPath, formatTokens } from './formatters.js';
 import { restoreCommand, copyRestoreCommand, copyAndFlash } from './copy-restore.js';
 import { renderEntry } from './entry-rendering.js';
-import { fetchSessionDetail, fetchSessions, putMetadata } from './api.js';
+import { fetchSessionDetail, fetchSessions, putMetadata, resetMetadataOverride } from './api.js';
 import { ARCHIVE_POLL_DELAY_MS, shouldPollArchives } from './archive-polling.js';
 import { archivalNote, archivalProvenanceText, machineFilterOptions, matchesMachineFilter, originTooltip, relationTooltip } from './archival-ui.js';
 import { formatToolTitle } from '/shared/browser/format.js';
@@ -39,6 +39,8 @@ const els = {
   showTools: document.querySelector('#show-tools'),
   copyRestore: document.querySelector('#copy-restore'),
   bookmarkSelected: document.querySelector('#bookmark-selected'),
+  metadataProvenance: document.querySelector('#metadata-provenance'),
+  resetMetadata: document.querySelector('#reset-metadata'),
   tagEditor: document.querySelector('#tag-editor'),
   tagInput: document.querySelector('#tag-input'),
   addTag: document.querySelector('#add-tag'),
@@ -414,6 +416,9 @@ function renderSelectedDetail({ scrollTopic = true } = {}) {
   els.copyRestore.title = command ? `Copy command: ${command}` : '';
   els.bookmarkSelected.textContent = isBookmarked(detail) ? '★ Bookmarked' : '☆ Bookmark';
   els.bookmarkSelected.classList.toggle('active', isBookmarked(detail));
+  const provenance = detail.metadata?.provenance?.source;
+  els.metadataProvenance.textContent = provenance === 'archive' ? 'Archived default' : provenance === 'live' && detail.metadata?.canReset ? 'Live override' : '';
+  els.resetMetadata.classList.toggle('hidden', !detail.metadata?.canReset);
   els.readerTitle.textContent = detail.name || detail.firstPrompt || detail.id;
   renderRelations(detail);
   const primaryMeta = [
@@ -752,6 +757,14 @@ els.showTools.addEventListener('change', () => {
   renderSelectedDetail({ scrollTopic: false });
   requestAnimationFrame(updateReaderHeaderHeight);
 });
+els.resetMetadata.addEventListener('click', async () => {
+  if (!state.selectedDetail?.metadata?.canReset) return;
+  const metadata = await resetMetadataOverride(state.selectedDetail.path);
+  syncMetadata(state.selectedDetail.path, metadata);
+  renderSessions();
+  renderDetail();
+});
+
 els.bookmarkSelected.addEventListener('click', async () => {
   if (!state.selectedDetail) return;
   await saveMetadata(state.selectedDetail.path, { bookmarked: !isBookmarked(state.selectedDetail) });

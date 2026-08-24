@@ -56,7 +56,7 @@ async function loadWorkspaceConfig() {
   const sessionArchiveManifestPath = parsed.sessionArchiveManifestPath
     ? resolve(dirname(configPath), requiredString(parsed.sessionArchiveManifestPath, 'sessionArchiveManifestPath'))
     : null;
-  const workspaces = parsed.workspaces.map((entry) => normalizeWorkspace(entry, ids, sessionArchiveManifestPath));
+  const workspaces = parsed.workspaces.map((entry) => normalizeWorkspace(entry, ids, sessionArchiveManifestPath, dirname(configPath)));
   const fallbackId = workspaces.find((workspace) => workspace.root === WORKSPACE_ROOT)?.id || workspaces[0].id;
   const defaultWorkspace = parsed.defaultWorkspace && ids.has(parsed.defaultWorkspace) ? parsed.defaultWorkspace : fallbackId;
   return { defaultWorkspace, workspaces, configured: true, path: resolve(WORKSPACE_CONFIG_PATH) };
@@ -72,7 +72,20 @@ function defaultWorkspaceConfig() {
   };
 }
 
-function normalizeWorkspace(entry, ids, sessionArchiveManifestPath = null) {
+function normalizeArchiveBindings(value, configDir, workspaceId) {
+  if (!Array.isArray(value)) return [];
+  return value.map((binding, index) => {
+    if (!binding || typeof binding !== 'object' || Array.isArray(binding)) throw new Error(`workspace ${workspaceId} sessionArchiveBindings[${index}] must be an object`);
+    const machineId = requiredString(binding.machineId, `workspace ${workspaceId} sessionArchiveBindings[${index}].machineId`);
+    const metadataBundlePath = binding.metadataBundlePath
+      ? resolve(configDir, requiredString(binding.metadataBundlePath, `workspace ${workspaceId} sessionArchiveBindings[${index}].metadataBundlePath`))
+      : null;
+    const archivedWorkspaceId = binding.archivedWorkspaceId ? normalizeWorkspaceId(binding.archivedWorkspaceId) : null;
+    return { ...structuredClone(binding), machineId, ...(metadataBundlePath ? { metadataBundlePath } : {}), ...(archivedWorkspaceId ? { archivedWorkspaceId } : {}) };
+  });
+}
+
+function normalizeWorkspace(entry, ids, sessionArchiveManifestPath = null, configDir = process.cwd()) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('Workspace entries must be objects');
   const id = normalizeWorkspaceId(entry.id);
   if (ids.has(id)) throw new Error(`Duplicate workspace id: ${id}`);
@@ -87,7 +100,7 @@ function normalizeWorkspace(entry, ids, sessionArchiveManifestPath = null) {
     taskHistoryPath: entry.taskHistoryPath ? resolve(String(entry.taskHistoryPath)) : null,
     sessionMetadataPath: entry.sessionMetadataPath ? resolve(String(entry.sessionMetadataPath)) : null,
     sessionArchiveManifestPath,
-    sessionArchiveBindings: sessionArchiveManifestPath ? (Array.isArray(entry.sessionArchiveBindings) ? structuredClone(entry.sessionArchiveBindings) : []) : null,
+    sessionArchiveBindings: sessionArchiveManifestPath ? normalizeArchiveBindings(entry.sessionArchiveBindings, configDir, id) : null,
     tokensCostAnalyzerOutputPath: entry.tokensCostAnalyzerOutputPath ? resolve(String(entry.tokensCostAnalyzerOutputPath)) : null,
     tools: Object.fromEntries(Object.entries(tools).map(([key, value]) => [key, value !== false])),
   };
@@ -220,6 +233,7 @@ function createWorkspaceHandlers(workspace) {
       basePath: '/tools/sessions',
       workspaceRoot: workspace.root,
       workspaceName: workspace.name,
+      workspaceId: workspace.id,
       ...(workspace.sessionMetadataPath ? { metadataPath: workspace.sessionMetadataPath } : {}),
       ...(workspace.sessionArchiveManifestPath ? {
         legacyMachinesPath: workspace.sessionArchiveManifestPath,

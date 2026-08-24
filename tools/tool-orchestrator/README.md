@@ -191,6 +191,7 @@ Optional multi-workspace config, including one shared immutable session archive 
       "sessionMetadataPath": "/home/user/work/framework-ws/.tools-config/session-browser/metadata.json",
       "sessionArchiveBindings": [{
         "machineId": "old-linux",
+        "metadataBundlePath": "../session-browser/archive/old-linux/metadata/bundle.json",
         "pathMap": [{ "from": "/home/user/work/framework-ws", "to": "." }]
       }],
       "tools": { "task-browser": true, "session-browser": true, "tokens-cost-analyzer": true }
@@ -220,11 +221,11 @@ The optional top-level `sessionArchiveManifestPath` is absolute or resolves rela
 }
 ```
 
-Manifest-relative roots resolve against the manifest directory. Each workspace independently opts in with `sessionArchiveBindings`; absolute `from` prefixes map by longest match to `to` targets constrained inside that workspace. A broad Global workspace may intentionally bind `/home/user` while narrower workspaces bind their own old roots, so the same immutable session can appear in separate handlers without sharing metadata or cache state.
+Manifest-relative roots resolve against the manifest directory. Each workspace independently opts in with `sessionArchiveBindings`; absolute `from` prefixes map by longest match to `to` targets constrained inside that workspace. `metadataBundlePath` resolves relative to `workspaces.json` and selects that machine's immutable metadata bundle for the same binding. Exact workspace ID is the default snapshot identity; add `archivedWorkspaceId` only for an explicit renamed/history workspace. A broad Global workspace may intentionally bind `/home/user` while narrower workspaces bind their own old roots, so the same immutable session can appear in separate handlers without sharing metadata, ownership, or cache state.
 
 Shared mode wins and does not merge a workspace-local `.tools-config/session-browser/machines.json`. To migrate, copy machine facts once into the shared manifest, move each local file's `pathMap` into that workspace's binding, start the Orchestrator and verify workspaces independently, then retain local files only if standalone Session Browser still needs them. Archive files, session keys, and metadata sidecars do not move. Missing manifests, invalid machines, and invalid bindings fail soft per handler; they cannot widen readable paths or disable live sessions.
 
-The same workspace IDs, explicit `sessionMetadataPath` values, shared manifest, and per-workspace bindings drive immutable multi-workspace metadata export/import. Session Browser's README documents `build-archive.mjs --workspaces`, dry-run reporting, explicit renamed/history-only bindings, `--apply`, backups, and the external import ledger. Broad Global visibility never transfers another workspace's metadata ownership.
+The same workspace IDs, explicit `sessionMetadataPath` values, shared manifest, and per-workspace bindings drive immutable multi-workspace metadata export and automatic read-through defaults. Session Browser verifies each bound snapshot and exposes it until a complete live copy-on-write override exists; resetting the override reveals the snapshot again. Broad Global visibility never transfers another workspace's metadata ownership. Session Browser's README documents export, diagnostics, precedence, and reset behavior.
 
 Workspace IDs are URL-safe and selected with `?workspace=<id>`, so two browser tabs can keep different workspace contexts. Cockpit navigation shows only tools enabled for the selected workspace, and each tool's workspace switcher shows only workspaces where that tool is enabled. If only one eligible workspace remains, the switcher renders a label rather than a dropdown. Home links always use the Cockpit icon. Availability checks determine whether an enabled tool is ready or warning. Missing metadata/history paths use each tool's existing default for that workspace. Task Browser and Session Browser default to enabled when their entries are omitted; Tokens / Cost Analyzer requires an explicit `"tokens-cost-analyzer": true` per workspace because analysis can scan full local session history.
 

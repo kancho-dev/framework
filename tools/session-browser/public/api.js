@@ -12,6 +12,17 @@ export async function fetchSessionDetail(path, { signal } = {}) {
   return detail;
 }
 
+export async function resetMetadataOverride(path) {
+  const res = await fetch('api/metadata/override', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to reset metadata override');
+  return data.metadata;
+}
+
 export async function putMetadata(path, patch) {
   const res = await fetch('api/metadata', {
     method: 'PUT',

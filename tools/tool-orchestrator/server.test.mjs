@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -70,26 +71,51 @@ test('relative shared archive manifests and per-workspace bindings reach Session
   assert.ok(payload.sessions.some(({ machineId, id }) => machineId === 'old' && id === 'archived'), JSON.stringify(payload));
 });
 
-test('shared archive handlers isolate nested workspace visibility, detail guards, failures, and metadata', async (t) => {
+test('four-workspace archive overlay isolates defaults, overrides, reset, and failures', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'orchestrator-shared-isolation-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const framework = join(root, 'framework');
   const morph = join(root, 'morph');
-  const archive = join(root, 'config', 'archive', 'old', 'pi');
-  await Promise.all([mkdir(framework), mkdir(morph), mkdir(archive, { recursive: true })]);
-  await writeFile(join(archive, 'framework.jsonl'), `${JSON.stringify({ type: 'session', id: 'framework-session', cwd: '/old/home/framework/project', timestamp: '2026-01-01T00:00:00.000Z' })}\n`);
-  await writeFile(join(archive, 'morph.jsonl'), `${JSON.stringify({ type: 'session', id: 'morph-session', cwd: '/old/home/morph/project', timestamp: '2026-01-01T00:00:00.000Z' })}\n`);
-  await writeFile(join(root, 'config', 'manifest.json'), JSON.stringify({ version: 1, machines: [{ id: 'old', roots: { pi: 'archive/old/pi' } }] }));
-  const metadata = Object.fromEntries(['framework', 'morph', 'global', 'broken'].map((id) => [id, join(root, 'metadata', `${id}.json`)]));
-  const binding = (from) => [{ machineId: 'old', pathMap: [{ from, to: '.' }] }];
-  const configPath = join(root, 'config', 'workspaces.json');
+  const history = join(root, 'history');
+  const configDir = join(root, 'config');
+  const archive = join(configDir, 'archive', 'old', 'pi');
+  const bundleDir = join(configDir, 'archive', 'old', 'metadata');
+  await Promise.all([mkdir(framework), mkdir(morph), mkdir(history), mkdir(archive, { recursive: true }), mkdir(join(bundleDir, 'workspaces'), { recursive: true })]);
+  const frameworkFile = join(archive, 'framework.jsonl');
+  const morphFile = join(archive, 'morph.jsonl');
+  await writeFile(frameworkFile, `${JSON.stringify({ type: 'session', id: 'framework-session', cwd: '/old/home/framework/project', timestamp: '2026-01-01T00:00:00.000Z' })}\n`);
+  await writeFile(morphFile, `${JSON.stringify({ type: 'session', id: 'morph-session', cwd: '/old/home/morph/project', timestamp: '2026-01-01T00:00:00.000Z' })}\n`);
+  await writeFile(join(configDir, 'manifest.json'), JSON.stringify({ version: 1, machines: [{ id: 'old', roots: { pi: 'archive/old/pi' } }] }));
+  const sha256 = (value) => createHash('sha256').update(value).digest('hex');
+  const snapshotSpecs = [
+    ['framework', '/old/home/framework', `pi@old:${frameworkFile}`, { bookmarked: true, tags: ['framework-default'], savedTopics: { f: { title: 'Framework topic' } } }],
+    ['morph', '/old/home/morph', `pi@old:${morphFile}`, { bookmarked: false, tags: ['morph-default'], savedTopics: {} }],
+    ['global', '/old/home', `pi@old:${frameworkFile}`, { bookmarked: false, tags: ['global-default'], savedTopics: {} }],
+    ['retired-client', '/old/home/framework', `pi@old:${frameworkFile}`, { bookmarked: false, tags: ['history-default'], savedTopics: {} }],
+  ];
+  const bundleWorkspaces = [];
+  for (const [id, oldRoot, key, entry] of snapshotSpecs) {
+    const bytes = Buffer.from(JSON.stringify({ version: 3, sessions: { [key]: entry } }));
+    const snapshotPath = `workspaces/${id}.json`;
+    await writeFile(join(bundleDir, snapshotPath), bytes);
+    bundleWorkspaces.push({ workspaceId: id, workspaceLabel: id, oldRoot, sourceMetadataPath: `/old/${id}/metadata.json`, snapshotPath, sha256: sha256(bytes), bytes: bytes.length, exportedAt: '2026-01-01T00:00:00.000Z' });
+  }
+  const malformedBytes = Buffer.from('{');
+  await writeFile(join(bundleDir, 'workspaces/malformed.json'), malformedBytes);
+  bundleWorkspaces.push({ workspaceId: 'malformed', workspaceLabel: 'malformed', oldRoot: '/old/home/framework', sourceMetadataPath: '/old/malformed/metadata.json', snapshotPath: 'workspaces/malformed.json', sha256: sha256(malformedBytes), bytes: malformedBytes.length, exportedAt: '2026-01-01T00:00:00.000Z' });
+  await writeFile(join(bundleDir, 'bundle.json'), JSON.stringify({ version: 1, machine: { id: 'old', label: 'Old' }, exportedAt: '2026-01-01T00:00:00.000Z', archiveManifest: { path: '../../../manifest.json', sha256: 'a'.repeat(64) }, workspaces: bundleWorkspaces }));
+  const metadata = Object.fromEntries(['framework', 'morph', 'global', 'history', 'malformed', 'broken'].map((id) => [id, join(root, 'metadata', `${id}.json`)]));
+  const binding = (from, archivedWorkspaceId) => [{ machineId: 'old', metadataBundlePath: 'archive/old/metadata/bundle.json', ...(archivedWorkspaceId ? { archivedWorkspaceId } : {}), pathMap: [{ from, to: '.' }] }];
+  const configPath = join(configDir, 'workspaces.json');
   await writeFile(configPath, JSON.stringify({
     sessionArchiveManifestPath: './manifest.json',
     workspaces: [
       { id: 'framework', root: framework, sessionMetadataPath: metadata.framework, sessionArchiveBindings: binding('/old/home/framework') },
       { id: 'morph', root: morph, sessionMetadataPath: metadata.morph, sessionArchiveBindings: binding('/old/home/morph') },
       { id: 'global', root, sessionMetadataPath: metadata.global, sessionArchiveBindings: binding('/old/home') },
-      { id: 'broken', root, sessionMetadataPath: metadata.broken, sessionArchiveBindings: [{ machineId: 'missing', pathMap: [] }] },
+      { id: 'history', root: history, sessionMetadataPath: metadata.history, sessionArchiveBindings: binding('/old/home/framework', 'retired-client') },
+      { id: 'malformed', root: framework, sessionMetadataPath: metadata.malformed, sessionArchiveBindings: binding('/old/home/framework', 'malformed') },
+      { id: 'broken', root, sessionMetadataPath: metadata.broken, sessionArchiveBindings: [{ machineId: 'missing', metadataBundlePath: './missing-bundle.json', pathMap: [] }] },
     ],
   }));
   const port = await unusedPort();
@@ -102,21 +128,54 @@ test('shared archive handlers isolate nested workspace visibility, detail guards
   await waitFor(origin, child);
   const sessionsFor = (id) => waitForArchives(`${origin}/tools/sessions/api/sessions?archivesOnly=1&workspace=${id}`);
 
-  const [frameworkPayload, morphPayload, globalPayload, brokenPayload] = await Promise.all(['framework', 'morph', 'global', 'broken'].map(sessionsFor));
-  assert.deepEqual(frameworkPayload.sessions.map(({ id }) => id), ['framework-session']);
+  const payloads = [];
+  for (const id of ['framework', 'morph', 'global', 'history', 'malformed', 'broken']) payloads.push(await sessionsFor(id));
+  const [frameworkPayload, morphPayload, globalPayload, historyPayload, malformedPayload, brokenPayload] = payloads;
+  assert.deepEqual(frameworkPayload.sessions.map(({ id }) => id), ['framework-session'], JSON.stringify(frameworkPayload));
   assert.deepEqual(morphPayload.sessions.map(({ id }) => id), ['morph-session']);
   assert.deepEqual(new Set(globalPayload.sessions.map(({ id }) => id)), new Set(['framework-session', 'morph-session']));
+  assert.deepEqual(historyPayload.sessions.map(({ id }) => id), ['framework-session']);
+  assert.deepEqual(frameworkPayload.sessions[0].metadata.tags, ['framework-default']);
+  assert.deepEqual(globalPayload.sessions.find(({ id }) => id === 'framework-session').metadata.tags, ['global-default']);
+  assert.deepEqual(historyPayload.sessions[0].metadata.tags, ['history-default']);
+  assert.equal(frameworkPayload.sessions[0].metadata.provenance.source, 'archive');
+  assert.deepEqual(malformedPayload.sessions.map(({ id }) => id), ['framework-session'], 'bad metadata never hides its session');
+  assert.ok(malformedPayload.sourceErrors.some(({ code }) => code === 'invalid-snapshot'));
   assert.ok(brokenPayload.sourceErrors.some(({ code }) => code === 'unknown-machine-binding'));
+  assert.ok(brokenPayload.sourceErrors.some(({ code }) => code === 'workspace-unbound'));
 
   const morphRef = globalPayload.sessions.find(({ id }) => id === 'morph-session').path;
   assert.equal((await fetch(`${origin}/tools/sessions/api/session?workspace=framework&ref=${encodeURIComponent(morphRef)}`)).status, 404);
   const frameworkRef = frameworkPayload.sessions[0].path;
+  const detail = await (await fetch(`${origin}/tools/sessions/api/session?workspace=framework&ref=${encodeURIComponent(frameworkRef)}`)).json();
+  assert.deepEqual(detail.metadata.tags, ['framework-default']);
+  const summary = await (await fetch(`${origin}/tools/sessions/api/summary?workspace=framework`)).json();
+  assert.equal(summary.latestBookmarkedSession.bookmarked, true);
+
   const saved = await fetch(`${origin}/tools/sessions/api/metadata?workspace=framework`, {
-    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref: frameworkRef, bookmarked: true }),
+    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref: frameworkRef, tags: ['edited'], savedTopics: { edited: { title: 'Edited topic' } } }),
   });
   assert.equal(saved.status, 200);
-  assert.match(await readFile(metadata.framework, 'utf8'), /"bookmarked": true/);
+  const override = (await saved.json()).metadata;
+  assert.equal(override.bookmarked, true, 'copy-on-write retains the complete archived entry');
+  assert.deepEqual(override.tags, ['edited']);
+  assert.equal(override.savedTopicCount, 1);
+  assert.equal(override.provenance.source, 'live');
+  assert.equal(override.canReset, true);
   await assert.rejects(readFile(metadata.global, 'utf8'), { code: 'ENOENT' });
+
+  const cleared = await fetch(`${origin}/tools/sessions/api/metadata?workspace=framework`, {
+    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref: frameworkRef, bookmarked: false, tags: [], savedTopics: {} }),
+  });
+  assert.equal(cleared.status, 200);
+  const storedEmpty = JSON.parse(await readFile(metadata.framework, 'utf8'));
+  assert.deepEqual(storedEmpty.sessions[frameworkRef], { bookmarked: false, tags: [], savedTopics: {} });
+  const reset = await fetch(`${origin}/tools/sessions/api/metadata/override?workspace=framework`, {
+    method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref: frameworkRef }),
+  });
+  assert.equal(reset.status, 200);
+  assert.deepEqual((await reset.json()).metadata.tags, ['framework-default']);
+  assert.equal(Object.hasOwn(JSON.parse(await readFile(metadata.framework, 'utf8')).sessions, frameworkRef), false);
 });
 
 test('an explicitly configured missing shared manifest reports a legacy-config diagnostic', async (t) => {
