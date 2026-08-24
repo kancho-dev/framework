@@ -12,6 +12,7 @@ import { tableScrollKeys } from './table-scroll.js';
 import { matchesSavedTopicSessionFilter, savedTopicDestination, savedTopicNoteIndicator, topicRows } from './saved-topics.js';
 import { workspaceFilterForTool } from '/shared/browser/workspace-tools.js';
 import { sessionStatusView } from './session-status.js';
+import { readerSkeleton } from './reader-skeleton.js';
 
 const sessionBrowserWorkspaceFilter = workspaceFilterForTool('session-browser');
 const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', machineFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, savedTopicSessionFilter: false, tagFilter: 'all', savedTopicsFilter: false, sourceErrors: [], unmappedSessions: [], archivesLoading: false, metadataError: null };
@@ -681,8 +682,9 @@ async function selectSession(path, options = {}) {
   requestAnimationFrame(scrollSelectedSessionCardIntoView);
   els.empty.classList.add('hidden');
   els.reader.classList.remove('hidden');
-  els.readerTitle.textContent = 'Loading…';
-  els.readerMeta.textContent = '';
+  const skeleton = readerSkeleton(state.sessions.find((session) => session.path === path));
+  els.readerTitle.textContent = skeleton?.title || 'Loading…';
+  els.readerMeta.innerHTML = skeleton ? `<div class="meta-row primary"><span class="badge">${escapeHtml(sourceLabel(skeleton.source))}</span>${contextLoadPill(skeleton)}<span><strong>Updated:</strong> ${escapeHtml(formatDate(skeleton.updatedAt))}</span><span><strong>Messages:</strong> ${escapeHtml(skeleton.messageCount ?? 'unknown')}</span></div>` : '';
   els.readerRelations.innerHTML = '';
   els.readerRelations.classList.add('hidden');
   els.messages.innerHTML = '';
