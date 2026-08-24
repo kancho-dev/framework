@@ -47,7 +47,6 @@ export function gaugeLevel(provider, now = Date.now()) {
 
   if (remaining <= 5) return 'critical';
   if (remaining <= 15) return 'low';
-  if (elapsedFraction < 0.05) return 'ok';
   const usedFraction = (100 - remaining) / 100;
   const paceRatio = usedFraction / Math.max(elapsedFraction, 0.05);
   if (paceRatio >= 1.5) return 'critical';

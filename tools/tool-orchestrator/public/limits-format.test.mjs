@@ -39,7 +39,10 @@ test('grades usage against elapsed reset-window pace', () => {
   assert.equal(gaugeLevel(provider(25, 0.5), NOW), 'critical');
   assert.equal(gaugeLevel(provider(90, 0.5), NOW), 'available');
   assert.equal(gaugeLevel(provider(99, 0.1), NOW), 'ok', 'blue waits until 20% of the window has elapsed');
-  assert.equal(gaugeLevel(provider(99, 0.01), NOW), 'ok', 'early-window pace does not create noisy warnings');
+  assert.equal(gaugeLevel(provider(97, 0.01), NOW), 'ok', 'the 5% denominator floor avoids noisy warnings for small early usage');
+  assert.equal(gaugeLevel(provider(94, 0.01), NOW), 'low', 'early usage can warn when it exceeds sustainable pace');
+  assert.equal(gaugeLevel(provider(92.4, 0.01), NOW), 'critical', 'early usage can become critical without a time exemption');
+  assert.equal(gaugeLevel(provider(70, 8 / (7 * 24)), NOW), 'critical', '30% weekly usage after eight hours is critical');
 });
 
 test('applies absolute safeguards and falls back when window timing is unusable', () => {
