@@ -29,7 +29,8 @@ const WORKSPACE_ROOT = resolve(process.env.WORKSPACE_ROOT || await findWorkspace
 const DEFAULT_WORKSPACE_CONFIG_PATH = join(WORKSPACE_ROOT, '.tools-config', 'tool-orchestrator', 'workspaces.json');
 const WORKSPACE_CONFIG_PATH = process.env.TOOL_ORCHESTRATOR_WORKSPACES_CONFIG || (await exists(DEFAULT_WORKSPACE_CONFIG_PATH) ? DEFAULT_WORKSPACE_CONFIG_PATH : '');
 const workspaceConfig = await loadWorkspaceConfig();
-const handlers = new Map(workspaceConfig.workspaces.map((workspace) => [workspace.id, createWorkspaceHandlers(workspace)]));
+const legacyMachineCwdHints = archiveMachineCwdHints(workspaceConfig.workspaces);
+const handlers = new Map(workspaceConfig.workspaces.map((workspace) => [workspace.id, createWorkspaceHandlers(workspace, legacyMachineCwdHints)]));
 
 function parsePort(value) {
   const port = Number(value);
@@ -83,6 +84,15 @@ function normalizeArchiveBindings(value, configDir, workspaceId) {
     const archivedWorkspaceId = binding.archivedWorkspaceId ? normalizeWorkspaceId(binding.archivedWorkspaceId) : null;
     return { ...structuredClone(binding), machineId, ...(metadataBundlePath ? { metadataBundlePath } : {}), ...(archivedWorkspaceId ? { archivedWorkspaceId } : {}) };
   });
+}
+
+function archiveMachineCwdHints(workspaces) {
+  const hints = {};
+  for (const workspace of workspaces) for (const binding of workspace.sessionArchiveBindings || []) {
+    const values = hints[binding.machineId] ||= new Set();
+    for (const mapping of binding.pathMap || []) if (typeof mapping?.from === 'string') values.add(resolve(mapping.from));
+  }
+  return Object.fromEntries(Object.entries(hints).map(([machineId, values]) => [machineId, [...values]]));
 }
 
 function normalizeWorkspace(entry, ids, sessionArchiveManifestPath = null, configDir = process.cwd()) {
@@ -219,7 +229,7 @@ async function serveCockpitPage(res, workspace) {
   return sendHtml(res, html.replace('<!-- __FRAMEWORK_COCKPIT_CONFIG__ -->', `<script>window.__FRAMEWORK_COCKPIT__ = ${config};</script>`));
 }
 
-function createWorkspaceHandlers(workspace) {
+function createWorkspaceHandlers(workspace, legacyMachineCwdHints) {
   return {
     'task-browser': createTaskBrowserHandler({
       basePath: '/tools/tasks',
@@ -238,6 +248,7 @@ function createWorkspaceHandlers(workspace) {
       ...(workspace.sessionArchiveManifestPath ? {
         legacyMachinesPath: workspace.sessionArchiveManifestPath,
         legacyMachineBindings: workspace.sessionArchiveBindings,
+        legacyMachineCwdHints,
       } : {}),
       cockpit: cockpitConfig(workspace, 'session-browser'),
     }),

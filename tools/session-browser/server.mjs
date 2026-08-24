@@ -354,6 +354,25 @@ function sessionSummary({ entries, activeEntries, topicAnchors, ...summary }) {
   return summary;
 }
 
+function encodedClaudeProject(cwd) {
+  return cwd.replace(/\//g, '-');
+}
+
+function inferClaudeProjectCwd(session, candidates) {
+  if (session.source !== 'claude-code' || session.cwd || !session.claudeProjectDirectory) return session;
+  const matches = candidates.filter((cwd) => encodedClaudeProject(cwd) === session.claudeProjectDirectory);
+  const { claudeProjectDirectory, ...summary } = session;
+  return matches.length === 1 ? { ...summary, cwd: matches[0] } : summary;
+}
+
+function machineCwdCandidates(ctx, machine) {
+  if (!machine) return [ctx.workspaceRoot];
+  return [...new Set([
+    ...machine.pathMap.map(({ from }) => from),
+    ...(ctx.legacyMachineCwdHints?.[machine.id] || []),
+  ])];
+}
+
 function withLegacyMachine(session, machine) {
   if (!machine) return session;
   const originalCwd = session.cwd || '';
@@ -388,9 +407,11 @@ async function listFileSessions(ctx, root, cache, load, machine = null) {
     files.map((file) => cache.summarize(file, async (path) => sessionSummary(await load(path, loadOptions)), cacheOptions))
   );
   cache.prune(files, cacheOptions);
+  const cwdCandidates = machineCwdCandidates(ctx, machine);
   const summaries = settled
     .filter((result) => result.status === 'fulfilled')
-    .map((result) => withLegacyMachine(result.value, machine));
+    .map((result) => inferClaudeProjectCwd(result.value, cwdCandidates))
+    .map((result) => withLegacyMachine(result, machine));
   const sessions = summaries
     .filter((session) => session.cwd && isUnderRoot(session.cwd, ctx.workspaceRoot))
     .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
@@ -940,6 +961,7 @@ function claudeCodeEntries(parsed) {
 
 function summarizeClaudeCodeSession(file, fileStat, parsed) {
   const info = claudeCodeFileInfo(file);
+  const projectDirectory = basename(info.isSidechain ? dirname(dirname(dirname(file))) : dirname(file));
   const recordedParentId = info.isSidechain ? parsed.find((line) => line?.sessionId)?.sessionId : null;
   const id = info.isSidechain && recordedParentId ? `${recordedParentId}/${info.agentName}` : claudeCodeFileId(file);
   const cwd = parsed.find((line) => line?.cwd)?.cwd || '';
@@ -959,6 +981,7 @@ function summarizeClaudeCodeSession(file, fileStat, parsed) {
     parentId: info.isSidechain ? (recordedParentId || info.parentId) : null,
     isSidechain: info.isSidechain,
     cwd,
+    ...(!cwd ? { claudeProjectDirectory: projectDirectory } : {}),
     name: title,
     modelLabel: model,
     model: { source: 'claude-code', provider: 'anthropic', model, variant: '' },
@@ -1050,7 +1073,8 @@ async function loadClaudeCodeSession(ctx, ref) {
   for (const file of files) {
     const loaded = await loadClaudeCodeFile(file);
     if (loaded.id === id) {
-      const detail = withLegacyMachine(loaded, machine);
+      const cwdCandidates = machineCwdCandidates(ctx, machine);
+      const detail = withLegacyMachine(inferClaudeProjectCwd(loaded, cwdCandidates), machine);
       const relations = await loadClaudeCodeRelations(detail, root, machine);
       return { ...detail, ...relations };
     }
@@ -1422,7 +1446,7 @@ async function isAllowedSessionPath(ctx, candidate) {
   return isUnderRoot(resolved, PI_SESSION_ROOT);
 }
 
-export function createSessionBrowserHandler({ basePath = '/', cockpit = null, workspaceRoot = DEFAULT_WORKSPACE_ROOT, workspaceName = basename(workspaceRoot) || workspaceRoot, workspaceId = 'default', metadataPath = DEFAULT_METADATA_PATH, legacyMachinesPath, legacyMachineBindings } = {}) {
+export function createSessionBrowserHandler({ basePath = '/', cockpit = null, workspaceRoot = DEFAULT_WORKSPACE_ROOT, workspaceName = basename(workspaceRoot) || workspaceRoot, workspaceId = 'default', metadataPath = DEFAULT_METADATA_PATH, legacyMachinesPath, legacyMachineBindings, legacyMachineCwdHints } = {}) {
   const normalizedBase = normalizeBasePath(basePath);
   const resolvedWorkspaceRoot = resolve(workspaceRoot);
   const ctx = {
@@ -1431,6 +1455,7 @@ export function createSessionBrowserHandler({ basePath = '/', cockpit = null, wo
     workspaceId,
     metadataPath: resolve(metadataPath),
     legacyMachineBindings,
+    legacyMachineCwdHints,
     scanKey: `${resolvedWorkspaceRoot}\0${resolve(legacyMachinesPath || join(resolvedWorkspaceRoot, '.tools-config', 'session-browser', 'machines.json'))}\0${JSON.stringify(legacyMachineBindings ?? null)}`,
     archiveMemo: createImmutableSourceMemo(),
     lastLive: null,

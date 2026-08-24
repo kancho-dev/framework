@@ -38,6 +38,14 @@ const claudeId = 'claude-session';
 await writeFile(join(roots['claude-code'], `${claudeId}.jsonl`), jsonl([
   { type: 'user', sessionId: claudeId, cwd: oldCwd, timestamp: '2026-01-01T00:00:00.000Z', message: { role: 'user', content: 'claude prompt' } },
 ]));
+const titleOnlyClaudeId = 'title-only-claude-session';
+const titleOnlyClaudeCwd = `${oldCwd}/framework`;
+const encodedClaudeProject = titleOnlyClaudeCwd.replace(/\//g, '-');
+await mkdir(join(roots['claude-code'], encodedClaudeProject), { recursive: true });
+await writeFile(join(roots['claude-code'], encodedClaudeProject, `${titleOnlyClaudeId}.jsonl`), jsonl([
+  { type: 'ai-title', aiTitle: 'Title-only archived session', sessionId: titleOnlyClaudeId },
+  { type: 'agent-name', agentName: 'Title-only archived session', sessionId: titleOnlyClaudeId },
+]));
 try {
   await execFileAsync('sqlite3', [roots.opencode, [
     'create table session (id text primary key, parent_id text, directory text, path text, title text, model text, cost real, tokens_input integer, tokens_output integer, tokens_cache_read integer, tokens_cache_write integer, time_created integer, time_updated integer, time_archived integer);',
@@ -82,7 +90,7 @@ process.env.WORKSPACE_ROOT = workspaceRoot;
 const { createSessionBrowserHandler } = await import('./server.mjs');
 
 async function withServer(run) {
-  const handler = createSessionBrowserHandler({ workspaceRoot, legacyMachinesPath: configPath });
+  const handler = createSessionBrowserHandler({ workspaceRoot, legacyMachinesPath: configPath, legacyMachineCwdHints: { old: [titleOnlyClaudeCwd] } });
   const server = createServer(async (req, res) => { if (!(await handler(req, res))) { res.statusCode = 404; res.end(); } });
   await new Promise((resolve) => server.listen(0, resolve));
   try { await run(server); } finally { server.close(); }
@@ -92,6 +100,22 @@ async function detail(server, ref) {
   const response = await fetch(`http://127.0.0.1:${server.address().port}/api/session?ref=${encodeURIComponent(ref)}`);
   return { status: response.status, body: await response.json() };
 }
+
+test('title-only Claude archive sessions use a unique configured project-directory match', async () => {
+  await withServer(async (server) => {
+    let body = { archivesLoading: true };
+    for (let attempt = 0; attempt < 30 && body.archivesLoading; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const response = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions?archivesOnly=1`);
+      body = await response.json();
+    }
+    const session = body.sessions.find(({ id }) => id === titleOnlyClaudeId);
+    assert.ok(session, 'lists the title-only session in its configured workspace');
+    assert.equal(session.originalCwd, titleOnlyClaudeCwd);
+    assert.equal(session.cwd, `${workspaceRoot}/framework`);
+    assert.equal(body.unmappedSessions.find(({ machineId }) => machineId === 'old').count, 1, 'only the deliberately foreign Pi session remains unmapped');
+  });
+});
 
 test('detail loaders resolve all configured legacy source roots', async (t) => {
   await withServer(async (server) => {
