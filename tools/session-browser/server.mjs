@@ -959,14 +959,13 @@ function claudeCodeEntries(parsed) {
   return entries;
 }
 
-function summarizeClaudeCodeSession(file, fileStat, parsed) {
+function summarizeClaudeCodeSession(file, fileStat, parsed, entries = claudeCodeEntries(parsed)) {
   const info = claudeCodeFileInfo(file);
   const projectDirectory = basename(info.isSidechain ? dirname(dirname(dirname(file))) : dirname(file));
   const recordedParentId = info.isSidechain ? parsed.find((line) => line?.sessionId)?.sessionId : null;
   const id = info.isSidechain && recordedParentId ? `${recordedParentId}/${info.agentName}` : claudeCodeFileId(file);
   const cwd = parsed.find((line) => line?.cwd)?.cwd || '';
   const title = parsed.find((line) => line?.type === 'ai-title')?.aiTitle || '';
-  const entries = claudeCodeEntries(parsed);
   const messageEntries = entries.filter((entry) => entry.type === 'message');
   const userEntries = messageEntries.filter((entry) => entry.message.role === 'user');
   const assistantEntries = messageEntries.filter((entry) => entry.message.role === 'assistant');
@@ -1002,11 +1001,11 @@ function summarizeClaudeCodeSession(file, fileStat, parsed) {
   };
 }
 
-async function loadClaudeCodeFile(file) {
+async function loadClaudeCodeFile(file, { summary: cachedSummary } = {}) {
   const [fileStat, content] = await Promise.all([stat(file), readFile(file, 'utf8')]);
   const parsed = parseClaudeCodeJsonl(content);
-  const summary = summarizeClaudeCodeSession(file, fileStat, parsed);
   const entries = claudeCodeEntries(parsed);
+  const summary = cachedSummary || summarizeClaudeCodeSession(file, fileStat, parsed, entries);
   const activeEntries = entries;
   const topicAnchors = activeEntries
     .filter((entry) => entry?.type === 'message' && entry.message?.role === 'user')
@@ -1017,6 +1016,31 @@ async function loadClaudeCodeFile(file) {
       depth: index === 0 ? 'first-prompt' : 'user-prompt',
     }));
   return { ...summary, entries, activeEntries, topicAnchors };
+}
+
+function claudeCodeCacheOptions(machine) {
+  return { provenance: machine ? 'archive' : 'live' };
+}
+
+async function cachedClaudeCodeSummary(file, machine = null) {
+  return SUMMARY_CACHES['claude-code'].summarize(
+    file,
+    async (path) => sessionSummary(await loadClaudeCodeFile(path)),
+    claudeCodeCacheOptions(machine),
+  );
+}
+
+async function loadCachedClaudeCodeFile(file, machine = null) {
+  let loaded = null;
+  const summary = await SUMMARY_CACHES['claude-code'].summarize(
+    file,
+    async (path) => {
+      loaded = await loadClaudeCodeFile(path);
+      return sessionSummary(loaded);
+    },
+    claudeCodeCacheOptions(machine),
+  );
+  return loaded || loadClaudeCodeFile(file, { summary });
 }
 
 async function listClaudeCodeSessions(ctx, machine = null) {
@@ -1047,7 +1071,7 @@ async function loadClaudeCodeRelations(detail, root = CLAUDE_PROJECTS_ROOT, mach
     const parentId = String(detail.id).split('/')[0];
     for (const file of files) {
       if (!claudeCodeFileInfo(file).isSidechain && basename(file, '.jsonl') === parentId) {
-        const parent = await loadClaudeCodeFile(file).catch(() => null);
+        const parent = await cachedClaudeCodeSummary(file, machine).catch(() => null);
         if (parent) return { parentSession: claudeCodeRelation(parent, machine), childSessions: [] };
       }
     }
@@ -1057,7 +1081,7 @@ async function loadClaudeCodeRelations(detail, root = CLAUDE_PROJECTS_ROOT, mach
   for (const file of files) {
     const info = claudeCodeFileInfo(file);
     if (info.isSidechain && info.parentId === detail.id) {
-      const child = await loadClaudeCodeFile(file).catch(() => null);
+      const child = await cachedClaudeCodeSummary(file, machine).catch(() => null);
       if (child) childSessions.push(claudeCodeRelation(child, machine));
     }
   }
@@ -1070,8 +1094,15 @@ async function loadClaudeCodeSession(ctx, ref) {
   const id = parsed?.value || ref.replace(/^claude-code:/, '');
   const root = machine?.roots['claude-code'] || CLAUDE_PROJECTS_ROOT;
   const files = await walkJsonlFiles(root);
-  for (const file of files) {
-    const loaded = await loadClaudeCodeFile(file);
+  const slash = id.indexOf('/');
+  const pathMatches = files.filter((file) => claudeCodeFileId(file) === id);
+  const remappedSidechains = slash < 0 ? [] : files.filter((file) => {
+    const info = claudeCodeFileInfo(file);
+    return info.isSidechain && info.agentName === id.slice(slash + 1) && !pathMatches.includes(file);
+  });
+
+  for (const file of [...pathMatches, ...remappedSidechains]) {
+    const loaded = await loadCachedClaudeCodeFile(file, machine);
     if (loaded.id === id) {
       const cwdCandidates = machineCwdCandidates(ctx, machine);
       const detail = withLegacyMachine(inferClaudeProjectCwd(loaded, cwdCandidates), machine);
