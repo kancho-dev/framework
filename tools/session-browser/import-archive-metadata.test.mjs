@@ -1,10 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { access, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { promisify } from 'node:util';
 import { sha256 } from './archive-metadata-bundle.mjs';
 import { applyArchiveMetadata, createArchiveMetadataDryRun, printReport } from './import-archive-metadata.mjs';
+
+const execFileAsync = promisify(execFile);
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'metadata-dry-run-'));
@@ -84,6 +88,23 @@ test('dry run verifies, canonicalizes, and merges without writing snapshot, dest
   assert.equal(report.ok, true);
   assert.equal(await readFile(state.snapshotPath, 'utf8'), state.snapshotBytes);
   assert.equal(await readFile(state.destinationPath, 'utf8'), state.destinationBytes);
+});
+
+test('real CLI emits complete JSON without exposing internal planned metadata', async () => {
+  const state = await fixture();
+  const { stdout } = await execFileAsync(process.execPath, [
+    new URL('./import-archive-metadata.mjs', import.meta.url).pathname,
+    '--bundle', state.bundlePath,
+    '--workspaces', state.workspaceConfigPath,
+    '--json',
+  ]);
+  const report = JSON.parse(stdout);
+  assert.equal(report.dryRun, true);
+  assert.equal(report.workspaces[0].status, 'bound');
+  assert.equal(report.workspaces[0].plannedMetadata, undefined);
+  assert.equal(report.workspaces[0].snapshotSha256.length, 64);
+  assert.equal(report.workspaces[0].counts.eligible, 1);
+  assert.deepEqual(report.summary, { bound: 1, unbound: 1, invalid: 0, 'already-imported': 0, failed: 0 });
 });
 
 test('snapshot failure is isolated and exposed in the machine-readable summary', async () => {
