@@ -23,6 +23,22 @@ test('renders ordered lists and blockquotes', () => {
   assert.equal(renderMarkdown('1. one\n2) two\n\n> quoted\n> again'), '<ol><li>one</li><li>two</li></ol><blockquote>quoted<br>again</blockquote>');
 });
 
+test('keeps mixed nested lists inside one ordered sequence', () => {
+  const source = '1. Prepare\n   - first check\n   - second check\n1. Execute\n   - verify result\n1. Finish';
+  assert.equal(
+    renderMarkdown(source),
+    '<ol><li>Prepare<ul><li>first check</li><li>second check</li></ul></li><li>Execute<ul><li>verify result</li></ul></li><li>Finish</li></ol>',
+  );
+});
+
+test('keeps a loose mixed list in one ordered sequence', () => {
+  const source = '1. Remove unused helpers:\n   - first helper\n   - second helper\n\n2. Add independent tests for:\n   - bookmark\n   - tags\n   - saved topics';
+  assert.equal(
+    renderMarkdown(source),
+    '<ol><li>Remove unused helpers:<ul><li>first helper</li><li>second helper</li></ul></li><li>Add independent tests for:<ul><li>bookmark</li><li>tags</li><li>saved topics</li></ul></li></ol>',
+  );
+});
+
 test('renders fenced code safely, including indented fences, and supports a presentation adapter', () => {
   const source = '```js\nconst value = "<unsafe>";\n```';
   assert.equal(renderMarkdown(source), '<pre><code>const value = &quot;&lt;unsafe&gt;&quot;;</code></pre>');

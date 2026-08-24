@@ -77,21 +77,52 @@ function isBlockStart(lines, index) {
     || (line.includes('|') && tableAlignments(next));
 }
 
-function collectList(lines, start, pattern) {
+function listItem(line) {
+  const match = (line || '').match(/^(\s*)([-*+]|\d+[.)])\s+(.+)$/);
+  if (!match) return null;
+  return {
+    indent: match[1].length,
+    ordered: /^\d/.test(match[2]),
+    content: match[3],
+  };
+}
+
+function renderList(lines, start) {
+  const first = listItem(lines[start]);
   const items = [];
   let cursor = start;
+
   while (cursor < lines.length) {
-    const match = lines[cursor].match(pattern);
-    if (!match) break;
-    let item = match[1];
+    const current = listItem(lines[cursor]);
+    if (!current || current.indent !== first.indent || current.ordered !== first.ordered) break;
+    let itemHtml = renderInline(current.content);
     cursor += 1;
-    while (cursor < lines.length && /^\s{2,}\S/.test(lines[cursor]) && !isBlockStart(lines, cursor)) {
-      item += ` ${lines[cursor].trim()}`;
-      cursor += 1;
+
+    while (cursor < lines.length) {
+      const child = listItem(lines[cursor]);
+      if (child?.indent > first.indent) {
+        const nested = renderList(lines, cursor);
+        itemHtml += nested.html;
+        cursor = nested.cursor;
+        continue;
+      }
+      if (/^\s{2,}\S/.test(lines[cursor]) && !isBlockStart(lines, cursor)) {
+        itemHtml += ` ${renderInline(lines[cursor].trim())}`;
+        cursor += 1;
+        continue;
+      }
+      break;
     }
-    items.push(item);
+    items.push(`<li>${itemHtml}</li>`);
+
+    if (first.ordered && /^\s*$/.test(lines[cursor] || '')) {
+      const next = listItem(lines[cursor + 1]);
+      if (next?.ordered && next.indent === first.indent) cursor += 1;
+    }
   }
-  return { items, cursor };
+
+  const tag = first.ordered ? 'ol' : 'ul';
+  return { html: `<${tag}>${items.join('')}</${tag}>`, cursor };
 }
 
 /**
@@ -149,15 +180,9 @@ export function renderMarkdown(markdown, options = {}) {
       cursor += 1;
       continue;
     }
-    if (/^\s*[-*+]\s+/.test(line)) {
-      const list = collectList(lines, cursor, /^\s*[-*+]\s+(.+)$/);
-      parts.push(`<ul>${list.items.map((item) => `<li>${renderInline(item)}</li>`).join('')}</ul>`);
-      cursor = list.cursor;
-      continue;
-    }
-    if (/^\s*\d+[.)]\s+/.test(line)) {
-      const list = collectList(lines, cursor, /^\s*\d+[.)]\s+(.+)$/);
-      parts.push(`<ol>${list.items.map((item) => `<li>${renderInline(item)}</li>`).join('')}</ol>`);
+    if (/^\s*(?:[-*+]|\d+[.)])\s+/.test(line)) {
+      const list = renderList(lines, cursor);
+      parts.push(list.html);
       cursor = list.cursor;
       continue;
     }

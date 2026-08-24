@@ -19,7 +19,7 @@ The renderer is pure and key-free: its output depends only on its arguments, and
 - paragraphs and hard line breaks within a prose block
 - strong text, emphasis, and inline code
 - HTTP(S) links opened with `noreferrer`
-- unordered and ordered lists, including indented continuation lines
+- unordered and ordered lists, including indented continuation lines and indented mixed-list nesting
 - blockquotes
 - fenced code blocks, including indented fences whose container indentation is removed while deeper code indentation is preserved
 - horizontal rules
