@@ -11,6 +11,7 @@ import { createRefreshCoordinator } from '/shared/refresh-coordinator.mjs';
 import { tableScrollKeys } from './table-scroll.js';
 import { matchesSavedTopicSessionFilter, savedTopicDestination, savedTopicNoteIndicator, topicRows } from './saved-topics.js';
 import { workspaceFilterForTool } from '/shared/browser/workspace-tools.js';
+import { sessionStatusView } from './session-status.js';
 
 const sessionBrowserWorkspaceFilter = workspaceFilterForTool('session-browser');
 const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', machineFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, savedTopicSessionFilter: false, tagFilter: 'all', savedTopicsFilter: false, sourceErrors: [], unmappedSessions: [], archivesLoading: false, metadataError: null };
@@ -29,6 +30,9 @@ const els = {
   tagFilter: document.querySelector('#tag-filter'),
   clearFilters: document.querySelector('#clear-filters'),
   status: document.querySelector('#status'),
+  archiveNotices: document.querySelector('#archive-notices'),
+  archiveNoticesSummary: document.querySelector('#archive-notices-summary'),
+  archiveNoticesList: document.querySelector('#archive-notices-list'),
   workspaceName: document.querySelector('#workspace-name'),
   sessions: document.querySelector('#sessions'),
   empty: document.querySelector('#empty'),
@@ -277,16 +281,25 @@ function scheduleSelectedTopicLinkScroll() {
 }
 
 function renderSessionCountStatus() {
-  const visibleCount = state.sessions.filter((session) => matches(session, els.filter.value)).length;
-  const errors = [
-    ...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`),
-    state.metadataError || '',
-  ].filter(Boolean);
-  const archiveStatus = state.archivesLoading ? ' · loading archived sessions…' : '';
-  const unmapped = (state.unmappedSessions || [])
-    .filter(({ count }) => count)
-    .map(({ label, machineId, count }) => `${label || machineId}: ${count} archived session${count === 1 ? '' : 's'} from other workspaces (not shown)`);
-  els.status.textContent = `${visibleCount} of ${state.sessions.length} sessions · ${workspaceDisplayName()}${archiveStatus}${unmapped.length ? ` · ${unmapped.join(' · ')}` : ''}${errors.length ? ` · ${errors.join(', ')}` : ''}`;
+  const view = sessionStatusView({
+    visibleCount: state.sessions.filter((session) => matches(session, els.filter.value)).length,
+    totalCount: state.sessions.length,
+    workspaceName: workspaceDisplayName(),
+    archivesLoading: state.archivesLoading,
+    unmappedSessions: state.unmappedSessions || [],
+    errors: [
+      ...(state.sourceErrors || []).map((item) => `${sourceLabel(item.source)} unavailable${item.error ? `: ${item.error}` : ''}`),
+      state.metadataError || '',
+    ],
+  });
+  els.status.textContent = view.primary;
+  els.archiveNotices.classList.toggle('hidden', view.notices.length === 0);
+  els.archiveNoticesSummary.textContent = view.noticeSummary;
+  els.archiveNoticesList.replaceChildren(...view.notices.map((notice) => {
+    const item = document.createElement('li');
+    item.textContent = notice;
+    return item;
+  }));
 }
 
 function renderSessions() {
