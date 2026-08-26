@@ -18,17 +18,20 @@ const CLAUDE_OAUTH_BETA = 'oauth-2025-04-20';
 export const PROVIDERS = [
   { id: 'codex', label: 'Codex', windowLabel: 'Weekly', windowDurationMins: WEEKLY_WINDOW_MINS },
   { id: 'claude-code', label: 'Claude Code', windowLabel: 'Weekly', windowDurationMins: WEEKLY_WINDOW_MINS },
+  { id: 'codex-five-hour', label: 'Codex', windowLabel: '5 hour', windowDurationMins: 300 },
   { id: 'claude-code-five-hour', label: 'Claude Code', windowLabel: '5 hour', windowDurationMins: 300 },
 ];
 
-const CODEX = PROVIDERS[0];
+const CODEX_WINDOWS = [
+  { provider: PROVIDERS[0], missingReason: 'no-weekly-window' },
+  { provider: PROVIDERS[2], missingReason: 'no-five-hour-window' },
+];
 
-// Both Claude windows come from a single usage response, so they share one read
-// and fail together; Codex stays independent. Weekly leads so the two weekly
-// gauges line up first and the five-hour one falls under Claude's weekly gauge.
+// Each provider supplies both windows in one response. Weekly gauges lead so
+// equal-duration windows align by row in the dashboard.
 const CLAUDE_WINDOWS = [
   { provider: PROVIDERS[1], key: 'seven_day', missingReason: 'no-weekly-window' },
-  { provider: PROVIDERS[2], key: 'five_hour', missingReason: 'no-five-hour-window' },
+  { provider: PROVIDERS[3], key: 'five_hour', missingReason: 'no-five-hour-window' },
 ];
 
 function unavailable(provider, reason, asOf) {
@@ -61,14 +64,18 @@ function isoFromValue(value) {
  * position is deliberately not trusted: Codex reports whichever bucket is most
  * constraining there, which is often the five-hour window.
  */
-export function selectCodexWeeklyWindow(response) {
+function selectCodexWindow(response, windowDurationMins) {
   const snapshots = codexSnapshots(response);
   for (const snapshot of snapshots) {
     for (const window of [snapshot?.primary, snapshot?.secondary]) {
-      if (window && window.windowDurationMins === WEEKLY_WINDOW_MINS) return window;
+      if (window && window.windowDurationMins === windowDurationMins) return window;
     }
   }
   return null;
+}
+
+export function selectCodexWeeklyWindow(response) {
+  return selectCodexWindow(response, WEEKLY_WINDOW_MINS);
 }
 
 function codexSnapshots(response) {
@@ -77,13 +84,21 @@ function codexSnapshots(response) {
   return [response?.rateLimits, ...extra].filter((snapshot) => snapshot && typeof snapshot === 'object');
 }
 
-export function codexGauge(response, asOf) {
-  if (!response || typeof response !== 'object') return unavailable(CODEX, 'no-data', asOf);
-  const window = selectCodexWeeklyWindow(response);
-  if (!window) return unavailable(CODEX, 'no-weekly-window', asOf);
+function codexWindowGauge(response, asOf, { provider, missingReason }) {
+  if (!response || typeof response !== 'object') return unavailable(provider, 'no-data', asOf);
+  const window = selectCodexWindow(response, provider.windowDurationMins);
+  if (!window) return unavailable(provider, missingReason, asOf);
   const remainingPercent = displayRemaining(window.usedPercent);
-  if (remainingPercent === null) return unavailable(CODEX, 'no-weekly-window', asOf);
-  return gauge(CODEX, remainingPercent, isoFromSeconds(window.resetsAt), asOf);
+  if (remainingPercent === null) return unavailable(provider, missingReason, asOf);
+  return gauge(provider, remainingPercent, isoFromSeconds(window.resetsAt), asOf);
+}
+
+export function codexGauges(response, asOf) {
+  return CODEX_WINDOWS.map((window) => codexWindowGauge(response, asOf, window));
+}
+
+export function codexGauge(response, asOf) {
+  return codexGauges(response, asOf)[0];
 }
 
 function claudeWindowGauge(usage, asOf, { provider, key, missingReason }) {
@@ -193,10 +208,10 @@ async function providerGauges(providers, read, build, asOf) {
 export async function subscriptionLimits({ readCodex = readCodexRateLimits, readClaude = readClaudeUsage, now = () => new Date() } = {}) {
   const asOf = now().toISOString();
   const [codex, claude] = await Promise.all([
-    providerGauges([CODEX], readCodex, (response, at) => [codexGauge(response, at)], asOf),
+    providerGauges(CODEX_WINDOWS.map((window) => window.provider), readCodex, codexGauges, asOf),
     providerGauges(CLAUDE_WINDOWS.map((window) => window.provider), readClaude, claudeGauges, asOf),
   ]);
-  return { asOf, refreshIntervalMs: 600_000, providers: [...codex, ...claude] };
+  return { asOf, refreshIntervalMs: 600_000, providers: [codex[0], claude[0], codex[1], claude[1]] };
 }
 
 export function createSubscriptionLimitsReader(options = {}) {
