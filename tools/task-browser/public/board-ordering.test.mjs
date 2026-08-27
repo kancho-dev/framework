@@ -14,6 +14,12 @@ test('sorts positive integer orders first and resolves equal, missing, and inval
   assert.deepEqual([...tasks].sort(sortForBoardOrder).map(({ key }) => key), ['b', 'a', 'z', 'x']);
 });
 
+test('newer display IDs win equal explicit-order ties before priority', () => {
+  const olderUrgent = { ...task('older', 'planned', 1, '#8'), metadata: { ...task('older', 'planned', 1, '#8').metadata, priority: 'urgent' } };
+  const newerNormal = { ...task('newer', 'planned', 1, '#9'), metadata: { ...task('newer', 'planned', 1, '#9').metadata, priority: 'normal' } };
+  assert.deepEqual([olderUrgent, newerNormal].sort(sortForBoardOrder).map(({ key }) => key), ['newer', 'older']);
+});
+
 test('active board rendering and placement share invalid-order semantics', () => {
   const tasks = [task('zero', 'active', 0, '#1'), task('negative', 'active', -2, '#2'), task('float', 'active', 1.5, '#3'), task('valid', 'active', 2, '#4')];
   const expected = [...tasks].sort(sortForBoardOrder).map(({ key }) => key);

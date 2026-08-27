@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from 'node:path';
-import { addRelationship, appendHistoryEvent, applyOptions, applyRelationshipPatch, ARRAY_FIELDS, buildHistoryEvent, changedTaskKeys, cleanArray, discoverTask, fieldName, findWorkspaceRoot, historyPathFor, metadataPathFor, normalizeTask, readHistory, readMetadata, removeRelationship, required, resolveTask, setChildren as setChildrenRelation, setParent as setParentRelation, snapshotTasks, split, withMetadataLock, writeMetadata } from './metadata-helpers.mjs';
+import { addRelationship, appendHistoryEvent, applyInitialPlannedOrder, applyOptions, applyRelationshipPatch, ARRAY_FIELDS, buildHistoryEvent, changedTaskKeys, cleanArray, discoverTask, fieldName, findWorkspaceRoot, historyPathFor, metadataPathFor, normalizeTask, readHistory, readMetadata, removeRelationship, required, resolveTask, setChildren as setChildrenRelation, setParent as setParentRelation, snapshotTasks, split, withMetadataLock, writeMetadata } from './metadata-helpers.mjs';
 
 main().catch((error) => {
   console.error(`Error: ${error.message}`);
@@ -54,6 +54,7 @@ async function initTask(ctx, key, opts) {
   const isNew = !ctx.metadata.tasks[key]?.displayId;
   ctx.metadata.tasks[key] = normalizeTask({ ...existing, ...discovered, displayId: existing.displayId || `#${ctx.metadata.nextDisplayNumber++}` }, existing);
   applyOptions(ctx.metadata, key, opts);
+  applyInitialPlannedOrder(ctx.metadata.tasks[key], isNew);
   await writeWithHistory(ctx, beforeTasks, 'metadata.init', provenance);
   return { key, metadata: ctx.metadata.tasks[key], created: isNew };
 }

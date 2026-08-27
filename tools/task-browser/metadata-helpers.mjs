@@ -244,11 +244,20 @@ export function normalizeTask(task, existing = {}, { inferType } = {}) {
   };
 }
 
+export function applyInitialPlannedOrder(task, isNew) {
+  if (isNew && task.status === 'planned' && task.order === null) task.order = 1;
+  return task;
+}
+
 export function syncMetadataTasks(metadata, discovered, { inferType } = {}) {
   const nowKeys = new Set(discovered.map((task) => task.key));
   for (const task of discovered) {
     const existing = metadata.tasks[task.key] || {};
-    metadata.tasks[task.key] = normalizeTask({ ...existing, ...task, displayId: existing.displayId || `#${metadata.nextDisplayNumber++}` }, existing, { inferType });
+    const isNew = !existing.displayId;
+    metadata.tasks[task.key] = applyInitialPlannedOrder(
+      normalizeTask({ ...existing, ...task, displayId: existing.displayId || `#${metadata.nextDisplayNumber++}` }, existing, { inferType }),
+      isNew,
+    );
   }
   for (const [key, task] of Object.entries(metadata.tasks)) {
     if (!nowKeys.has(key)) task.missing = true;

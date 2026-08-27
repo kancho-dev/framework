@@ -57,7 +57,7 @@ Task Browser sorts cards deterministically in the frontend.
 
 For non-`done` columns:
 
-1. optional positive-integer `order` metadata, ascending;
+1. optional positive-integer `order` metadata, ascending; equal explicit orders prefer the newer display ID;
 2. priority: `urgent`, `high`, `normal`, `low`;
 3. latest run timestamp, newest first, with `HANDOFF.md` mtime fallback when no runs exist;
 4. display ID number, descending;
@@ -107,7 +107,7 @@ Example shape:
 }
 ```
 
-Task Browser metadata owns UI/workflow fields: `displayId`, `status`, `priority`, `type`, nullable `nextActor`, `blockedBy`, `parent`, `children`, `related`, `tags`, and optional positive-integer `order`.
+Task Browser metadata owns UI/workflow fields: `displayId`, `status`, `priority`, `type`, nullable `nextActor`, `blockedBy`, `parent`, `children`, `related`, `tags`, and optional positive-integer `order`. Newly initialized `planned` tasks start at order `1`, so they remain visible at the top until the user reorders them.
 
 Server and metadata CLI writes are safe to run concurrently. Every writer holds the same cross-process lock for its complete read-modify-write transaction, then publishes through a per-write temporary file and atomic rename. A writer waits up to five seconds for an active transaction before failing rather than overwriting state; locks owned by a process that no longer exists are recovered automatically.
 

@@ -14,6 +14,7 @@ import {
   normalizeMetadata,
   normalizeTask,
   readMetadata,
+  syncMetadataTasks,
   withMetadataLock,
   writeMetadata,
 } from './metadata-helpers.mjs';
@@ -32,6 +33,19 @@ test('normalizeTask preserves allowed next actors and safely clears absent or in
 test('normalizeTask treats non-positive and non-integer order values as missing', () => {
   assert.equal(normalizeTask({ ...baseTask, order: 2 }).order, 2);
   for (const order of [0, -1, 1.5, Number.NaN]) assert.equal(normalizeTask({ ...baseTask, order }).order, null);
+});
+
+test('newly discovered planned tasks start at order one without changing existing tasks', () => {
+  const metadata = { nextDisplayNumber: 2, tasks: {
+    'demo/existing': { ...baseTask, slug: 'existing', status: 'planned', order: null },
+  } };
+  syncMetadataTasks(metadata, [
+    { key: 'demo/existing', project: 'demo', slug: 'existing', path: 'projects/demo/work/existing' },
+    { key: 'demo/new', project: 'demo', slug: 'new', path: 'projects/demo/work/new' },
+  ]);
+  assert.equal(metadata.tasks['demo/existing'].order, null);
+  assert.equal(metadata.tasks['demo/new'].status, 'planned');
+  assert.equal(metadata.tasks['demo/new'].order, 1);
 });
 
 test('stored metadata normalizes absent or older invalid nextActor values to null', () => {
