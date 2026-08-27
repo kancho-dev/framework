@@ -37,16 +37,15 @@ async function discoverTasks(ctx) {
       const taskPath = join(taskDir, 'TASK.md');
       if (!(await exists(taskPath))) continue;
       const handoffPath = join(taskDir, 'HANDOFF.md');
-      const [taskText, handoffText, contextText, steeringNotes, runs, artifacts, handoffStat] = await Promise.all([
+      const [taskText, handoffText, contextText, steeringNotes, runs, artifacts] = await Promise.all([
         readFile(taskPath, 'utf8').catch(() => ''),
         readFile(handoffPath, 'utf8').catch(() => ''),
         readFile(join(taskDir, 'CONTEXT.md'), 'utf8').catch(() => ''),
         readSteeringNotes(taskDir),
         summarizeRuns(ctx, join(taskDir, 'runs')),
         inventoryTaskFiles(taskDir),
-        stat(handoffPath).catch(() => null),
       ]);
-      tasks.push(summarizeTask(ctx, projectEntry.name, taskEntry.name, taskDir, taskText, handoffText, contextText, steeringNotes, runs, artifacts, handoffStat));
+      tasks.push(summarizeTask(ctx, projectEntry.name, taskEntry.name, taskDir, taskText, handoffText, contextText, steeringNotes, runs, artifacts));
     }
   }
   return tasks.sort((a, b) => a.key.localeCompare(b.key));
@@ -99,10 +98,10 @@ async function updateSteeringNotes(ctx, key, body) {
   return readSteeringNotes(taskDir);
 }
 
-function summarizeTask(ctx, project, slug, taskDir, taskText, handoffText, contextText, steeringNotes, runs, artifacts, handoffStat) {
+function summarizeTask(ctx, project, slug, taskDir, taskText, handoffText, contextText, steeringNotes, runs, artifacts) {
   const relPath = relativePath(ctx, taskDir);
   const title = firstHeading(taskText) || slug;
-  const latestRunAt = runTimestamp(runs[0]?.file) || handoffStat?.mtime?.toISOString() || null;
+  const latestRunAt = runs[0]?.runAt || null;
   return {
     key: `${project}/${slug}`,
     project,
@@ -151,15 +150,17 @@ function compact(text, max) {
 }
 
 async function summarizeRuns(ctx, runsDir) {
-  const entries = (await safeReadDir(runsDir)).filter((entry) => entry.isFile() && entry.name.endsWith('.md')).sort((a, b) => b.name.localeCompare(a.name));
-  return Promise.all(entries.map(async (entry) => {
+  const entries = (await safeReadDir(runsDir)).filter((entry) => entry.isFile() && entry.name.endsWith('.md'));
+  const runs = await Promise.all(entries.map(async (entry) => {
     const path = join(runsDir, entry.name);
     return {
       file: entry.name,
       path: relativePath(ctx, path),
       title: runTitle(entry.name, await readFirstHeading(path)),
+      runAt: runTimestamp(entry.name),
     };
   }));
+  return runs.sort((a, b) => (Date.parse(b.runAt || '') || 0) - (Date.parse(a.runAt || '') || 0) || b.file.localeCompare(a.file));
 }
 
 async function readFirstHeading(path) {
@@ -235,9 +236,28 @@ function runTitle(fileName, heading) {
   return `${date} ${time.slice(0, 2)}:${time.slice(2)} — ${label}`;
 }
 
-function runTimestamp(fileName) {
-  const match = String(fileName || '').match(/^(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})-/);
-  return match ? `${match[1]}T${match[2]}:${match[3]}:00.000Z` : null;
+export function runTimestamp(fileName) {
+  const name = String(fileName || '');
+  let match = name.match(/^(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})?(?:-|\.md$)/);
+  if (!match) match = name.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-|\.md$)/);
+  if (match) return validRunTimestamp(match.slice(1));
+  match = name.match(/^(\d{4})-(\d{2})-(\d{2})-.+\.md$/);
+  return match ? validRunTimestamp([...match.slice(1), '00', '00', '00']) : null;
+}
+
+export function latestDoneTransition(history = []) {
+  return history.reduce((latest, event) => {
+    const status = event?.changes?.status;
+    const timestamp = status?.after === 'done' && status?.before !== 'done' && Number.isFinite(Date.parse(event.timestamp)) ? event.timestamp : null;
+    return timestamp && (!latest || Date.parse(timestamp) > Date.parse(latest)) ? timestamp : latest;
+  }, null);
+}
+
+function validRunTimestamp([year, month, day, hour, minute, second = '00']) {
+  const parts = [year, month, day, hour, minute, second].map(Number);
+  const timestamp = new Date(Date.UTC(...parts.slice(0, 3).map((value, index) => index === 1 ? value - 1 : value), ...parts.slice(3)));
+  const actual = [timestamp.getUTCFullYear(), timestamp.getUTCMonth() + 1, timestamp.getUTCDate(), timestamp.getUTCHours(), timestamp.getUTCMinutes(), timestamp.getUTCSeconds()];
+  return actual.every((value, index) => value === parts[index]) ? timestamp.toISOString() : null;
 }
 
 function inferType(task) {
@@ -253,13 +273,17 @@ function inferType(task) {
 async function taskPayload(ctx) {
   const discovered = await discoverTasks(ctx);
   const metadata = await syncMetadata(ctx, discovered);
-  const history = await readHistory(ctx.historyPath, { limit: 1000 });
+  const history = await readHistory(ctx.historyPath, { limit: Number.MAX_SAFE_INTEGER });
   const historyByTask = new Map();
   for (const event of history) {
     if (!historyByTask.has(event.taskKey)) historyByTask.set(event.taskKey, []);
-    if (historyByTask.get(event.taskKey).length < 8) historyByTask.get(event.taskKey).push(event);
+    historyByTask.get(event.taskKey).push(event);
   }
-  const tasks = discovered.map((task) => ({ ...task, metadata: { ...metadata.tasks[task.key], blocks: deriveBlocks(metadata, task.key) }, metadataHistory: historyByTask.get(task.key) || [] }));
+  const tasks = discovered.map((task) => {
+    const taskHistory = historyByTask.get(task.key) || [];
+    const latestRunAt = task.latestRunAt || (metadata.tasks[task.key]?.status === 'done' ? latestDoneTransition(taskHistory) : null);
+    return { ...task, latestRunAt, metadata: { ...metadata.tasks[task.key], blocks: deriveBlocks(metadata, task.key) }, metadataHistory: taskHistory.slice(0, 8) };
+  });
   const missing = Object.entries(metadata.tasks).filter(([, value]) => value.missing).map(([key, value]) => ({ key, metadata: value }));
   return { workspaceRoot: ctx.workspaceRoot, workspaceName: ctx.workspaceName, metadataPath: ctx.metadataPath, statuses: STATUSES, priorities: PRIORITIES, tasks, missing };
 }

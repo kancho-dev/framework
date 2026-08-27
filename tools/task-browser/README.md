@@ -59,16 +59,17 @@ For non-`done` columns:
 
 1. optional positive-integer `order` metadata, ascending; equal explicit orders prefer the newer display ID;
 2. priority: `urgent`, `high`, `normal`, `low`;
-3. latest run timestamp, newest first, with `HANDOFF.md` mtime fallback when no runs exist;
+3. latest interpretable run filename timestamp/date, newest first;
 4. display ID number, descending;
 5. task key fallback.
 
 For `done`:
 
-1. tasks with run logs before tasks without run logs;
-2. latest run timestamp, newest first;
-3. display ID number, descending;
-4. task key fallback.
+1. latest interpretable run filename timestamp/date, or the latest recorded `status → done` metadata-history event when no run date is interpretable, newest first;
+2. display ID number, descending;
+3. task key fallback.
+
+Run recency recognizes canonical `YYYY-MM-DD-HHMM-label.md` names and historical timestamp-only, six-digit-time, and compact `YYYYMMDD-HHMMSS-label.md` forms. Valid date-plus-label names without an encoded time represent midnight UTC, preserving date precision without inventing a time. Invalid-calendar and dateless names are ignored. Filesystem and task-file modification times are never ordering evidence; missing optional history falls through deterministically to display ID and task key.
 
 ## Metadata
 

@@ -4,7 +4,39 @@ import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createTaskBrowserHandler } from './server.mjs';
+import { createTaskBrowserHandler, latestDoneTransition, runTimestamp } from './server.mjs';
+import { sortTasks } from './public/task-utils.js';
+
+test('run timestamps support historical filename forms and reject invalid dates', () => {
+  assert.equal(runTimestamp('2026-08-27-1137-builder.md'), '2026-08-27T11:37:00.000Z');
+  assert.equal(runTimestamp('2026-08-27-1137.md'), '2026-08-27T11:37:00.000Z');
+  assert.equal(runTimestamp('2026-08-27-113743-builder.md'), '2026-08-27T11:37:43.000Z');
+  assert.equal(runTimestamp('20260827-113743-builder.md'), '2026-08-27T11:37:43.000Z');
+  assert.equal(runTimestamp('2026-08-27-builder.md'), '2026-08-27T00:00:00.000Z');
+  assert.equal(runTimestamp('2026-02-30-1137-builder.md'), null);
+  assert.equal(runTimestamp('2026-02-30-builder.md'), null);
+  assert.equal(runTimestamp('not-a-run.md'), null);
+});
+
+test('Done-transition fallback ignores newer arbitrary history and selects the latest completion', () => {
+  const history = [
+    { timestamp: '2026-08-29T10:00:00.000Z', changes: { order: { before: 1, after: 2 } } },
+    { timestamp: '2026-08-28T10:00:00.000Z', changes: { status: { before: 'review', after: 'done' } } },
+    { timestamp: '2026-08-27T10:00:00.000Z', changes: { status: { before: 'active', after: 'done' } } },
+    { timestamp: 'invalid', changes: { status: { before: 'review', after: 'done' } } },
+  ];
+  assert.equal(latestDoneTransition(history), '2026-08-28T10:00:00.000Z');
+  assert.equal(latestDoneTransition([{ timestamp: '2026-08-29T10:00:00.000Z', changes: { tags: { before: [], after: ['x'] } } }]), null);
+});
+
+test('Done activity sorts #173 above #172 and does not privilege run presence', () => {
+  const tasks = [
+    { key: 'task-172', hasRunLogs: true, latestRunAt: runTimestamp('2026-08-27-0935-wayfinder-resolution.md'), metadata: { displayId: '#172' } },
+    { key: 'task-173', hasRunLogs: true, latestRunAt: runTimestamp('20260827-113743-openclaw-coordination-session-evidence.md'), metadata: { displayId: '#173' } },
+    { key: 'history-only', hasRunLogs: false, latestRunAt: '2026-08-28T10:00:00.000Z', metadata: { displayId: '#100' } },
+  ];
+  assert.deepEqual(sortTasks('done', tasks).map(({ key }) => key), ['history-only', 'task-173', 'task-172']);
+});
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'task-browser-server-next-actor-'));
