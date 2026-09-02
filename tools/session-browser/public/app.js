@@ -13,6 +13,7 @@ import { matchesSavedTopicSessionFilter, savedTopicDestination, savedTopicNoteIn
 import { workspaceFilterForTool } from '/shared/browser/workspace-tools.js';
 import { sessionStatusView } from './session-status.js';
 import { readerSkeleton } from './reader-skeleton.js';
+import { matchingTags, matchesTagFilter, syncTagFilterControl, validTagFilter } from './tag-filter.js';
 
 const sessionBrowserWorkspaceFilter = workspaceFilterForTool('session-browser');
 const state = { sessions: [], selectedPath: null, selectedTopicId: null, selectedDetail: null, browseMode: true, sourceFilter: 'all', machineFilter: 'all', cwdFilter: 'all', sortMode: 'updated-desc', bookmarkFilter: false, savedTopicSessionFilter: false, tagFilter: 'all', savedTopicsFilter: false, sourceErrors: [], unmappedSessions: [], archivesLoading: false, metadataError: null };
@@ -179,7 +180,7 @@ function applyFilterControlValues() {
   els.machineFilter.value = state.machineFilter;
   els.cwdFilter.value = state.cwdFilter;
   els.cwdFilter.title = state.cwdFilter === 'all' ? 'All work dirs' : state.cwdFilter;
-  els.tagFilter.value = state.tagFilter;
+  syncTagFilterControl(els.tagFilter, state.tagFilter, { preserveQuery: document.activeElement === els.tagFilter });
   els.sortMode.value = state.sortMode;
   window.FrameworkSelect?.refreshAll?.();
 }
@@ -198,7 +199,7 @@ function matches(session, query) {
   if (state.cwdFilter !== 'all' && (session.cwd || '') !== state.cwdFilter) return false;
   if (state.bookmarkFilter && !isBookmarked(session)) return false;
   if (!matchesSavedTopicSessionFilter(session, state.savedTopicSessionFilter)) return false;
-  if (state.tagFilter !== 'all' && !sessionTags(session).includes(state.tagFilter)) return false;
+  if (!matchesTagFilter(sessionTags(session), state.tagFilter)) return false;
   if (!query.trim()) return true;
   const haystack = [session.id, session.name, session.cwd, session.firstPrompt, session.path, sessionTags(session).join(' ')].join(' ').toLowerCase();
   return query.toLowerCase().split(/\s+/).every((term) => haystack.includes(term));
@@ -344,10 +345,16 @@ function allTags() {
 
 function renderTagFilter() {
   const tags = allTags();
-  const current = state.tagFilter;
-  els.tagFilter.innerHTML = ['all', ...tags].map((tag) => `<option value="${escapeHtml(tag)}">${escapeHtml(tag === 'all' ? 'All tags' : tag)}</option>`).join('');
-  els.tagFilter.value = tags.includes(current) ? current : 'all';
-  state.tagFilter = els.tagFilter.value;
+  state.tagFilter = validTagFilter(tags, state.tagFilter);
+  syncTagFilterControl(els.tagFilter, state.tagFilter, { preserveQuery: document.activeElement === els.tagFilter });
+  tagFilterAutocomplete?.refresh();
+}
+
+function selectTagFilter(tag) {
+  state.tagFilter = tag || 'all';
+  syncTagFilterControl(els.tagFilter, state.tagFilter);
+  persistFilterState();
+  renderSessions();
 }
 
 function renderSourceFilter() {
@@ -729,8 +736,10 @@ els.savedTopicSessionFilter.addEventListener('change', () => {
   persistFilterState();
   renderSessions();
 });
-els.tagFilter.addEventListener('change', () => {
-  state.tagFilter = els.tagFilter.value;
+els.tagFilter.addEventListener('input', () => {
+  if (els.tagFilter.value === state.tagFilter) return;
+  state.tagFilter = 'all';
+  els.tagFilter.title = 'All tags';
   persistFilterState();
   renderSessions();
 });
@@ -818,10 +827,7 @@ els.sessions.addEventListener('click', (event) => {
   const tag = event.target.closest('.tag-pill');
   if (tag) {
     event.stopPropagation();
-    state.tagFilter = tag.dataset.tag;
-    els.tagFilter.value = state.tagFilter;
-    persistFilterState();
-    renderSessions();
+    selectTagFilter(tag.dataset.tag);
     return;
   }
   const card = event.target.closest('.session-card');
@@ -883,7 +889,13 @@ document.querySelector('.reader-pane').addEventListener('click', () => {
 
 window.addEventListener('resize', updateReaderHeaderHeight);
 window.FrameworkAutocomplete?.attach(els.tagInput, { options: () => allTags(), maxVisible: 12 });
-for (const select of [els.tagFilter, els.sourceFilter, els.machineFilter, els.cwdFilter, els.sortMode]) {
+const tagFilterAutocomplete = window.FrameworkAutocomplete?.attach(els.tagFilter, {
+  options: (query) => matchingTags(allTags(), query),
+  maxVisible: 12,
+  onSelect: ({ value }) => selectTagFilter(value),
+});
+els.tagFilter.addEventListener('focus', () => els.tagFilter.select());
+for (const select of [els.sourceFilter, els.machineFilter, els.cwdFilter, els.sortMode]) {
   window.FrameworkSelect?.attach(select, { maxVisible: 12 });
 }
 setBrowseMode(true);
