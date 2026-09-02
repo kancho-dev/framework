@@ -57,8 +57,8 @@ Task Browser sorts cards deterministically in the frontend.
 
 For non-`done` columns:
 
-1. optional positive-integer `order` metadata, ascending; equal explicit orders prefer the newer display ID;
-2. priority: `urgent`, `high`, `normal`, `low`;
+1. optional positive-integer `order` metadata, ascending;
+2. priority: `urgent`, `high`, `normal`, `low` (including when explicit orders are equal);
 3. latest interpretable run filename timestamp/date, newest first;
 4. display ID number, descending;
 5. task key fallback.

@@ -14,10 +14,25 @@ test('sorts positive integer orders first and resolves equal, missing, and inval
   assert.deepEqual([...tasks].sort(sortForBoardOrder).map(({ key }) => key), ['b', 'a', 'z', 'x']);
 });
 
-test('newer display IDs win equal explicit-order ties before priority', () => {
-  const olderUrgent = { ...task('older', 'planned', 1, '#8'), metadata: { ...task('older', 'planned', 1, '#8').metadata, priority: 'urgent' } };
-  const newerNormal = { ...task('newer', 'planned', 1, '#9'), metadata: { ...task('newer', 'planned', 1, '#9').metadata, priority: 'normal' } };
-  assert.deepEqual([olderUrgent, newerNormal].sort(sortForBoardOrder).map(({ key }) => key), ['newer', 'older']);
+test('equal explicit orders sort by priority before display ID and task key', () => {
+  const prioritized = [
+    { ...task('low', 'planned', 1, '#12'), metadata: { ...task('low', 'planned', 1, '#12').metadata, priority: 'low' } },
+    { ...task('critical', 'planned', 1, '#9'), metadata: { ...task('critical', 'planned', 1, '#9').metadata, priority: 'urgent' } },
+    { ...task('normal', 'planned', 1, '#11'), metadata: { ...task('normal', 'planned', 1, '#11').metadata, priority: 'normal' } },
+    { ...task('high', 'planned', 1, '#10'), metadata: { ...task('high', 'planned', 1, '#10').metadata, priority: 'high' } },
+  ];
+  assert.deepEqual(prioritized.sort(sortForBoardOrder).map(({ key }) => key), ['critical', 'high', 'normal', 'low']);
+
+  const earlierLow = { ...task('earlier-low', 'planned', 1, '#20'), metadata: { ...task('earlier-low', 'planned', 1, '#20').metadata, priority: 'low' } };
+  const laterUrgent = { ...task('later-urgent', 'planned', 2, '#1'), metadata: { ...task('later-urgent', 'planned', 2, '#1').metadata, priority: 'urgent' } };
+  assert.deepEqual([laterUrgent, earlierLow].sort(sortForBoardOrder).map(({ key }) => key), ['earlier-low', 'later-urgent']);
+
+  const samePriority = [
+    { ...task('older', 'planned', 1, '#8'), metadata: { ...task('older', 'planned', 1, '#8').metadata, priority: 'high' } },
+    { ...task('z-key', 'planned', 1, '#9'), metadata: { ...task('z-key', 'planned', 1, '#9').metadata, priority: 'high' } },
+    { ...task('a-key', 'planned', 1, '#9'), metadata: { ...task('a-key', 'planned', 1, '#9').metadata, priority: 'high' } },
+  ];
+  assert.deepEqual(samePriority.sort(sortForBoardOrder).map(({ key }) => key), ['a-key', 'z-key', 'older']);
 });
 
 test('active board rendering and placement share invalid-order semantics', () => {

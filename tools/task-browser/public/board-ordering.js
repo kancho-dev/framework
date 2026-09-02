@@ -14,7 +14,6 @@ export function sortForBoardOrder(a, b) {
   if (aOrder !== null && bOrder !== null && aOrder !== bOrder) return aOrder - bOrder;
   if (aOrder === null && bOrder !== null) return 1;
   if (aOrder !== null && bOrder === null) return -1;
-  if (aOrder !== null && bOrder !== null && displayNumber(a) !== displayNumber(b)) return displayNumber(b) - displayNumber(a);
   return (priorityRank[a.metadata?.priority] ?? 99) - (priorityRank[b.metadata?.priority] ?? 99)
     || (Date.parse(b.latestRunAt || '') || 0) - (Date.parse(a.latestRunAt || '') || 0)
     || displayNumber(b) - displayNumber(a)
