@@ -12,6 +12,7 @@ import { outlineEntries } from './reader-outline.js';
 import { editSteeringDraft, savedSteeringDraft } from './steering-notes.js';
 import { addRelationPatch, currentTags, relationInput, removeRelationPatch, taskKeyFromRelationInput } from './relations.js';
 import { clearRequestedSelection, requestedSelection } from './selection.js';
+import { attachDeferredSelectPicker } from './select-picker.js';
 import { copyText as copyClipboardText, flashButton } from '/shared/browser/clipboard.js';
 import { formatToolTitle } from '/shared/browser/format.js';
 import { createRefreshInteractionRegistry } from '/shared/browser/refresh-interactions.js';
@@ -392,6 +393,7 @@ els.detail.addEventListener('click', (event) => {
   const preview = event.target.closest('.open-preview');
   if (preview) openReader(preview);
 });
+attachDeferredSelectPicker(els.detailMeta);
 els.detailMeta.addEventListener('input', (event) => {
   const form = event.target.closest('.inline-metadata-editor');
   if (!form) return;
