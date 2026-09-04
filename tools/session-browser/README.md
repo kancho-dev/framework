@@ -142,7 +142,7 @@ Sub-agent (sidechain) sessions are read-only in the browser and are not independ
 
 ## Writing An Adapter
 
-A new source normalizes into these shapes. This is the contract; everything else about a source is adapter-private.
+Start with the shared [Agent Tool Adapter Admission contract](../../docs/agent-tool-adapter-admission.md). A new source then normalizes into these tool-specific shapes; everything else about the source stays adapter-private.
 
 ```ts
 type SessionSummary = {

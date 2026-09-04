@@ -209,6 +209,7 @@ Use [`COMMANDS.md`](COMMANDS.md) if you want native slash-command integration. T
 - [`SKILLS.md`](SKILLS.md) — skill resolution, local capability precedence, and skill format guidance.
 - [`SECURITY.md`](SECURITY.md) — command/setup safety rules.
 - [`ENGINEERING.md`](ENGINEERING.md) — implementation guidance for code and docs changes.
+- [`docs/agent-tool-adapter-admission.md`](docs/agent-tool-adapter-admission.md) — admission contract for new Session Browser and Tokens / Cost Analyzer sources.
 - [`ROLES/`](ROLES/) — role instructions for Overseer, Builder, Oracle, and Historian.
 - [`SKILLS/`](SKILLS/) — optional procedural playbooks.
 - [`USAGE-PROMPTS.md`](USAGE-PROMPTS.md) — copy-friendly prompt examples.

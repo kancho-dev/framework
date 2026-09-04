@@ -219,6 +219,8 @@ Subscription comparisons are warning-only when currencies differ from token esti
 
 The analyzer intentionally avoids context-window percentages and invoice-grade cost claims. Recorded native costs, source-derived token totals, pricing-table estimates, and unknowns are separate fields in `report.v1.json` and visible in the UI. Cockpit integration should be opt-in for selected workspaces; do not promote the analyzer as a default enabled tool until the workflow has broader validation.
 
+New native sources must follow the shared [Agent Tool Adapter Admission contract](../../docs/agent-tool-adapter-admission.md), including its Analyzer accounting and provenance gate.
+
 OpenCode support reads assistant-message usage from the local `opencode.db`, and falls back to the `session` aggregate row only when no message-level usage exists. Its explicit per-response `tokens.total` is authoritative because it also covers `tokens.reasoning`, which is recorded beside `output` rather than inside it; when that total is missing, the analyzer derives it from `input + output + reasoning + cache.read + cache.write`. Reasoning tokens therefore count toward token totals but are not priced, so cost stays an input/output/cache estimate. Session Browser applies the same total and fallback rule (shared in `tools/shared-web/opencode-usage.mjs`), so both tools report the same OpenCode total.
 
 ### Known limitation: sessions that change model mid-way
